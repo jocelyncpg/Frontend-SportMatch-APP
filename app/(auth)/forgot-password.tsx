@@ -10,18 +10,27 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import Logo from '../../components/Logo';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import BrandLogo from '../../components/BrandLogo';
+import { validateEmail } from '../../services/validators';
 import { Colors, useAppTheme } from '../../theme/ThemeContext';
 
 export default function ForgotPasswordScreen() {
   const { colors } = useAppTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
+  const insets = useSafeAreaInsets();
 
   const [email, setEmail] = useState('');
   const [enviado, setEnviado] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   function handleEnviar() {
-    if (!email.trim()) return;
+    const problema = validateEmail(email);
+    if (problema) {
+      setError(problema);
+      return;
+    }
+    setError(null);
     // Simulado por ahora: aquí se conecta al endpoint real de recuperación cuando exista.
     setEnviado(true);
   }
@@ -34,15 +43,13 @@ export default function ForgotPasswordScreen() {
       <View style={styles.content}>
         <TouchableOpacity
           onPress={() => router.back()}
-          style={styles.backButton}
+          style={[styles.backButton, { top: insets.top + 12 }]}
         >
           <Ionicons name="arrow-back" size={18} color={colors.text} />
         </TouchableOpacity>
 
         {/* Logo */}
-        <View style={styles.logoWrap}>
-          <Logo width={300} />
-        </View>
+        <BrandLogo width={222} style={styles.logo} />
 
         <Text style={styles.title}>Recuperar contraseña</Text>
 
@@ -52,7 +59,7 @@ export default function ForgotPasswordScreen() {
               Ingresa tu correo y te enviaremos instrucciones para restablecer tu contraseña.
             </Text>
 
-            <View style={styles.inputBox}>
+            <View style={[styles.inputBox, error && styles.inputBoxError]}>
               <Ionicons name="mail-outline" size={16} color={colors.textMuted} />
 
               <TextInput
@@ -60,11 +67,16 @@ export default function ForgotPasswordScreen() {
                 placeholderTextColor={colors.textMuted}
                 style={styles.input}
                 value={email}
-                onChangeText={setEmail}
+                onChangeText={(t) => {
+                  setEmail(t);
+                  if (error) setError(null);
+                }}
                 autoCapitalize="none"
+                autoCorrect={false}
                 keyboardType="email-address"
               />
             </View>
+            {error ? <Text style={styles.fieldError}>{error}</Text> : null}
 
             <TouchableOpacity
               style={styles.sendButton}
@@ -87,7 +99,7 @@ export default function ForgotPasswordScreen() {
             <Text style={styles.subtitle}>
               Si el correo{' '}
               <Text style={{ color: colors.text, fontWeight: '700' }}>
-                {email}
+                {email.trim()}
               </Text>{' '}
               está registrado, te llegarán instrucciones para recuperar tu cuenta.
             </Text>
@@ -122,7 +134,6 @@ const makeStyles = (c: Colors) =>
 
     backButton: {
       position: 'absolute',
-      top: 60,
       left: 24,
       width: 36,
       height: 36,
@@ -134,9 +145,8 @@ const makeStyles = (c: Colors) =>
       justifyContent: 'center',
     },
 
-    logoWrap: {
-      marginLeft: -38,
-      marginTop: -100,
+    logo: {
+      marginBottom: 32,
     },
 
     title: {
@@ -164,6 +174,18 @@ const makeStyles = (c: Colors) =>
       paddingHorizontal: 14,
       paddingVertical: 13,
       marginBottom: 20,
+    },
+
+    inputBoxError: {
+      borderColor: c.danger,
+      marginBottom: 8,
+    },
+
+    fieldError: {
+      color: c.danger,
+      fontSize: 11,
+      marginBottom: 16,
+      marginLeft: 4,
     },
 
     input: {

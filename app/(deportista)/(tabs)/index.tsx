@@ -10,16 +10,22 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import AthleteCard from '../../../components/AthleteCard';
-import Logo from '../../../components/Logo';
+import BrandLogo from '../../../components/BrandLogo';
 import TrainingRow from '../../../components/TrainingRow';
 import { Usuario, getSession } from '../../../services/auth';
+import { sugerencias, useMatches } from '../../../services/matchStore';
 import { Colors, useAppTheme } from '../../../theme/ThemeContext';
 
 export default function HomeScreen() {
   const { colors } = useAppTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
+  const insets = useSafeAreaInsets();
+
+  const estado = useMatches();
+  const recomendados = useMemo(() => sugerencias(estado).slice(0, 5), [estado]);
 
   const [usuario, setUsuario] = useState<Usuario | null>(null);
 
@@ -34,13 +40,11 @@ export default function HomeScreen() {
   return (
     <ScrollView
       style={styles.container}
-      contentContainerStyle={styles.content}
+      contentContainerStyle={[styles.content, { paddingTop: insets.top + 12 }]}
     >
       {/* Encabezado */}
       <View style={styles.header}>
-        <View style={styles.logoWrap}>
-          <Logo width={270} />
-        </View>
+        <BrandLogo width={200} />
 
         <TouchableOpacity
           onPress={() =>
@@ -107,40 +111,30 @@ export default function HomeScreen() {
         </TouchableOpacity>
       </View>
 
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-      >
-        <AthleteCard
-          name="Camila R."
-          sport="Running"
-          level="Intermedio"
-          distance="1.8 km"
-          compatibility={95}
-          colorFrom="#3648A6"
-          colorTo="#22C55E"
-        />
-
-        <AthleteCard
-          name="Diego A."
-          sport="Fútbol"
-          level="Intermedio"
-          distance="2.3 km"
-          compatibility={89}
-          colorFrom="#1F2A5C"
-          colorTo="#6366F1"
-        />
-
-        <AthleteCard
-          name="Valentina S."
-          sport="Ciclismo"
-          level="Intermedio"
-          distance="2.7 km"
-          compatibility={87}
-          colorFrom="#22C55E"
-          colorTo="#BBF7D0"
-        />
-      </ScrollView>
+      {recomendados.length > 0 ? (
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+        >
+          {recomendados.map((persona) => (
+            <AthleteCard
+              key={persona.id}
+              name={persona.name}
+              sport={persona.sport}
+              level={persona.level}
+              distance={persona.distance}
+              compatibility={persona.compatibility}
+              colorFrom={persona.colorFrom}
+              fotoUri={persona.fotoUri}
+              onPress={() => router.push('/(deportista)/(tabs)/discover')}
+            />
+          ))}
+        </ScrollView>
+      ) : (
+        <Text style={styles.emptyText}>
+          Ya viste a todos los deportistas cerca de ti por ahora.
+        </Text>
+      )}
 
       {/* Sección: Entrenamientos cerca de ti */}
       <View style={[styles.sectionRow, { marginTop: 24 }]}>
@@ -191,21 +185,15 @@ const makeStyles = (c: Colors) =>
 
     content: {
       paddingHorizontal: 20,
-      paddingTop: 60,
       paddingBottom: 30,
     },
 
     header: {
       width: '100%',
       flexDirection: 'row',
-      alignItems: 'flex-start',
+      alignItems: 'center',
       justifyContent: 'space-between',
       marginBottom: 20,
-    },
-
-    logoWrap: {
-      marginLeft: -38,
-      marginTop: -25,
     },
 
     miniAvatar: {
@@ -300,5 +288,10 @@ const makeStyles = (c: Colors) =>
       color: c.accent,
       fontSize: 11,
       fontWeight: '600',
+    },
+
+    emptyText: {
+      color: c.textMuted,
+      fontSize: 12,
     },
   });

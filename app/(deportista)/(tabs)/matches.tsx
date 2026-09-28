@@ -2,65 +2,62 @@ import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 import { Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import Logo from '../../../components/Logo';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import Avatar from '../../../components/Avatar';
+import BrandLogo from '../../../components/BrandLogo';
+import MatchModal from '../../../components/MatchModal';
 import { Usuario, getSession } from '../../../services/auth';
+import { Persona, aceptarSolicitud, rechazarSolicitud, useMatches } from '../../../services/matchStore';
 import { Colors, useAppTheme } from '../../../theme/ThemeContext';
-
-const SOLICITUDES_INICIALES = [
-  { id: '1', name: 'Ignacio R.', sport: 'Ciclismo', level: 'Avanzado', compatibility: 85, colorFrom: '#7C3AED' },
-  { id: '2', name: 'Daniela S.', sport: 'Yoga', level: 'Intermedio', compatibility: 90, colorFrom: '#22C55E' },
-];
-
-const CONFIRMADOS_INICIALES = [
-  { id: '3', name: 'Camila R.', sport: 'Running', level: 'Intermedio', compatibility: 95, colorFrom: '#3648A6' },
-  { id: '4', name: 'Diego A.', sport: 'Fútbol', level: 'Intermedio', compatibility: 89, colorFrom: '#1F2A5C' },
-];
 
 export default function MatchesScreen() {
   const { colors } = useAppTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
+  const insets = useSafeAreaInsets();
 
+  const { solicitudes, confirmados } = useMatches();
   const [tab, setTab] = useState<'solicitudes' | 'confirmados'>('solicitudes');
-  const [solicitudes, setSolicitudes] = useState(SOLICITUDES_INICIALES);
-  const [confirmados, setConfirmados] = useState(CONFIRMADOS_INICIALES);
   const [usuario, setUsuario] = useState<Usuario | null>(null);
+  const [nuevoMatch, setNuevoMatch] = useState<Persona | null>(null);
 
   useEffect(() => {
     getSession().then(setUsuario);
   }, []);
 
   function aceptar(id: string) {
-    const persona = solicitudes.find((s) => s.id === id);
-    if (!persona) return;
-    setConfirmados((prev) => [...prev, persona]);
-    setSolicitudes((prev) => prev.filter((s) => s.id !== id));
+    const persona = aceptarSolicitud(id);
+    if (persona) setNuevoMatch(persona);
   }
 
   function rechazar(id: string) {
-    setSolicitudes((prev) => prev.filter((s) => s.id !== id));
+    rechazarSolicitud(id);
   }
 
-  function abrirChat(persona: { id: string; name: string; sport: string; colorFrom: string }) {
+  function abrirChat(persona: Persona) {
     router.push({
       pathname: '/(deportista)/chat/[id]',
       params: { id: persona.id, name: persona.name, sport: persona.sport, colorFrom: persona.colorFrom },
     });
   }
 
+  function enviarMensajeDesdeMatch() {
+    const persona = nuevoMatch;
+    setNuevoMatch(null);
+    if (persona) abrirChat(persona);
+  }
+
   const lista = tab === 'solicitudes' ? solicitudes : confirmados;
   const iniciales = usuario
     ? `${usuario.nombre[0]}${usuario.apellidoPaterno[0]}`
     : '..';
+  const miNombre = usuario ? `${usuario.nombre} ${usuario.apellidoPaterno}` : 'Yo';
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { paddingTop: insets.top + 12 }]}>
 
       {/* HEADER */}
       <View style={styles.topbar}>
-
-        <View style={styles.logoWrap}>
-          <Logo width={270} />
-        </View>
+        <BrandLogo width={200} />
 
         <TouchableOpacity
           onPress={() => router.push('/(deportista)/(tabs)/profile')}
@@ -75,7 +72,6 @@ export default function MatchesScreen() {
             <Text style={styles.miniAvatarText}>{iniciales}</Text>
           )}
         </TouchableOpacity>
-
       </View>
 
       {/* TABS */}
@@ -120,18 +116,20 @@ export default function MatchesScreen() {
         {lista.map((persona) => (
           <View key={persona.id} style={styles.card}>
 
-            <View
-              style={[
-                styles.avatar,
-                { backgroundColor: persona.colorFrom },
-              ]}
+            <Avatar
+              name={persona.name}
+              colorFrom={persona.colorFrom}
+              uri={persona.fotoUri}
+              style={styles.avatar}
+              fontSize={18}
+              overlayStyle={styles.avatarOverlay}
             >
               <View style={styles.badge}>
                 <Text style={styles.badgeText}>
                   {persona.compatibility}%
                 </Text>
               </View>
-            </View>
+            </Avatar>
 
             <View style={styles.cardInfo}>
               <Text style={styles.cardName}>
@@ -191,6 +189,18 @@ export default function MatchesScreen() {
         )}
       </ScrollView>
 
+      {/* ¡ES UN MATCH! */}
+      <MatchModal
+        visible={nuevoMatch !== null}
+        miNombre={miNombre}
+        miFoto={usuario?.fotoPerfil}
+        nombre={nuevoMatch?.name ?? ''}
+        colorFrom={nuevoMatch?.colorFrom ?? '#7C3AED'}
+        fotoUri={nuevoMatch?.fotoUri}
+        onEnviarMensaje={enviarMensajeDesdeMatch}
+        onCerrar={() => setNuevoMatch(null)}
+      />
+
     </View>
   );
 }
@@ -200,21 +210,14 @@ const makeStyles = (c: Colors) =>
     container: {
       flex: 1,
       backgroundColor: c.bg,
-      paddingTop: 60,
     },
 
     topbar: {
       flexDirection: 'row',
       justifyContent: 'space-between',
-      alignItems: 'flex-start',
+      alignItems: 'center',
       paddingHorizontal: 20,
       marginBottom: 16,
-      height: 55,
-    },
-
-    logoWrap: {
-      marginLeft: -38,
-      marginTop: -25,
     },
 
     miniAvatar: {
@@ -293,6 +296,9 @@ const makeStyles = (c: Colors) =>
       width: 56,
       height: 56,
       borderRadius: 12,
+    },
+
+    avatarOverlay: {
       alignItems: 'flex-end',
       padding: 4,
     },

@@ -1,9 +1,12 @@
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import { ImageBackground, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import Logo from '../../components/Logo';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import BrandLogo from '../../components/BrandLogo';
 
 export default function OnboardingScreen() {
+  const insets = useSafeAreaInsets();
+
   return (
     <ImageBackground
       source={require('../../assets/images/onboarding-bg.png')}
@@ -13,11 +16,9 @@ export default function OnboardingScreen() {
       <LinearGradient
         colors={['rgba(11,15,25,0)', 'rgba(11,15,25,0.35)', 'rgba(11,15,25,0.95)', '#0B0F19']}
         locations={[0, 0.45, 0.78, 1]}
-        style={styles.gradient}
+        style={[styles.gradient, { paddingTop: insets.top + 16, paddingBottom: insets.bottom + 28 }]}
       >
-        <View style={[styles.logoOverlay, { transform: [{ translateY: -40 }] }]}>
-          <Logo width={310} forceDark />
-        </View>
+        <BrandLogo width={229} forceDark />
 
         <View style={styles.bottom}>
           <Text style={styles.heading}>Conecta, entrena{'\n'}y comparte</Text>
@@ -38,9 +39,8 @@ export default function OnboardingScreen() {
 
 const styles = StyleSheet.create({
   background: { flex: 1 },
-  gradient: { flex: 1, justifyContent: 'space-between', paddingHorizontal: 24, paddingBottom: 40 },
+  gradient: { flex: 1, justifyContent: 'space-between', paddingHorizontal: 24 },
 
-  logoOverlay: { paddingTop: 50 },
   bottom: {},
   heading: { color: '#fff', fontSize: 28, fontWeight: '800', lineHeight: 34, marginBottom: 10 },
   subtitle: { color: '#C9CEDA', fontSize: 13, marginBottom: 24 },

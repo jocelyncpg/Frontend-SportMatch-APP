@@ -2,7 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { KeyboardAvoidingView, Platform, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import Logo from '../../components/Logo';
+import BrandLogo from '../../components/BrandLogo';
 import { login } from '../../services/auth';
 import { Colors, useAppTheme } from '../../theme/ThemeContext';
 
@@ -17,12 +17,12 @@ export default function LoginScreen() {
 
   async function handleLogin() {
     setError('');
-    if (!email || !password) {
+    if (!email.trim() || !password) {
       setError('Ingresa tu correo y contraseña');
       return;
     }
     try {
-      await login(email, password);
+      await login(email.trim(), password);
       router.replace('/(deportista)/(tabs)');
     } catch (e: any) {
       setError(e.message);
@@ -35,11 +35,9 @@ export default function LoginScreen() {
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
       <View style={styles.content}>
-        <View style={[styles.logoWrap, { transform: [{ translateY: -45 }] }]}>
-          <Logo width={300} />
-        </View>
+        <BrandLogo width={222} style={styles.logo} />
 
-        <Text style={styles.title}>Bienvenido </Text>
+        <Text style={styles.title}>Bienvenido</Text>
         <Text style={styles.subtitle}>Inicia sesión para seguir entrenando</Text>
 
         {error ? <Text style={styles.errorText}>{error}</Text> : null}
@@ -53,6 +51,7 @@ export default function LoginScreen() {
             value={email}
             onChangeText={setEmail}
             autoCapitalize="none"
+            autoCorrect={false}
             keyboardType="email-address"
           />
         </View>
@@ -66,6 +65,8 @@ export default function LoginScreen() {
             value={password}
             onChangeText={setPassword}
             secureTextEntry={!mostrarPassword}
+            autoCapitalize="none"
+            autoCorrect={false}
           />
           <TouchableOpacity onPress={() => setMostrarPassword(!mostrarPassword)}>
             <Ionicons name={mostrarPassword ? 'eye-off-outline' : 'eye-outline'} size={18} color={colors.textMuted} />
@@ -94,7 +95,7 @@ const makeStyles = (c: Colors) =>
   StyleSheet.create({
     container: { flex: 1, backgroundColor: c.bg },
     content: { flex: 1, justifyContent: 'center', paddingHorizontal: 24 },
-    logoWrap: { marginLeft: -38, marginTop: -25 },
+    logo: { marginBottom: 36 },
     title: { color: c.text, fontSize: 22, fontWeight: '700', marginBottom: 6 },
     subtitle: { color: c.textMuted, fontSize: 13, marginBottom: 20 },
     errorText: { color: c.danger, fontSize: 12, marginBottom: 12 },

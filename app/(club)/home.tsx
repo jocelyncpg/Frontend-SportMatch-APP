@@ -1,10 +1,12 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useMemo, useState } from 'react';
 import { Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import Logo from '../../components/Logo';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import Avatar from '../../components/Avatar';
+import BrandLogo from '../../components/BrandLogo';
 import { Colors, useAppTheme } from '../../theme/ThemeContext';
 
-type Postulante = { id: string; name: string; sport: string; level: string; colorFrom: string };
+type Postulante = { id: string; name: string; sport: string; level: string; colorFrom: string; fotoUri?: string | null };
 
 const POSTULANTES_INICIALES: Postulante[] = [
   { id: '1', name: 'Matías P.', sport: 'Atletismo', level: 'Avanzado', colorFrom: '#7C3AED' },
@@ -14,6 +16,7 @@ const POSTULANTES_INICIALES: Postulante[] = [
 export default function ClubHomeScreen() {
   const { colors } = useAppTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
+  const insets = useSafeAreaInsets();
 
   const [tab, setTab] = useState<'postulantes' | 'confirmados'>('postulantes');
   const [postulantes, setPostulantes] = useState(POSTULANTES_INICIALES);
@@ -57,9 +60,9 @@ export default function ClubHomeScreen() {
   const lista = tab === 'postulantes' ? postulantes : confirmados;
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { paddingTop: insets.top + 12 }]}>
       <View style={styles.topbar}>
-        <Logo width={120} />
+        <BrandLogo width={200} />
         <View style={styles.clubBadge}>
           <Ionicons name="shield" size={16} color="#fff" />
         </View>
@@ -107,7 +110,13 @@ export default function ClubHomeScreen() {
 
         {lista.map((persona) => (
           <View key={persona.id} style={styles.card}>
-            <View style={[styles.avatar, { backgroundColor: persona.colorFrom }]} />
+            <Avatar
+              name={persona.name}
+              colorFrom={persona.colorFrom}
+              uri={persona.fotoUri}
+              style={styles.avatar}
+              fontSize={16}
+            />
             <View style={styles.cardInfo}>
               <Text style={styles.cardName}>{persona.name}</Text>
               <Text style={styles.cardMeta}>{persona.sport} · {persona.level}</Text>
@@ -173,7 +182,7 @@ export default function ClubHomeScreen() {
 const makeStyles = (c: Colors) =>
   StyleSheet.create({
     container: { flex: 1, backgroundColor: c.bg },
-    topbar: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingTop: 60, paddingHorizontal: 20, marginBottom: 20 },
+    topbar: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, marginBottom: 20 },
     clubBadge: { width: 34, height: 34, borderRadius: 17, backgroundColor: c.primary, alignItems: 'center', justifyContent: 'center' },
     content: { paddingHorizontal: 20, paddingBottom: 30 },
     sectionTitle: { color: c.text, fontSize: 14, fontWeight: '700', marginBottom: 10 },

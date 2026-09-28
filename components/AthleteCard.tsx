@@ -1,34 +1,52 @@
 import { useMemo } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Colors, useAppTheme } from '../theme/ThemeContext';
+import Avatar from './Avatar';
 
 type AthleteCardProps = {
   name: string;
   sport: string;
   level: string;
-  distance: string;
+  distance?: string;
   compatibility: number;
   colorFrom: string;
-  colorTo: string;
+  fotoUri?: string | null;
+  onPress?: () => void;
 };
 
-export default function AthleteCard({ name, sport, level, distance, compatibility, colorFrom, colorTo }: AthleteCardProps) {
+export default function AthleteCard({
+  name,
+  sport,
+  level,
+  distance,
+  compatibility,
+  colorFrom,
+  fotoUri,
+  onPress,
+}: AthleteCardProps) {
   const { colors } = useAppTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
   return (
-    <View style={styles.card}>
-      <View style={[styles.avatar, { backgroundColor: colorFrom }]}>
+    <TouchableOpacity style={styles.card} onPress={onPress} disabled={!onPress} activeOpacity={0.85}>
+      <Avatar
+        name={name}
+        colorFrom={colorFrom}
+        uri={fotoUri}
+        style={styles.avatar}
+        fontSize={30}
+        overlayStyle={styles.avatarOverlay}
+      >
         <View style={styles.badge}>
           <Text style={styles.badgeText}>{compatibility}%</Text>
         </View>
-      </View>
+      </Avatar>
       <View style={styles.body}>
         <Text style={styles.name}>{name}</Text>
         <Text style={styles.meta}>{sport} · {level}</Text>
-        <Text style={styles.distance}>{distance}</Text>
+        {distance ? <Text style={styles.distance}>{distance}</Text> : null}
       </View>
-    </View>
+    </TouchableOpacity>
   );
 }
 
@@ -43,7 +61,8 @@ const makeStyles = (c: Colors) =>
       overflow: 'hidden',
       marginRight: 10,
     },
-    avatar: { height: 96, justifyContent: 'flex-start', alignItems: 'flex-end', padding: 6 },
+    avatar: { height: 96 },
+    avatarOverlay: { alignItems: 'flex-end', justifyContent: 'flex-start', padding: 6 },
     badge: { backgroundColor: c.badgeBg, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 20 },
     badgeText: { color: c.success, fontSize: 10, fontWeight: '700' },
     body: { padding: 9 },

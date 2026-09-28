@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
   Animated,
   Dimensions,
@@ -11,93 +11,58 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import Logo from '../../../components/Logo';
+import Avatar from '../../../components/Avatar';
+import BrandLogo from '../../../components/BrandLogo';
+import MatchModal from '../../../components/MatchModal';
 import { Usuario, getSession } from '../../../services/auth';
+import { Persona, darLike, descartar, reiniciarDemo, sugerencias, useMatches } from '../../../services/matchStore';
 import { Colors, useAppTheme } from '../../../theme/ThemeContext';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const SWIPE_THRESHOLD = 120;
 const CARD_HEIGHT = 420;
 
-const DEPORTISTAS = [
-  {
-    id: '1',
-    name: 'Camila R.',
-    age: 24,
-    sport: 'Running',
-    level: 'Intermedio',
-    distance: '1.8 km',
-    compatibility: 95,
-    colorFrom: '#3648A6',
-    colorTo: '#22C55E',
-    bio: 'Entrenando para una media maratón. Busco compañera para trotes de fondo los fines de semana.',
-  },
-  {
-    id: '2',
-    name: 'Diego A.',
-    age: 27,
-    sport: 'Fútbol',
-    level: 'Intermedio',
-    distance: '2.3 km',
-    compatibility: 89,
-    colorFrom: '#1F2A5C',
-    colorTo: '#6366F1',
-    bio: 'Juego 2 veces por semana, busco gente para armar equipo fijo.',
-  },
-  {
-    id: '3',
-    name: 'Valentina S.',
-    age: 22,
-    sport: 'Ciclismo',
-    level: 'Intermedio',
-    distance: '2.7 km',
-    compatibility: 87,
-    colorFrom: '#22C55E',
-    colorTo: '#BBF7D0',
-    bio: 'Salidas los sábados en la mañana, ritmo tranquilo pero constante.',
-  },
-  {
-    id: '4',
-    name: 'Andrés M.',
-    age: 25,
-    sport: 'Running',
-    level: 'Principiante',
-    distance: '3.1 km',
-    compatibility: 83,
-    colorFrom: '#7C3AED',
-    colorTo: '#C4B5FD',
-    bio: 'Recién empezando a correr, busco compañía para agarrar el hábito.',
-  },
-  {
-    id: '5',
-    name: 'Matías P.',
-    age: 29,
-    sport: 'Fútbol',
-    level: 'Avanzado',
-    distance: '3.2 km',
-    compatibility: 78,
-    colorFrom: '#1F2A5C',
-    colorTo: '#6366F1',
-    bio: 'Nivel competitivo, juego en liga amateur los domingos.',
-  },
-];
-
 export default function DiscoverScreen() {
   const { colors } = useAppTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
+  const insets = useSafeAreaInsets();
+
+  const estado = useMatches();
+  const deck = useMemo(() => sugerencias(estado), [estado]);
+  const personaActual = deck[0];
+  const siguientePersona = deck[1];
 
   const [usuario, setUsuario] = useState<Usuario | null>(null);
-  const [index, setIndex] = useState(0);
+  const [nuevoMatch, setNuevoMatch] = useState<Persona | null>(null);
+  const [aviso, setAviso] = useState<string | null>(null);
+
   const pan = useRef(new Animated.ValueXY()).current;
+  const animando = useRef(false);
+  // El PanResponder se crea una sola vez, así que lee la persona actual desde una ref.
+  const actualRef = useRef<Persona | undefined>(undefined);
+  actualRef.current = personaActual;
 
   useEffect(() => {
     getSession().then(setUsuario);
   }, []);
 
+  // El aviso "Solicitud enviada" desaparece solo.
+  useEffect(() => {
+    if (!aviso) return;
+    const t = setTimeout(() => setAviso(null), 1800);
+    return () => clearTimeout(t);
+  }, [aviso]);
+
+  // Cuando cambia la tarjeta, se centra la nueva antes de pintar (evita el parpadeo).
+  useLayoutEffect(() => {
+    pan.setValue({ x: 0, y: 0 });
+  }, [personaActual?.id]);
+
   const panResponder = useRef(
     PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
+      onStartShouldSetPanResponder: () => !animando.current,
 
       onPanResponderMove: Animated.event(
         [null, { dx: pan.x, dy: pan.y }],
@@ -117,6 +82,10 @@ export default function DiscoverScreen() {
   ).current;
 
   function forceSwipe(direction: 'left' | 'right') {
+    const persona = actualRef.current;
+    if (!persona || animando.current) return;
+    animando.current = true;
+
     Animated.timing(pan, {
       toValue: {
         x:
@@ -128,8 +97,18 @@ export default function DiscoverScreen() {
       duration: 220,
       useNativeDriver: false,
     }).start(() => {
-      pan.setValue({ x: 0, y: 0 });
-      setIndex((prev) => prev + 1);
+      animando.current = false;
+
+      if (direction === 'right') {
+        const resultado = darLike(persona);
+        if (resultado === 'match') {
+          setNuevoMatch(persona);
+        } else {
+          setAviso(`Solicitud enviada a ${persona.name.split(' ')[0]}`);
+        }
+      } else {
+        descartar(persona.id);
+      }
     });
   }
 
@@ -138,6 +117,17 @@ export default function DiscoverScreen() {
       toValue: { x: 0, y: 0 },
       useNativeDriver: false,
     }).start();
+  }
+
+  function enviarMensajeDesdeMatch() {
+    const persona = nuevoMatch;
+    setNuevoMatch(null);
+    if (persona) {
+      router.push({
+        pathname: '/(deportista)/chat/[id]',
+        params: { id: persona.id, name: persona.name, sport: persona.sport, colorFrom: persona.colorFrom },
+      });
+    }
   }
 
   const rotate = pan.x.interpolate({
@@ -160,19 +150,15 @@ export default function DiscoverScreen() {
   const iniciales = usuario
     ? `${usuario.nombre[0]}${usuario.apellidoPaterno[0]}`
     : '..';
-
-  const personaActual = DEPORTISTAS[index];
-  const siguientePersona = DEPORTISTAS[index + 1];
+  const miNombre = usuario ? `${usuario.nombre} ${usuario.apellidoPaterno}` : 'Yo';
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { paddingTop: insets.top + 12 }]}>
 
       {/* HEADER */}
       <View style={styles.topbar}>
         <View>
-          <View style={styles.logoWrap}>
-            <Logo width={270} />
-          </View>
+          <BrandLogo width={200} />
 
           <Text style={styles.subtitle}>
             {usuario?.comuna
@@ -214,6 +200,11 @@ export default function DiscoverScreen() {
             <Text style={styles.emptyText}>
               Ya viste a todos los deportistas cerca de ti por ahora.
             </Text>
+
+            <TouchableOpacity style={styles.resetButton} onPress={reiniciarDemo}>
+              <Ionicons name="refresh" size={14} color={colors.accent} />
+              <Text style={styles.resetButtonText}>Reiniciar demo</Text>
+            </TouchableOpacity>
           </View>
         )}
 
@@ -224,14 +215,12 @@ export default function DiscoverScreen() {
               styles.cardBehind,
             ]}
           >
-            <View
-              style={[
-                styles.photo,
-                {
-                  backgroundColor:
-                    siguientePersona.colorFrom,
-                },
-              ]}
+            <Avatar
+              name={siguientePersona.name}
+              colorFrom={siguientePersona.colorFrom}
+              uri={siguientePersona.fotoUri}
+              style={styles.photo}
+              fontSize={72}
             />
           </View>
         )}
@@ -249,14 +238,12 @@ export default function DiscoverScreen() {
               },
             ]}
           >
-            <View
-              style={[
-                styles.photo,
-                {
-                  backgroundColor:
-                    personaActual.colorFrom,
-                },
-              ]}
+            <Avatar
+              name={personaActual.name}
+              colorFrom={personaActual.colorFrom}
+              uri={personaActual.fotoUri}
+              style={styles.photo}
+              fontSize={72}
             >
 
               <Animated.View
@@ -267,7 +254,7 @@ export default function DiscoverScreen() {
                 ]}
               >
                 <Text style={styles.likeStampText}>
-                  MATCH
+                  ME GUSTA
                 </Text>
               </Animated.View>
 
@@ -289,13 +276,14 @@ export default function DiscoverScreen() {
                 </Text>
               </View>
 
-            </View>
+            </Avatar>
 
             <View style={styles.cardBody}>
 
               <View style={styles.nameRow}>
                 <Text style={styles.name}>
-                  {personaActual.name}, {personaActual.age}
+                  {personaActual.name}
+                  {personaActual.age ? `, ${personaActual.age}` : ''}
                 </Text>
 
                 <Text style={styles.distance}>
@@ -355,6 +343,28 @@ export default function DiscoverScreen() {
         </View>
       )}
 
+      {/* AVISO: SOLICITUD ENVIADA */}
+      {aviso && (
+        <View style={styles.toastWrap} pointerEvents="none">
+          <View style={styles.toast}>
+            <Ionicons name="paper-plane" size={14} color={colors.accent} />
+            <Text style={styles.toastText}>{aviso}</Text>
+          </View>
+        </View>
+      )}
+
+      {/* ¡ES UN MATCH! */}
+      <MatchModal
+        visible={nuevoMatch !== null}
+        miNombre={miNombre}
+        miFoto={usuario?.fotoPerfil}
+        nombre={nuevoMatch?.name ?? ''}
+        colorFrom={nuevoMatch?.colorFrom ?? '#7C3AED'}
+        fotoUri={nuevoMatch?.fotoUri}
+        onEnviarMensaje={enviarMensajeDesdeMatch}
+        onCerrar={() => setNuevoMatch(null)}
+      />
+
     </View>
   );
 }
@@ -364,7 +374,6 @@ const makeStyles = (c: Colors) =>
     container: {
       flex: 1,
       backgroundColor: c.bg,
-      paddingTop: 60,
     },
 
     topbar: {
@@ -375,15 +384,11 @@ const makeStyles = (c: Colors) =>
       marginBottom: 16,
     },
 
-    logoWrap: {
-      marginLeft: -38,
-      marginTop: -25,
-    },
-
     subtitle: {
       color: c.textMuted,
       fontSize: 11,
-      marginTop: 2,
+      marginTop: 4,
+      marginLeft: 2,
     },
 
     miniAvatar: {
@@ -396,6 +401,7 @@ const makeStyles = (c: Colors) =>
       alignItems: 'center',
       justifyContent: 'center',
       overflow: 'hidden',
+      marginTop: 7,
     },
 
     miniAvatarImage: {
@@ -427,6 +433,25 @@ const makeStyles = (c: Colors) =>
       textAlign: 'center',
     },
 
+    resetButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      borderWidth: 1,
+      borderColor: c.border,
+      backgroundColor: c.card,
+      borderRadius: 20,
+      paddingHorizontal: 14,
+      paddingVertical: 8,
+      marginTop: 4,
+    },
+
+    resetButtonText: {
+      color: c.accent,
+      fontSize: 12,
+      fontWeight: '700',
+    },
+
     card: {
       position: 'absolute',
       width: SCREEN_WIDTH - 40,
@@ -446,7 +471,6 @@ const makeStyles = (c: Colors) =>
 
     photo: {
       height: CARD_HEIGHT * 0.62,
-      position: 'relative',
     },
 
     compatBadge: {
@@ -570,5 +594,31 @@ const makeStyles = (c: Colors) =>
       backgroundColor: '#DB2777',
       alignItems: 'center',
       justifyContent: 'center',
+    },
+
+    toastWrap: {
+      position: 'absolute',
+      left: 0,
+      right: 0,
+      bottom: 118,
+      alignItems: 'center',
+    },
+
+    toast: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      backgroundColor: c.card,
+      borderWidth: 1,
+      borderColor: c.border,
+      borderRadius: 20,
+      paddingHorizontal: 16,
+      paddingVertical: 10,
+    },
+
+    toastText: {
+      color: c.text,
+      fontSize: 12,
+      fontWeight: '600',
     },
   });

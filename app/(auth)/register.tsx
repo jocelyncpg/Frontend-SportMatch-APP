@@ -2,7 +2,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import Logo from '../../components/Logo';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import BrandLogo from '../../components/BrandLogo';
 import { register } from '../../services/auth';
 import {
   formatRut,
@@ -20,6 +21,7 @@ type Campo = 'rut' | 'nombre' | 'apellidoPaterno' | 'apellidoMaterno' | 'email' 
 export default function RegisterScreen() {
   const { colors } = useAppTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
+  const insets = useSafeAreaInsets();
 
   const [rut, setRut] = useState('');
   const [nombre, setNombre] = useState('');
@@ -77,10 +79,14 @@ export default function RegisterScreen() {
       style={styles.container}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
-      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-        <View style={[styles.logoWrap, { transform: [{ translateY: -15 }] }]}>
-          <Logo width={300} />
-        </View>
+      <ScrollView
+        contentContainerStyle={[
+          styles.content,
+          { paddingTop: insets.top + 24, paddingBottom: insets.bottom + 32 },
+        ]}
+        keyboardShouldPersistTaps="handled"
+      >
+        <BrandLogo width={222} style={styles.logo} />
 
         <Text style={styles.title}>Crea tu cuenta</Text>
         <Text style={styles.subtitle}>Únete y encuentra tu compañero ideal</Text>
@@ -243,8 +249,8 @@ export default function RegisterScreen() {
 const makeStyles = (c: Colors) =>
   StyleSheet.create({
     container: { flex: 1, backgroundColor: c.bg },
-    content: { flexGrow: 1, justifyContent: 'center', paddingHorizontal: 24, paddingVertical: 40 },
-    logoWrap: { marginLeft: -38, marginTop: -25 },
+    content: { flexGrow: 1, justifyContent: 'center', paddingHorizontal: 24 },
+    logo: { marginBottom: 28 },
     title: { color: c.text, fontSize: 22, fontWeight: '700', marginBottom: 6 },
     subtitle: { color: c.textMuted, fontSize: 13, marginBottom: 20 },
     errorText: { color: c.danger, fontSize: 12, marginBottom: 12 },
