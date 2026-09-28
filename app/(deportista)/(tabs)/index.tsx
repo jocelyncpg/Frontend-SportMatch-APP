@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   Image,
   ScrollView,
@@ -15,8 +15,12 @@ import AthleteCard from '../../../components/AthleteCard';
 import Logo from '../../../components/Logo';
 import TrainingRow from '../../../components/TrainingRow';
 import { Usuario, getSession } from '../../../services/auth';
+import { Colors, useAppTheme } from '../../../theme/ThemeContext';
 
 export default function HomeScreen() {
+  const { colors } = useAppTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
+
   const [usuario, setUsuario] = useState<Usuario | null>(null);
 
   useEffect(() => {
@@ -70,15 +74,25 @@ export default function HomeScreen() {
         <Ionicons
           name="search"
           size={16}
-          color="#8A93A6"
+          color={colors.textMuted}
         />
 
         <TextInput
           placeholder="Buscar deporte, personas o clubes..."
-          placeholderTextColor="#8A93A6"
+          placeholderTextColor={colors.textMuted}
           style={styles.searchInput}
         />
       </View>
+
+      {/* Acceso al directorio de clubes */}
+      <TouchableOpacity
+        style={styles.clubBanner}
+        onPress={() => router.push('/(deportista)/clubs')}
+      >
+        <Ionicons name="shield-outline" size={18} color={colors.accent} />
+        <Text style={styles.clubBannerText}>Explorar clubes cerca de ti</Text>
+        <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
+      </TouchableOpacity>
 
       {/* Sección: Deportistas recomendados */}
       <View style={styles.sectionRow}>
@@ -86,9 +100,11 @@ export default function HomeScreen() {
           Deportistas recomendados
         </Text>
 
-        <Text style={styles.sectionLink}>
-          Ver todos
-        </Text>
+        <TouchableOpacity onPress={() => router.push('/(deportista)/(tabs)/discover')}>
+          <Text style={styles.sectionLink}>
+            Ver todos
+          </Text>
+        </TouchableOpacity>
       </View>
 
       <ScrollView
@@ -132,9 +148,11 @@ export default function HomeScreen() {
           Entrenamientos cerca de ti
         </Text>
 
-        <Text style={styles.sectionLink}>
-          Ver todos
-        </Text>
+        <TouchableOpacity onPress={() => router.push('/(deportista)/activities')}>
+          <Text style={styles.sectionLink}>
+            Ver todos
+          </Text>
+        </TouchableOpacity>
       </View>
 
       <TrainingRow
@@ -164,102 +182,123 @@ export default function HomeScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#0B0F19',
-  },
+const makeStyles = (c: Colors) =>
+  StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: c.bg,
+    },
 
-  content: {
-    paddingHorizontal: 20,
-    paddingTop: 60,
-    paddingBottom: 30,
-  },
+    content: {
+      paddingHorizontal: 20,
+      paddingTop: 60,
+      paddingBottom: 30,
+    },
 
-  header: {
-    width: '100%',
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    justifyContent: 'space-between',
-    marginBottom: 20,
-  },
+    header: {
+      width: '100%',
+      flexDirection: 'row',
+      alignItems: 'flex-start',
+      justifyContent: 'space-between',
+      marginBottom: 20,
+    },
 
-  logoWrap: {
-    marginLeft: -38,
-    marginTop: -25,
-  },
+    logoWrap: {
+      marginLeft: -38,
+      marginTop: -25,
+    },
 
-  miniAvatar: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    backgroundColor: '#161C2A',
-    borderWidth: 1,
-    borderColor: '#262E40',
-    alignItems: 'center',
-    justifyContent: 'center',
-    overflow: 'hidden',
-  },
+    miniAvatar: {
+      width: 34,
+      height: 34,
+      borderRadius: 17,
+      backgroundColor: c.card,
+      borderWidth: 1,
+      borderColor: c.border,
+      alignItems: 'center',
+      justifyContent: 'center',
+      overflow: 'hidden',
+    },
 
-  miniAvatarImage: {
-    width: '100%',
-    height: '100%',
-  },
+    miniAvatarImage: {
+      width: '100%',
+      height: '100%',
+    },
 
-  miniAvatarText: {
-    color: '#fff',
-    fontSize: 12,
-    fontWeight: '700',
-  },
+    miniAvatarText: {
+      color: c.text,
+      fontSize: 12,
+      fontWeight: '700',
+    },
 
-  greeting: {
-    color: '#fff',
-    fontSize: 22,
-    fontWeight: '700',
-    marginBottom: 4,
-  },
+    greeting: {
+      color: c.text,
+      fontSize: 22,
+      fontWeight: '700',
+      marginBottom: 4,
+    },
 
-  subtitle: {
-    color: '#8A93A6',
-    fontSize: 13,
-    marginBottom: 16,
-  },
+    subtitle: {
+      color: c.textMuted,
+      fontSize: 13,
+      marginBottom: 16,
+    },
 
-  searchBox: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    backgroundColor: '#161C2A',
-    borderWidth: 1,
-    borderColor: '#262E40',
-    borderRadius: 13,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    marginBottom: 22,
-  },
+    searchBox: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      backgroundColor: c.inputBg,
+      borderWidth: 1,
+      borderColor: c.border,
+      borderRadius: 13,
+      paddingHorizontal: 14,
+      paddingVertical: 12,
+      marginBottom: 14,
+    },
 
-  searchInput: {
-    color: '#fff',
-    fontSize: 13,
-    flex: 1,
-  },
+    searchInput: {
+      color: c.text,
+      fontSize: 13,
+      flex: 1,
+    },
 
-  sectionRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'baseline',
-    marginBottom: 12,
-  },
+    clubBanner: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+      backgroundColor: c.card,
+      borderWidth: 1,
+      borderColor: c.border,
+      borderRadius: 13,
+      paddingHorizontal: 14,
+      paddingVertical: 12,
+      marginBottom: 22,
+    },
 
-  sectionTitle: {
-    color: '#fff',
-    fontSize: 14,
-    fontWeight: '700',
-  },
+    clubBannerText: {
+      color: c.text,
+      fontSize: 12.5,
+      fontWeight: '600',
+      flex: 1,
+    },
 
-  sectionLink: {
-    color: '#9061F9',
-    fontSize: 11,
-    fontWeight: '600',
-  },
-});
+    sectionRow: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'baseline',
+      marginBottom: 12,
+    },
+
+    sectionTitle: {
+      color: c.text,
+      fontSize: 14,
+      fontWeight: '700',
+    },
+
+    sectionLink: {
+      color: c.accent,
+      fontSize: 11,
+      fontWeight: '600',
+    },
+  });

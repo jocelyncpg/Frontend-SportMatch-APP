@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Animated,
   Dimensions,
@@ -14,9 +14,11 @@ import {
 
 import Logo from '../../../components/Logo';
 import { Usuario, getSession } from '../../../services/auth';
+import { Colors, useAppTheme } from '../../../theme/ThemeContext';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const SWIPE_THRESHOLD = 120;
+const CARD_HEIGHT = 420;
 
 const DEPORTISTAS = [
   {
@@ -82,6 +84,9 @@ const DEPORTISTAS = [
 ];
 
 export default function DiscoverScreen() {
+  const { colors } = useAppTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
+
   const [usuario, setUsuario] = useState<Usuario | null>(null);
   const [index, setIndex] = useState(0);
   const pan = useRef(new Animated.ValueXY()).current;
@@ -164,22 +169,17 @@ export default function DiscoverScreen() {
 
       {/* HEADER */}
       <View style={styles.topbar}>
+        <View>
+          <View style={styles.logoWrap}>
+            <Logo width={270} />
+          </View>
 
-
-      <View>
-        <View style={styles.logoWrap}>
-          <Logo width={270} />
+          <Text style={styles.subtitle}>
+            {usuario?.comuna
+              ? `Cerca de ${usuario.comuna}`
+              : 'Desliza para conectar'}
+          </Text>
         </View>
-
-        <Text style={styles.subtitle}>
-          {usuario?.comuna
-            ? `Cerca de ${usuario.comuna}`
-            : 'Desliza para conectar'}
-        </Text>
-     </View>
-
-
-
 
         <TouchableOpacity
           onPress={() =>
@@ -198,7 +198,6 @@ export default function DiscoverScreen() {
             </Text>
           )}
         </TouchableOpacity>
-
       </View>
 
       {/* DECK */}
@@ -209,7 +208,7 @@ export default function DiscoverScreen() {
             <Ionicons
               name="checkmark-done-circle-outline"
               size={48}
-              color="#8A93A6"
+              color={colors.textMuted}
             />
 
             <Text style={styles.emptyText}>
@@ -338,7 +337,7 @@ export default function DiscoverScreen() {
             <Ionicons
               name="close"
               size={26}
-              color="#8A93A6"
+              color={colors.textMuted}
             />
           </TouchableOpacity>
 
@@ -360,216 +359,216 @@ export default function DiscoverScreen() {
   );
 }
 
-const CARD_HEIGHT = 420;
+const makeStyles = (c: Colors) =>
+  StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: c.bg,
+      paddingTop: 60,
+    },
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#0B0F19',
-    paddingTop: 60,
-  },
+    topbar: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'flex-start',
+      paddingHorizontal: 20,
+      marginBottom: 16,
+    },
 
-  topbar: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    paddingHorizontal: 20,
-    marginBottom: 16,
-  },
+    logoWrap: {
+      marginLeft: -38,
+      marginTop: -25,
+    },
 
-  logoWrap: {
-    marginLeft: -38,
-    marginTop: -25,
-  },
+    subtitle: {
+      color: c.textMuted,
+      fontSize: 11,
+      marginTop: 2,
+    },
 
-  subtitle: {
-    color: '#8A93A6',
-    fontSize: 11,
-    marginTop: 2,
-  },
+    miniAvatar: {
+      width: 34,
+      height: 34,
+      borderRadius: 17,
+      backgroundColor: c.card,
+      borderWidth: 1,
+      borderColor: c.border,
+      alignItems: 'center',
+      justifyContent: 'center',
+      overflow: 'hidden',
+    },
 
-  miniAvatar: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    backgroundColor: '#161C2A',
-    borderWidth: 1,
-    borderColor: '#262E40',
-    alignItems: 'center',
-    justifyContent: 'center',
-    overflow: 'hidden',
-  },
+    miniAvatarImage: {
+      width: '100%',
+      height: '100%',
+    },
 
-  miniAvatarImage: {
-    width: '100%',
-    height: '100%',
-  },
+    miniAvatarText: {
+      color: c.text,
+      fontSize: 12,
+      fontWeight: '700',
+    },
 
-  miniAvatarText: {
-    color: '#fff',
-    fontSize: 12,
-    fontWeight: '700',
-  },
+    deck: {
+      flex: 1,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
 
-  deck: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
+    emptyState: {
+      alignItems: 'center',
+      paddingHorizontal: 40,
+      gap: 12,
+    },
 
-  emptyState: {
-    alignItems: 'center',
-    paddingHorizontal: 40,
-    gap: 12,
-  },
+    emptyText: {
+      color: c.textMuted,
+      fontSize: 13,
+      textAlign: 'center',
+    },
 
-  emptyText: {
-    color: '#8A93A6',
-    fontSize: 13,
-    textAlign: 'center',
-  },
+    card: {
+      position: 'absolute',
+      width: SCREEN_WIDTH - 40,
+      height: CARD_HEIGHT,
+      backgroundColor: c.card,
+      borderRadius: 22,
+      borderWidth: 1,
+      borderColor: c.border,
+      overflow: 'hidden',
+    },
 
-  card: {
-    position: 'absolute',
-    width: SCREEN_WIDTH - 40,
-    height: CARD_HEIGHT,
-    backgroundColor: '#161C2A',
-    borderRadius: 22,
-    borderWidth: 1,
-    borderColor: '#262E40',
-    overflow: 'hidden',
-  },
+    cardBehind: {
+      top: 12,
+      transform: [{ scale: 0.96 }],
+      opacity: 0.6,
+    },
 
-  cardBehind: {
-    top: 12,
-    transform: [{ scale: 0.96 }],
-    opacity: 0.6,
-  },
+    photo: {
+      height: CARD_HEIGHT * 0.62,
+      position: 'relative',
+    },
 
-  photo: {
-    height: CARD_HEIGHT * 0.62,
-    position: 'relative',
-  },
+    compatBadge: {
+      position: 'absolute',
+      top: 14,
+      right: 14,
+      backgroundColor: 'rgba(11,15,25,0.75)',
+      paddingHorizontal: 10,
+      paddingVertical: 5,
+      borderRadius: 20,
+    },
 
-  compatBadge: {
-    position: 'absolute',
-    top: 14,
-    right: 14,
-    backgroundColor: 'rgba(11,15,25,0.75)',
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 20,
-  },
+    compatText: {
+      color: '#4ADE80',
+      fontSize: 12,
+      fontWeight: '800',
+    },
 
-  compatText: {
-    color: '#4ADE80',
-    fontSize: 12,
-    fontWeight: '800',
-  },
+    stamp: {
+      position: 'absolute',
+      top: 24,
+      borderWidth: 3,
+      borderRadius: 8,
+      paddingHorizontal: 10,
+      paddingVertical: 4,
+    },
 
-  stamp: {
-    position: 'absolute',
-    top: 24,
-    borderWidth: 3,
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-  },
+    likeStamp: {
+      left: 20,
+      borderColor: '#4ADE80',
+      transform: [{ rotate: '-15deg' }],
+    },
 
-  likeStamp: {
-    left: 20,
-    borderColor: '#4ADE80',
-    transform: [{ rotate: '-15deg' }],
-  },
+    likeStampText: {
+      color: '#4ADE80',
+      fontWeight: '900',
+      fontSize: 20,
+      letterSpacing: 1,
+    },
 
-  likeStampText: {
-    color: '#4ADE80',
-    fontWeight: '900',
-    fontSize: 20,
-    letterSpacing: 1,
-  },
+    nopeStamp: {
+      right: 20,
+      borderColor: '#F87171',
+      transform: [{ rotate: '15deg' }],
+    },
 
-  nopeStamp: {
-    right: 20,
-    borderColor: '#F87171',
-    transform: [{ rotate: '15deg' }],
-  },
+    nopeStampText: {
+      color: '#F87171',
+      fontWeight: '900',
+      fontSize: 20,
+      letterSpacing: 1,
+    },
 
-  nopeStampText: {
-    color: '#F87171',
-    fontWeight: '900',
-    fontSize: 20,
-    letterSpacing: 1,
-  },
+    cardBody: {
+      padding: 16,
+    },
 
-  cardBody: {
-    padding: 16,
-  },
+    nameRow: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'baseline',
+      marginBottom: 8,
+    },
 
-  nameRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'baseline',
-    marginBottom: 8,
-  },
+    name: {
+      color: c.text,
+      fontSize: 18,
+      fontWeight: '700',
+    },
 
-  name: {
-    color: '#fff',
-    fontSize: 18,
-    fontWeight: '700',
-  },
+    distance: {
+      color: c.textMuted,
+      fontSize: 11,
+    },
 
-  distance: {
-    color: '#8A93A6',
-    fontSize: 11,
-  },
+    tagsRow: {
+      flexDirection: 'row',
+      gap: 6,
+      marginBottom: 10,
+    },
 
-  tagsRow: {
-    flexDirection: 'row',
-    gap: 6,
-    marginBottom: 10,
-  },
+    tag: {
+      color: c.accent,
+      backgroundColor: c.chip,
+      fontSize: 10.5,
+      fontWeight: '700',
+      paddingHorizontal: 9,
+      paddingVertical: 4,
+      borderRadius: 10,
+      overflow: 'hidden',
+    },
 
-  tag: {
-    color: '#9061F9',
-    backgroundColor: '#1E2536',
-    fontSize: 10.5,
-    fontWeight: '700',
-    paddingHorizontal: 9,
-    paddingVertical: 4,
-    borderRadius: 10,
-  },
+    bio: {
+      color: c.textMuted,
+      fontSize: 11.5,
+      lineHeight: 16,
+    },
 
-  bio: {
-    color: '#8A93A6',
-    fontSize: 11.5,
-    lineHeight: 16,
-  },
+    actions: {
+      flexDirection: 'row',
+      justifyContent: 'center',
+      gap: 24,
+      paddingVertical: 24,
+    },
 
-  actions: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    gap: 24,
-    paddingVertical: 24,
-  },
+    rejectButton: {
+      width: 58,
+      height: 58,
+      borderRadius: 29,
+      backgroundColor: c.card,
+      borderWidth: 1,
+      borderColor: c.border,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
 
-  rejectButton: {
-    width: 58,
-    height: 58,
-    borderRadius: 29,
-    backgroundColor: '#161C2A',
-    borderWidth: 1,
-    borderColor: '#262E40',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-
-  acceptButton: {
-    width: 58,
-    height: 58,
-    borderRadius: 29,
-    backgroundColor: '#DB2777',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-});
+    acceptButton: {
+      width: 58,
+      height: 58,
+      borderRadius: 29,
+      backgroundColor: '#DB2777',
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+  });

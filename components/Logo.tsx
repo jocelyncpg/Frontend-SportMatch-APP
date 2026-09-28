@@ -1,21 +1,16 @@
-import { Image, StyleSheet } from 'react-native';
+import { Image } from 'react-native';
+import { useAppTheme } from '../theme/ThemeContext';
 
-type LogoProps = {
-  width?: number;
-};
+const ASPECT_RATIO = 2172 / 724;
 
-const ASPECT_RATIO = 2172 / 724; // ancho / alto real de tu imagen
+type LogoProps = { width?: number; forceDark?: boolean };
 
-export default function Logo({ width = 220 }: LogoProps) {
-  return (
-    <Image
-      source={require('../assets/images/logo-full.png')}
-      style={[styles.logo, { width, height: width / ASPECT_RATIO }]}
-      resizeMode="contain"
-    />
-  );
+export default function Logo({ width = 220, forceDark = false }: LogoProps) {
+  const { isDark } = useAppTheme();
+  const source =
+    isDark || forceDark
+      ? require('../assets/images/logo-full.png')
+      : require('../assets/images/logo-full-light.png');
+
+  return <Image source={source} style={{ width, height: width / ASPECT_RATIO }} resizeMode="contain" />;
 }
-
-const styles = StyleSheet.create({
-  logo: {},
-});

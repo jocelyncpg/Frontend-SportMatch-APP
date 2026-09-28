@@ -1,14 +1,24 @@
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { router } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Alert, Image, Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { Usuario, getSession, logout, updateFotoPerfil, updatePerfilExtra, updateUbicacion } from '../../../services/auth';
 import { GEOAPIFY_API_KEY, solicitarUbicacion } from '../../../services/location';
+import { Colors, Mode, useAppTheme } from '../../../theme/ThemeContext';
 
 const DEPORTES_DISPONIBLES = ['Running', 'Fútbol', 'Ciclismo', 'Yoga', 'Tenis', 'Natación', 'Trekking'];
 
+const OPCIONES_TEMA: { key: Mode; label: string; icon: keyof typeof Ionicons.glyphMap }[] = [
+  { key: 'system', label: 'Automático', icon: 'phone-portrait-outline' },
+  { key: 'light', label: 'Claro', icon: 'sunny-outline' },
+  { key: 'dark', label: 'Oscuro', icon: 'moon-outline' },
+];
+
 export default function ProfileScreen() {
+  const { colors, mode, setMode } = useAppTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
+
   const [usuario, setUsuario] = useState<Usuario | null>(null);
   const [comunaManual, setComunaManual] = useState('');
   const [pidiendoUbicacion, setPidiendoUbicacion] = useState(false);
@@ -180,7 +190,7 @@ export default function ProfileScreen() {
         {usuario?.comuna ? (
           <View>
             <View style={styles.locationRow}>
-              <Ionicons name="location" size={14} color="#4ADE80" />
+              <Ionicons name="location" size={14} color={colors.success} />
               <Text style={styles.locationText}>{usuario.comuna}</Text>
               <TouchableOpacity onPress={handleActivarUbicacion} disabled={pidiendoUbicacion}>
                 <Text style={styles.updateLink}>{pidiendoUbicacion ? 'Actualizando...' : 'Actualizar'}</Text>
@@ -201,7 +211,7 @@ export default function ProfileScreen() {
         ) : (
           <>
             <TouchableOpacity style={styles.locationButton} onPress={handleActivarUbicacion} disabled={pidiendoUbicacion}>
-              <Ionicons name="navigate-outline" size={15} color="#9061F9" />
+              <Ionicons name="navigate-outline" size={15} color={colors.accent} />
               <Text style={styles.locationButtonText}>
                 {pidiendoUbicacion ? 'Detectando...' : 'Activar mi ubicación'}
               </Text>
@@ -213,7 +223,7 @@ export default function ProfileScreen() {
                 <View style={styles.inputBoxSmall}>
                   <TextInput
                     placeholder="Ej: Providencia"
-                    placeholderTextColor="#8A93A6"
+                    placeholderTextColor={colors.textMuted}
                     style={styles.input}
                     value={comunaManual}
                     onChangeText={setComunaManual}
@@ -260,8 +270,28 @@ export default function ProfileScreen() {
         )}
       </View>
 
+      {/* Apariencia */}
+      <View style={styles.section}>
+        <Text style={[styles.sectionTitle, { marginBottom: 10 }]}>Apariencia</Text>
+        <View style={styles.themeRow}>
+          {OPCIONES_TEMA.map((op) => {
+            const activo = mode === op.key;
+            return (
+              <TouchableOpacity
+                key={op.key}
+                style={[styles.themeOption, activo && styles.themeOptionActive]}
+                onPress={() => setMode(op.key)}
+              >
+                <Ionicons name={op.icon} size={18} color={activo ? '#fff' : colors.textMuted} />
+                <Text style={[styles.themeOptionText, activo && styles.themeOptionTextActive]}>{op.label}</Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+      </View>
+
       <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
-        <Ionicons name="log-out-outline" size={18} color="#F87171" />
+        <Ionicons name="log-out-outline" size={18} color={colors.danger} />
         <Text style={styles.logoutText}>Cerrar sesión</Text>
       </TouchableOpacity>
 
@@ -273,7 +303,7 @@ export default function ProfileScreen() {
             <TextInput
               style={styles.bioInput}
               placeholder="Cuéntale a otros deportistas sobre ti..."
-              placeholderTextColor="#8A93A6"
+              placeholderTextColor={colors.textMuted}
               multiline
               numberOfLines={4}
               maxLength={200}
@@ -317,7 +347,7 @@ export default function ProfileScreen() {
             <View style={styles.inputBoxSmall}>
               <TextInput
                 placeholder="Ej: Escalada, Box, Pádel..."
-                placeholderTextColor="#8A93A6"
+                placeholderTextColor={colors.textMuted}
                 style={styles.input}
                 value={otroDeporteTexto}
                 onChangeText={setOtroDeporteTexto}
@@ -339,81 +369,91 @@ export default function ProfileScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#0B0F19' },
-  content: { padding: 20, paddingTop: 60, alignItems: 'center' },
-  header: { alignItems: 'center', marginBottom: 24 },
-  avatarWrapper: { width: 100, height: 100, marginBottom: 12 },
-  avatarInner: {
-    width: 100, height: 100, borderRadius: 50,
-    backgroundColor: '#161C2A', borderWidth: 2, borderColor: '#262E40',
-    alignItems: 'center', justifyContent: 'center', overflow: 'hidden',
-  },
-  avatarImage: { width: '100%', height: '100%' },
-  avatarText: { color: '#fff', fontSize: 30, fontWeight: '700' },
-  editBadge: {
-    position: 'absolute', bottom: 0, right: 0,
-    width: 30, height: 30, borderRadius: 15,
-    backgroundColor: '#7C3AED', borderWidth: 3, borderColor: '#0B0F19',
-    alignItems: 'center', justifyContent: 'center',
-  },
-  name: { color: '#fff', fontSize: 18, fontWeight: '700' },
-  email: { color: '#8A93A6', fontSize: 12, marginTop: 2 },
-  statsRow: {
-    flexDirection: 'row', width: '100%', backgroundColor: '#161C2A',
-    borderWidth: 1, borderColor: '#262E40', borderRadius: 14, paddingVertical: 14, marginBottom: 20,
-  },
-  statBox: { flex: 1, alignItems: 'center' },
-  statNumber: { color: '#fff', fontSize: 17, fontWeight: '700' },
-  statLabel: { color: '#8A93A6', fontSize: 9.5, marginTop: 2 },
-  section: { width: '100%', marginBottom: 16 },
-  sectionHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 },
-  sectionTitle: { color: '#fff', fontSize: 13, fontWeight: '700' },
-  sectionText: { color: '#8A93A6', fontSize: 12, lineHeight: 17 },
-  locationRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  locationText: { color: '#fff', fontSize: 12.5, fontWeight: '600' },
-  updateLink: { color: '#9061F9', fontSize: 10.5, fontWeight: '700', marginLeft: 'auto' },
-  mapImage: { width: '100%', height: 140, borderRadius: 12, marginTop: 10, backgroundColor: '#161C2A' },
-  locationButton: {
-    flexDirection: 'row', alignItems: 'center', gap: 8,
-    backgroundColor: '#161C2A', borderWidth: 1, borderColor: '#262E40',
-    borderRadius: 12, paddingVertical: 10, paddingHorizontal: 14, alignSelf: 'flex-start',
-  },
-  locationButtonText: { color: '#9061F9', fontSize: 12, fontWeight: '700' },
-  manualLocation: { marginTop: 12, width: '100%' },
-  inputBoxSmall: {
-    backgroundColor: '#161C2A', borderWidth: 1, borderColor: '#262E40',
-    borderRadius: 12, paddingHorizontal: 14, paddingVertical: 10, marginTop: 8, marginBottom: 10,
-  },
-  input: { color: '#fff', fontSize: 13 },
-  saveComunaButton: { backgroundColor: '#7C3AED', borderRadius: 12, paddingVertical: 10, alignItems: 'center' },
-  loginButtonText: { color: '#fff', fontSize: 13, fontWeight: '700' },
-  logoutButton: {
-    flexDirection: 'row', alignItems: 'center', gap: 8,
-    borderWidth: 1, borderColor: '#F87171', borderRadius: 13,
-    paddingVertical: 12, paddingHorizontal: 24, marginTop: 12,
-  },
-  logoutText: { color: '#F87171', fontSize: 13, fontWeight: '700' },
+const makeStyles = (c: Colors) =>
+  StyleSheet.create({
+    container: { flex: 1, backgroundColor: c.bg },
+    content: { padding: 20, paddingTop: 60, alignItems: 'center' },
+    header: { alignItems: 'center', marginBottom: 24 },
+    avatarWrapper: { width: 100, height: 100, marginBottom: 12 },
+    avatarInner: {
+      width: 100, height: 100, borderRadius: 50,
+      backgroundColor: c.card, borderWidth: 2, borderColor: c.border,
+      alignItems: 'center', justifyContent: 'center', overflow: 'hidden',
+    },
+    avatarImage: { width: '100%', height: '100%' },
+    avatarText: { color: c.text, fontSize: 30, fontWeight: '700' },
+    editBadge: {
+      position: 'absolute', bottom: 0, right: 0,
+      width: 30, height: 30, borderRadius: 15,
+      backgroundColor: c.primary, borderWidth: 3, borderColor: c.bg,
+      alignItems: 'center', justifyContent: 'center',
+    },
+    name: { color: c.text, fontSize: 18, fontWeight: '700' },
+    email: { color: c.textMuted, fontSize: 12, marginTop: 2 },
+    statsRow: {
+      flexDirection: 'row', width: '100%', backgroundColor: c.card,
+      borderWidth: 1, borderColor: c.border, borderRadius: 14, paddingVertical: 14, marginBottom: 20,
+    },
+    statBox: { flex: 1, alignItems: 'center' },
+    statNumber: { color: c.text, fontSize: 17, fontWeight: '700' },
+    statLabel: { color: c.textMuted, fontSize: 9.5, marginTop: 2 },
+    section: { width: '100%', marginBottom: 16 },
+    sectionHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 },
+    sectionTitle: { color: c.text, fontSize: 13, fontWeight: '700' },
+    sectionText: { color: c.textMuted, fontSize: 12, lineHeight: 17 },
+    locationRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+    locationText: { color: c.text, fontSize: 12.5, fontWeight: '600' },
+    updateLink: { color: c.accent, fontSize: 10.5, fontWeight: '700', marginLeft: 'auto' },
+    mapImage: { width: '100%', height: 140, borderRadius: 12, marginTop: 10, backgroundColor: c.card },
+    locationButton: {
+      flexDirection: 'row', alignItems: 'center', gap: 8,
+      backgroundColor: c.card, borderWidth: 1, borderColor: c.border,
+      borderRadius: 12, paddingVertical: 10, paddingHorizontal: 14, alignSelf: 'flex-start',
+    },
+    locationButtonText: { color: c.accent, fontSize: 12, fontWeight: '700' },
+    manualLocation: { marginTop: 12, width: '100%' },
+    inputBoxSmall: {
+      backgroundColor: c.inputBg, borderWidth: 1, borderColor: c.border,
+      borderRadius: 12, paddingHorizontal: 14, paddingVertical: 10, marginTop: 8, marginBottom: 10,
+    },
+    input: { color: c.text, fontSize: 13 },
+    saveComunaButton: { backgroundColor: c.primary, borderRadius: 12, paddingVertical: 10, alignItems: 'center' },
+    loginButtonText: { color: '#fff', fontSize: 13, fontWeight: '700' },
+    logoutButton: {
+      flexDirection: 'row', alignItems: 'center', gap: 8,
+      borderWidth: 1, borderColor: c.danger, borderRadius: 13,
+      paddingVertical: 12, paddingHorizontal: 24, marginTop: 12,
+    },
+    logoutText: { color: c.danger, fontSize: 13, fontWeight: '700' },
 
-  chipsWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  deporteChip: { backgroundColor: '#1E2536', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 6 },
-  deporteChipText: { color: '#9061F9', fontSize: 11.5, fontWeight: '700' },
+    chipsWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+    deporteChip: { backgroundColor: c.chip, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 6 },
+    deporteChipText: { color: c.accent, fontSize: 11.5, fontWeight: '700' },
 
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', padding: 24 },
-  modalBox: { backgroundColor: '#161C2A', borderRadius: 18, padding: 20, borderWidth: 1, borderColor: '#262E40' },
-  modalTitle: { color: '#fff', fontSize: 16, fontWeight: '700', marginBottom: 14 },
-  bioInput: {
-    backgroundColor: '#0B0F19', borderWidth: 1, borderColor: '#262E40', borderRadius: 12,
-    padding: 12, color: '#fff', fontSize: 13, height: 90, textAlignVertical: 'top',
-  },
-  charCount: { color: '#8A93A6', fontSize: 10, textAlign: 'right', marginTop: 4, marginBottom: 10 },
-  selectChip: { borderWidth: 1, borderColor: '#262E40', borderRadius: 20, paddingHorizontal: 14, paddingVertical: 8, marginBottom: 12 },
-  selectChipActive: { backgroundColor: '#7C3AED', borderColor: '#7C3AED' },
-  selectChipText: { color: '#AEB6C2', fontSize: 12, fontWeight: '600' },
-  selectChipTextActive: { color: '#fff' },
-  otroLabel: { color: '#8A93A6', fontSize: 11, fontWeight: '600', marginTop: 4, marginBottom: 6 },
-  modalActions: { flexDirection: 'row', gap: 10, marginTop: 8 },
-  modalCancel: { flex: 1, paddingVertical: 12, borderRadius: 12, borderWidth: 1, borderColor: '#262E40', alignItems: 'center' },
-  modalCancelText: { color: '#8A93A6', fontSize: 13, fontWeight: '700' },
-  modalSave: { flex: 1, backgroundColor: '#7C3AED', borderRadius: 12, paddingVertical: 12, alignItems: 'center' },
-});
+    themeRow: { flexDirection: 'row', gap: 8 },
+    themeOption: {
+      flex: 1, alignItems: 'center', gap: 4, paddingVertical: 10,
+      backgroundColor: c.card, borderWidth: 1, borderColor: c.border, borderRadius: 12,
+    },
+    themeOptionActive: { backgroundColor: c.primary, borderColor: c.primary },
+    themeOptionText: { color: c.textMuted, fontSize: 11.5, fontWeight: '600' },
+    themeOptionTextActive: { color: '#fff' },
+
+    modalOverlay: { flex: 1, backgroundColor: c.overlay, justifyContent: 'center', padding: 24 },
+    modalBox: { backgroundColor: c.card, borderRadius: 18, padding: 20, borderWidth: 1, borderColor: c.border },
+    modalTitle: { color: c.text, fontSize: 16, fontWeight: '700', marginBottom: 14 },
+    bioInput: {
+      backgroundColor: c.bg, borderWidth: 1, borderColor: c.border, borderRadius: 12,
+      padding: 12, color: c.text, fontSize: 13, height: 90, textAlignVertical: 'top',
+    },
+    charCount: { color: c.textMuted, fontSize: 10, textAlign: 'right', marginTop: 4, marginBottom: 10 },
+    selectChip: { borderWidth: 1, borderColor: c.border, borderRadius: 20, paddingHorizontal: 14, paddingVertical: 8, marginBottom: 12 },
+    selectChipActive: { backgroundColor: c.primary, borderColor: c.primary },
+    selectChipText: { color: c.textMuted, fontSize: 12, fontWeight: '600' },
+    selectChipTextActive: { color: '#fff' },
+    otroLabel: { color: c.textMuted, fontSize: 11, fontWeight: '600', marginTop: 4, marginBottom: 6 },
+    modalActions: { flexDirection: 'row', gap: 10, marginTop: 8 },
+    modalCancel: { flex: 1, paddingVertical: 12, borderRadius: 12, borderWidth: 1, borderColor: c.border, alignItems: 'center' },
+    modalCancelText: { color: c.textMuted, fontSize: 13, fontWeight: '700' },
+    modalSave: { flex: 1, backgroundColor: c.primary, borderRadius: 12, paddingVertical: 12, alignItems: 'center' },
+  });

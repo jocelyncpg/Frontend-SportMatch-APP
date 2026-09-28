@@ -1,27 +1,71 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import Logo from '../../components/Logo';
 import { register } from '../../services/auth';
+import {
+  formatRut,
+  passwordRules,
+  validateEmail,
+  validateNombre,
+  validatePassword,
+  validatePasswordMatch,
+  validateRut,
+} from '../../services/validators';
+import { Colors, useAppTheme } from '../../theme/ThemeContext';
+
+type Campo = 'rut' | 'nombre' | 'apellidoPaterno' | 'apellidoMaterno' | 'email' | 'password' | 'confirmar';
 
 export default function RegisterScreen() {
+  const { colors } = useAppTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
+
   const [rut, setRut] = useState('');
   const [nombre, setNombre] = useState('');
   const [apellidoPaterno, setApellidoPaterno] = useState('');
   const [apellidoMaterno, setApellidoMaterno] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmar, setConfirmar] = useState('');
+  const [mostrarPassword, setMostrarPassword] = useState(false);
+  const [mostrarConfirmar, setMostrarConfirmar] = useState(false);
   const [error, setError] = useState('');
+  const [touched, setTouched] = useState<Partial<Record<Campo, boolean>>>({});
+  const [submitted, setSubmitted] = useState(false);
+
+  const errors: Record<Campo, string | null> = {
+    rut: validateRut(rut),
+    nombre: validateNombre(nombre, 'Nombre'),
+    apellidoPaterno: validateNombre(apellidoPaterno, 'Apellido paterno'),
+    apellidoMaterno: validateNombre(apellidoMaterno, 'Apellido materno', false),
+    email: validateEmail(email),
+    password: validatePassword(password),
+    confirmar: validatePasswordMatch(password, confirmar),
+  };
+
+  const touch = (c: Campo) => setTouched((prev) => ({ ...prev, [c]: true }));
+  const err = (c: Campo) => (touched[c] || submitted ? errors[c] : null);
+  const reglas = passwordRules(password);
 
   async function handleRegister() {
     setError('');
-    if (!rut || !nombre || !apellidoPaterno || !email || !password) {
-      setError('Completa los campos obligatorios (*)');
+    setSubmitted(true);
+
+    if (Object.values(errors).some((e) => e)) {
+      setError('Revisa los campos marcados en rojo.');
       return;
     }
+
     try {
-      await register({ rut, nombre, apellidoPaterno, apellidoMaterno, email, password });
+      await register({
+        rut,
+        nombre: nombre.trim(),
+        apellidoPaterno: apellidoPaterno.trim(),
+        apellidoMaterno: apellidoMaterno.trim() || undefined,
+        email: email.trim(),
+        password,
+      });
       router.replace('/(deportista)/(tabs)');
     } catch (e: any) {
       setError(e.message);
@@ -29,89 +73,158 @@ export default function RegisterScreen() {
   }
 
   return (
-<KeyboardAvoidingView
-  style={styles.container}
-  behavior={Platform.OS === 'ios' ? 'padding' : undefined}
->
-  <ScrollView contentContainerStyle={styles.content}>
-    <View style={[styles.logoWrap, { transform: [{ translateY: -15 }] }]}>
-      <Logo width={300} />
-    </View>
-    
+    <KeyboardAvoidingView
+      style={styles.container}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+    >
+      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+        <View style={[styles.logoWrap, { transform: [{ translateY: -15 }] }]}>
+          <Logo width={300} />
+        </View>
+
         <Text style={styles.title}>Crea tu cuenta</Text>
         <Text style={styles.subtitle}>Únete y encuentra tu compañero ideal</Text>
 
         {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
-        <View style={styles.inputBox}>
-          <Ionicons name="card-outline" size={16} color="#8A93A6" />
+        {/* RUT */}
+        <View style={[styles.inputBox, err('rut') && styles.inputBoxError]}>
+          <Ionicons name="card-outline" size={16} color={colors.textMuted} />
           <TextInput
             placeholder="RUT (12345678-9) *"
-            placeholderTextColor="#8A93A6"
+            placeholderTextColor={colors.textMuted}
             style={styles.input}
             value={rut}
-            onChangeText={setRut}
+            onChangeText={(t) => setRut(formatRut(t))}
+            onBlur={() => touch('rut')}
             autoCapitalize="characters"
+            autoCorrect={false}
+            maxLength={10}
           />
         </View>
+        {err('rut') ? <Text style={styles.fieldError}>{err('rut')}</Text> : null}
 
-        <View style={styles.inputBox}>
-          <Ionicons name="person-outline" size={16} color="#8A93A6" />
+        {/* Nombre */}
+        <View style={[styles.inputBox, err('nombre') && styles.inputBoxError]}>
+          <Ionicons name="person-outline" size={16} color={colors.textMuted} />
           <TextInput
             placeholder="Nombre *"
-            placeholderTextColor="#8A93A6"
+            placeholderTextColor={colors.textMuted}
             style={styles.input}
             value={nombre}
             onChangeText={setNombre}
+            onBlur={() => touch('nombre')}
+            autoCapitalize="words"
+            maxLength={40}
           />
         </View>
+        {err('nombre') ? <Text style={styles.fieldError}>{err('nombre')}</Text> : null}
 
-        <View style={styles.inputBox}>
-          <Ionicons name="person-outline" size={16} color="#8A93A6" />
+        {/* Apellido paterno */}
+        <View style={[styles.inputBox, err('apellidoPaterno') && styles.inputBoxError]}>
+          <Ionicons name="person-outline" size={16} color={colors.textMuted} />
           <TextInput
             placeholder="Apellido paterno *"
-            placeholderTextColor="#8A93A6"
+            placeholderTextColor={colors.textMuted}
             style={styles.input}
             value={apellidoPaterno}
             onChangeText={setApellidoPaterno}
+            onBlur={() => touch('apellidoPaterno')}
+            autoCapitalize="words"
+            maxLength={40}
           />
         </View>
+        {err('apellidoPaterno') ? <Text style={styles.fieldError}>{err('apellidoPaterno')}</Text> : null}
 
-        <View style={styles.inputBox}>
-          <Ionicons name="person-outline" size={16} color="#8A93A6" />
+        {/* Apellido materno */}
+        <View style={[styles.inputBox, err('apellidoMaterno') && styles.inputBoxError]}>
+          <Ionicons name="person-outline" size={16} color={colors.textMuted} />
           <TextInput
             placeholder="Apellido materno (opcional)"
-            placeholderTextColor="#8A93A6"
+            placeholderTextColor={colors.textMuted}
             style={styles.input}
             value={apellidoMaterno}
             onChangeText={setApellidoMaterno}
+            onBlur={() => touch('apellidoMaterno')}
+            autoCapitalize="words"
+            maxLength={40}
           />
         </View>
+        {err('apellidoMaterno') ? <Text style={styles.fieldError}>{err('apellidoMaterno')}</Text> : null}
 
-        <View style={styles.inputBox}>
-          <Ionicons name="mail-outline" size={16} color="#8A93A6" />
+        {/* Correo */}
+        <View style={[styles.inputBox, err('email') && styles.inputBoxError]}>
+          <Ionicons name="mail-outline" size={16} color={colors.textMuted} />
           <TextInput
             placeholder="Correo electrónico *"
-            placeholderTextColor="#8A93A6"
+            placeholderTextColor={colors.textMuted}
             style={styles.input}
             value={email}
             onChangeText={setEmail}
+            onBlur={() => touch('email')}
             autoCapitalize="none"
+            autoCorrect={false}
             keyboardType="email-address"
+            maxLength={100}
           />
         </View>
+        {err('email') ? <Text style={styles.fieldError}>{err('email')}</Text> : null}
 
-        <View style={styles.inputBox}>
-          <Ionicons name="lock-closed-outline" size={16} color="#8A93A6" />
+        {/* Contraseña */}
+        <View style={[styles.inputBox, err('password') && styles.inputBoxError]}>
+          <Ionicons name="lock-closed-outline" size={16} color={colors.textMuted} />
           <TextInput
             placeholder="Contraseña *"
-            placeholderTextColor="#8A93A6"
+            placeholderTextColor={colors.textMuted}
             style={styles.input}
             value={password}
             onChangeText={setPassword}
-            secureTextEntry
+            onBlur={() => touch('password')}
+            secureTextEntry={!mostrarPassword}
+            autoCapitalize="none"
+            autoCorrect={false}
+            maxLength={64}
           />
+          <TouchableOpacity onPress={() => setMostrarPassword(!mostrarPassword)}>
+            <Ionicons name={mostrarPassword ? 'eye-off-outline' : 'eye-outline'} size={18} color={colors.textMuted} />
+          </TouchableOpacity>
         </View>
+
+        {(password.length > 0 || touched.password || submitted) && (
+          <View style={styles.rulesBox}>
+            {reglas.map((r) => (
+              <View key={r.id} style={styles.ruleRow}>
+                <Ionicons
+                  name={r.ok ? 'checkmark-circle' : 'ellipse-outline'}
+                  size={14}
+                  color={r.ok ? colors.success : colors.textMuted}
+                />
+                <Text style={[styles.ruleText, r.ok && { color: colors.success }]}>{r.label}</Text>
+              </View>
+            ))}
+          </View>
+        )}
+
+        {/* Confirmar contraseña */}
+        <View style={[styles.inputBox, err('confirmar') && styles.inputBoxError]}>
+          <Ionicons name="lock-closed-outline" size={16} color={colors.textMuted} />
+          <TextInput
+            placeholder="Repite tu contraseña *"
+            placeholderTextColor={colors.textMuted}
+            style={styles.input}
+            value={confirmar}
+            onChangeText={setConfirmar}
+            onBlur={() => touch('confirmar')}
+            secureTextEntry={!mostrarConfirmar}
+            autoCapitalize="none"
+            autoCorrect={false}
+            maxLength={64}
+          />
+          <TouchableOpacity onPress={() => setMostrarConfirmar(!mostrarConfirmar)}>
+            <Ionicons name={mostrarConfirmar ? 'eye-off-outline' : 'eye-outline'} size={18} color={colors.textMuted} />
+          </TouchableOpacity>
+        </View>
+        {err('confirmar') ? <Text style={styles.fieldError}>{err('confirmar')}</Text> : null}
 
         <TouchableOpacity style={styles.loginButton} onPress={handleRegister}>
           <Text style={styles.loginButtonText}>Registrarse</Text>
@@ -127,36 +240,50 @@ export default function RegisterScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#0B0F19' },
-  content: { flexGrow: 1, justifyContent: 'center', paddingHorizontal: 24, paddingVertical: 40 },
-  logoWrap: {  marginLeft: -38,marginTop: -25 },
-  title: { color: '#fff', fontSize: 22, fontWeight: '700', marginBottom: 6 },
-  subtitle: { color: '#8A93A6', fontSize: 13, marginBottom: 20 },
-  errorText: { color: '#F87171', fontSize: 12, marginBottom: 12 },
-  inputBox: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    backgroundColor: '#161C2A',
-    borderWidth: 1,
-    borderColor: '#262E40',
-    borderRadius: 13,
-    paddingHorizontal: 14,
-    paddingVertical: 13,
-    marginBottom: 12,
-  },
-  input: { color: '#fff', fontSize: 13, flex: 1 },
-  loginButton: {
-    backgroundColor: '#7C3AED',
-    borderRadius: 13,
-    paddingVertical: 14,
-    alignItems: 'center',
-    marginTop: 8,
-    marginBottom: 20,
-  },
-  loginButtonText: { color: '#fff', fontSize: 14, fontWeight: '700' },
-  registerLink: { color: '#8A93A6', fontSize: 12.5, textAlign: 'center' },
-  registerLinkAccent: { color: '#9061F9', fontWeight: '700' },
-});
-
+const makeStyles = (c: Colors) =>
+  StyleSheet.create({
+    container: { flex: 1, backgroundColor: c.bg },
+    content: { flexGrow: 1, justifyContent: 'center', paddingHorizontal: 24, paddingVertical: 40 },
+    logoWrap: { marginLeft: -38, marginTop: -25 },
+    title: { color: c.text, fontSize: 22, fontWeight: '700', marginBottom: 6 },
+    subtitle: { color: c.textMuted, fontSize: 13, marginBottom: 20 },
+    errorText: { color: c.danger, fontSize: 12, marginBottom: 12 },
+    inputBox: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+      backgroundColor: c.inputBg,
+      borderWidth: 1,
+      borderColor: c.border,
+      borderRadius: 13,
+      paddingHorizontal: 14,
+      paddingVertical: 13,
+      marginBottom: 12,
+    },
+    inputBoxError: { borderColor: c.danger },
+    input: { color: c.text, fontSize: 13, flex: 1 },
+    fieldError: { color: c.danger, fontSize: 11, marginTop: -8, marginBottom: 12, marginLeft: 4 },
+    rulesBox: {
+      backgroundColor: c.card,
+      borderWidth: 1,
+      borderColor: c.border,
+      borderRadius: 12,
+      padding: 12,
+      marginTop: -4,
+      marginBottom: 12,
+      gap: 6,
+    },
+    ruleRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+    ruleText: { color: c.textMuted, fontSize: 11.5 },
+    loginButton: {
+      backgroundColor: c.primary,
+      borderRadius: 13,
+      paddingVertical: 14,
+      alignItems: 'center',
+      marginTop: 8,
+      marginBottom: 20,
+    },
+    loginButtonText: { color: '#fff', fontSize: 14, fontWeight: '700' },
+    registerLink: { color: c.textMuted, fontSize: 12.5, textAlign: 'center' },
+    registerLinkAccent: { color: c.accent, fontWeight: '700' },
+  });

@@ -16,7 +16,7 @@ export default function OnboardingScreen() {
         style={styles.gradient}
       >
         <View style={[styles.logoOverlay, { transform: [{ translateY: -40 }] }]}>
-          <Logo width={310} />
+          <Logo width={310} forceDark />
         </View>
 
         <View style={styles.bottom}>
