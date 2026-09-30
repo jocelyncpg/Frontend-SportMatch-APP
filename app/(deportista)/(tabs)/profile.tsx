@@ -3,11 +3,23 @@ import * as ImagePicker from 'expo-image-picker';
 import { router } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 import { Alert, Image, Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ApiError } from '../../../services/api';
 import { Usuario, getSession, logout, updateFotoPerfil, updatePerfilExtra, updateUbicacion } from '../../../services/auth';
 import { GEOAPIFY_API_KEY, solicitarUbicacion } from '../../../services/location';
 import { Colors, Mode, useAppTheme } from '../../../theme/ThemeContext';
 
 const DEPORTES_DISPONIBLES = ['Running', 'Fútbol', 'Ciclismo', 'Yoga', 'Tenis', 'Natación', 'Trekking'];
+
+/** Los cambios del perfil ahora se guardan en el servidor, así que pueden fallar. */
+function avisarError(titulo: string, e: unknown) {
+  const mensaje =
+    e instanceof ApiError && e.status === 422
+      ? 'Revisa los datos: la comuna solo puede tener letras, espacios, guiones o apóstrofos, y cada deporte debe tener nombre.'
+      : e instanceof Error
+        ? e.message
+        : 'Inténtalo de nuevo.';
+  Alert.alert(titulo, mensaje);
+}
 
 const OPCIONES_TEMA: { key: Mode; label: string; icon: keyof typeof Ionicons.glyphMap }[] = [
   { key: 'system', label: 'Automático', icon: 'phone-portrait-outline' },
@@ -95,7 +107,12 @@ export default function ProfileScreen() {
     if (resultado.ok && resultado.ubicacion) {
       const { latitud, longitud, comuna } = resultado.ubicacion;
       const comunaFinal = comuna ?? 'Ubicación detectada';
-      await updateUbicacion(usuario.id, { comuna: comunaFinal, latitud, longitud });
+      try {
+        await updateUbicacion(usuario.id, { comuna: comunaFinal, latitud, longitud });
+      } catch (e) {
+        avisarError('No se pudo guardar tu ubicación', e);
+        return;
+      }
       setUsuario({ ...usuario, comuna: comunaFinal, latitud, longitud });
       setPermisoNegado(false);
     } else {
@@ -105,7 +122,12 @@ export default function ProfileScreen() {
 
   async function handleGuardarComunaManual() {
     if (!usuario || !comunaManual.trim()) return;
-    await updateUbicacion(usuario.id, { comuna: comunaManual.trim() });
+    try {
+      await updateUbicacion(usuario.id, { comuna: comunaManual.trim() });
+    } catch (e) {
+      avisarError('No se pudo guardar la comuna', e);
+      return;
+    }
     setUsuario({ ...usuario, comuna: comunaManual.trim() });
   }
 
@@ -116,7 +138,12 @@ export default function ProfileScreen() {
 
   async function guardarBio() {
     if (!usuario) return;
-    await updatePerfilExtra(usuario.id, { biografia: bioTemp.trim() });
+    try {
+      await updatePerfilExtra(usuario.id, { biografia: bioTemp.trim() });
+    } catch (e) {
+      avisarError('No se pudo guardar tu biografía', e);
+      return;
+    }
     setUsuario({ ...usuario, biografia: bioTemp.trim() });
     setModalBioVisible(false);
   }
@@ -143,7 +170,12 @@ export default function ProfileScreen() {
       .map((d) => d.trim())
       .filter((d) => d.length > 0);
     const deportesFinales = [...deportesTemp, ...extras];
-    await updatePerfilExtra(usuario.id, { deportes: deportesFinales });
+    try {
+      await updatePerfilExtra(usuario.id, { deportes: deportesFinales });
+    } catch (e) {
+      avisarError('No se pudieron guardar tus deportes', e);
+      return;
+    }
     setUsuario({ ...usuario, deportes: deportesFinales });
     setModalDeportesVisible(false);
   }

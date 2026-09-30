@@ -2,6 +2,7 @@ import { useSyncExternalStore } from 'react';
 
 import { ApiError, apiRequest } from './api';
 import { getSession, getToken } from './auth';
+import { nombreDeporte } from './deportes';
 
 export type Persona = {
   id: string;
@@ -56,23 +57,6 @@ const DEMO_MATCHES: Persona[] = [
 const porId = (id: string) => DEMO_MATCHES.find((p) => p.id === id)!;
 
 const COLORES = ['#3648A6', '#1F2A5C', '#DB2777', '#22C55E', '#7C3AED', '#0EA5E9'];
-
-const DEPORTES: Record<string, string> = {
-  tennis: 'Tenis',
-  tenis: 'Tenis',
-  futbol: 'Fútbol',
-  running: 'Running',
-  ciclismo: 'Ciclismo',
-  natacion: 'Natación',
-  yoga: 'Yoga',
-  basquetbol: 'Básquetbol',
-  padel: 'Pádel',
-  voleibol: 'Vóleibol',
-};
-
-function nombreDeporte(codigo: string): string {
-  return DEPORTES[codigo.toLowerCase()] ?? codigo.charAt(0).toUpperCase() + codigo.slice(1);
-}
 
 function nombreNivel(nivel: number): string {
   if (nivel <= 2) return 'Principiante';

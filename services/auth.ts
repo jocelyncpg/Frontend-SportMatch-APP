@@ -1,12 +1,16 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { ApiError, apiRequest } from './api';
+import { codigoDeporte, nombreDeporte } from './deportes';
 
 const SESSION_KEY = 'sportmatch_session';
 const TOKEN_KEY = 'sportmatch_token';
-// Datos que por ahora solo viven en el teléfono (foto, ubicación, deportes del
-// perfil), guardados por id de usuario para no perderlos al volver a entrar.
+// La foto de perfil es un archivo del teléfono (file://...) que otros no pueden
+// abrir, así que por ahora solo vive aquí, guardada por id de usuario.
 const LOCAL_EXTRAS_KEY = 'sportmatch_local_extras';
+// La pantalla de perfil aún no pide el nivel; Ms_Users lo exige (1 a 5), así
+// que un deporte nuevo se guarda como intermedio y uno existente conserva el suyo.
+const NIVEL_POR_DEFECTO = 3;
 
 export type Usuario = {
   id: string;
@@ -43,11 +47,22 @@ type ProfileResponse = {
   nombre: string;
   apellido_paterno: string;
   apellido_materno: string | null;
+  fecha_nacimiento: string | null;
+  telefono: string | null;
   foto_perfil: string | null;
   biografia: string | null;
 };
 
-type LocalExtras = Partial<Pick<Usuario, 'fotoPerfil' | 'comuna' | 'latitud' | 'longitud' | 'biografia' | 'deportes'>>;
+type Zona = { comuna: string; latitud: number | null; longitud: number | null };
+
+/** GET/PUT /users/{id}/preferences. El PUT reemplaza todo, así que se envía completo. */
+type Preferences = {
+  deportes: { deporte_codigo: string; nivel: number }[];
+  zona: Zona | null;
+  [otros: string]: unknown;
+};
+
+type LocalExtras = Partial<Pick<Usuario, 'fotoPerfil'>>;
 
 /** El login falló porque la cuenta aún no confirma su correo. */
 export class EmailNotVerifiedError extends Error {
@@ -67,22 +82,28 @@ async function saveLocalExtras(userId: string, datos: LocalExtras): Promise<void
   await AsyncStorage.setItem(LOCAL_EXTRAS_KEY, JSON.stringify(extras));
 }
 
-/** Guarda el token y arma la sesión con el perfil que tiene el backend. */
+/** Guarda el token y arma la sesión con el perfil y las preferencias del backend. */
 async function iniciarSesion(tokens: TokenResponse): Promise<Usuario> {
-  const perfil = await apiRequest<ProfileResponse>(`/users/${tokens.user.user_id}/profile`, {
-    token: tokens.access_token,
-  });
-  const extras = (await getLocalExtras())[tokens.user.user_id] ?? {};
+  const userId = tokens.user.user_id;
+  const [perfil, preferencias] = await Promise.all([
+    apiRequest<ProfileResponse>(`/users/${userId}/profile`, { token: tokens.access_token }),
+    apiRequest<Preferences>(`/users/${userId}/preferences`, { token: tokens.access_token }),
+  ]);
+  // De lo guardado en el teléfono solo se usa la foto; lo demás manda el backend.
+  const fotoLocal = (await getLocalExtras())[userId]?.fotoPerfil;
   const usuario: Usuario = {
-    id: tokens.user.user_id,
+    id: userId,
     rut: perfil.rut ?? '',
     nombre: perfil.nombre,
     apellidoPaterno: perfil.apellido_paterno,
     apellidoMaterno: perfil.apellido_materno ?? undefined,
     email: tokens.user.email,
-    fotoPerfil: perfil.foto_perfil ?? undefined,
+    fotoPerfil: fotoLocal ?? perfil.foto_perfil ?? undefined,
     biografia: perfil.biografia ?? undefined,
-    ...extras,
+    deportes: preferencias.deportes.map((d) => nombreDeporte(d.deporte_codigo)),
+    comuna: preferencias.zona?.comuna,
+    latitud: preferencias.zona?.latitud ?? undefined,
+    longitud: preferencias.zona?.longitud ?? undefined,
   };
   await AsyncStorage.multiSet([
     [TOKEN_KEY, tokens.access_token],
@@ -148,29 +169,87 @@ export async function getToken(): Promise<string | null> {
   return AsyncStorage.getItem(TOKEN_KEY);
 }
 
-async function actualizarLocal(userId: string, datos: LocalExtras): Promise<void> {
-  await saveLocalExtras(userId, datos);
+async function actualizarSesion(userId: string, datos: Partial<Usuario>): Promise<void> {
   const session = await getSession();
   if (session && session.id === userId) {
     await AsyncStorage.setItem(SESSION_KEY, JSON.stringify({ ...session, ...datos }));
   }
 }
 
-// Por ahora solo se guardan en el teléfono (aún no se envían al backend).
-export async function updateFotoPerfil(userId: string, fotoUri: string): Promise<void> {
-  await actualizarLocal(userId, { fotoPerfil: fotoUri });
+async function tokenActual(): Promise<string> {
+  const token = await getToken();
+  if (!token) throw new ApiError('Tu sesión expiró. Vuelve a iniciar sesión.', 401, '');
+  return token;
 }
 
+/** Lee las preferencias, aplica el cambio y las guarda completas (el PUT reemplaza todo). */
+async function cambiarPreferencias(
+  userId: string,
+  token: string,
+  cambio: (actuales: Preferences) => Preferences
+): Promise<void> {
+  const actuales = await apiRequest<Preferences>(`/users/${userId}/preferences`, { token });
+  await apiRequest(`/users/${userId}/preferences`, { method: 'PUT', token, body: cambio(actuales) });
+}
+
+// Solo en el teléfono: ver LOCAL_EXTRAS_KEY.
+export async function updateFotoPerfil(userId: string, fotoUri: string): Promise<void> {
+  await saveLocalExtras(userId, { fotoPerfil: fotoUri });
+  await actualizarSesion(userId, { fotoPerfil: fotoUri });
+}
+
+/** Guarda la comuna (y las coordenadas, si hay) como zona en Ms_Users. */
 export async function updateUbicacion(
   userId: string,
   datos: { comuna?: string; latitud?: number; longitud?: number }
 ): Promise<void> {
-  await actualizarLocal(userId, datos);
+  const token = await tokenActual();
+  const redondear = (n?: number) => (n === undefined ? null : Math.round(n * 1e5) / 1e5);
+  await cambiarPreferencias(userId, token, (actuales) => ({
+    ...actuales,
+    zona: datos.comuna
+      ? { comuna: datos.comuna, latitud: redondear(datos.latitud), longitud: redondear(datos.longitud) }
+      : null,
+  }));
+  await actualizarSesion(userId, datos);
 }
 
+/** Guarda la biografía en el perfil y los deportes en las preferencias de Ms_Users. */
 export async function updatePerfilExtra(
   userId: string,
   datos: { biografia?: string; deportes?: string[] }
 ): Promise<void> {
-  await actualizarLocal(userId, datos);
+  const token = await tokenActual();
+
+  if (datos.biografia !== undefined) {
+    // PUT /profile reemplaza el perfil completo: se reenvía lo que ya tiene.
+    const p = await apiRequest<ProfileResponse>(`/users/${userId}/profile`, { token });
+    await apiRequest(`/users/${userId}/profile`, {
+      method: 'PUT',
+      token,
+      body: {
+        nombre: p.nombre,
+        apellido_paterno: p.apellido_paterno,
+        apellido_materno: p.apellido_materno,
+        fecha_nacimiento: p.fecha_nacimiento,
+        telefono: p.telefono,
+        foto_perfil: p.foto_perfil,
+        biografia: datos.biografia || null,
+      },
+    });
+  }
+
+  const deportes = datos.deportes;
+  if (deportes !== undefined) {
+    await cambiarPreferencias(userId, token, (actuales) => {
+      const niveles = new Map(actuales.deportes.map((d) => [d.deporte_codigo, d.nivel]));
+      const codigos = [...new Set(deportes.map(codigoDeporte).filter((c) => c.length > 0))];
+      return {
+        ...actuales,
+        deportes: codigos.map((c) => ({ deporte_codigo: c, nivel: niveles.get(c) ?? NIVEL_POR_DEFECTO })),
+      };
+    });
+  }
+
+  await actualizarSesion(userId, datos);
 }
