@@ -50,7 +50,8 @@ export function validateEmail(email: string): string | null {
 
 export function passwordRules(password: string): PasswordRule[] {
   return [
-    { id: 'largo', label: 'Entre 8 y 64 caracteres', ok: password.length >= 8 && password.length <= 64 },
+    // Mismo mínimo que exige Ms_Users al registrar.
+    { id: 'largo', label: 'Entre 12 y 64 caracteres', ok: password.length >= 12 && password.length <= 64 },
     { id: 'mayus', label: 'Una letra mayúscula', ok: /[A-ZÁÉÍÓÚÑ]/.test(password) },
     { id: 'minus', label: 'Una letra minúscula', ok: /[a-záéíóúñ]/.test(password) },
     { id: 'numero', label: 'Un número', ok: /\d/.test(password) },

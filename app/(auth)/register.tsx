@@ -35,6 +35,7 @@ export default function RegisterScreen() {
   const [error, setError] = useState('');
   const [touched, setTouched] = useState<Partial<Record<Campo, boolean>>>({});
   const [submitted, setSubmitted] = useState(false);
+  const [enviando, setEnviando] = useState(false);
 
   const errors: Record<Campo, string | null> = {
     rut: validateRut(rut),
@@ -59,6 +60,7 @@ export default function RegisterScreen() {
       return;
     }
 
+    setEnviando(true);
     try {
       await register({
         rut,
@@ -68,9 +70,12 @@ export default function RegisterScreen() {
         email: email.trim(),
         password,
       });
-      router.replace('/(deportista)/(tabs)');
+      // La cuenta queda inactiva hasta ingresar el código que llega al correo.
+      router.replace({ pathname: '/(auth)/verify-email', params: { email: email.trim(), nuevo: '1' } });
     } catch (e: any) {
       setError(e.message);
+    } finally {
+      setEnviando(false);
     }
   }
 
@@ -232,8 +237,12 @@ export default function RegisterScreen() {
         </View>
         {err('confirmar') ? <Text style={styles.fieldError}>{err('confirmar')}</Text> : null}
 
-        <TouchableOpacity style={styles.loginButton} onPress={handleRegister}>
-          <Text style={styles.loginButtonText}>Registrarse</Text>
+        <TouchableOpacity
+          style={[styles.loginButton, enviando && { opacity: 0.6 }]}
+          onPress={handleRegister}
+          disabled={enviando}
+        >
+          <Text style={styles.loginButtonText}>{enviando ? 'Creando cuenta...' : 'Registrarse'}</Text>
         </TouchableOpacity>
 
         <TouchableOpacity onPress={() => router.back()}>

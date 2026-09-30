@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
-import { router } from 'expo-router';
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { router, useFocusEffect } from 'expo-router';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
   Animated,
   Dimensions,
@@ -17,7 +17,15 @@ import Avatar from '../../../components/Avatar';
 import BrandLogo from '../../../components/BrandLogo';
 import MatchModal from '../../../components/MatchModal';
 import { Usuario, getSession } from '../../../services/auth';
-import { Persona, darLike, descartar, reiniciarDemo, sugerencias, useMatches } from '../../../services/matchStore';
+import {
+  Persona,
+  cargarSugerencias,
+  darLike,
+  descartar,
+  reiniciarDemo,
+  sugerencias,
+  useMatches,
+} from '../../../services/matchStore';
 import { Colors, useAppTheme } from '../../../theme/ThemeContext';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -44,9 +52,13 @@ export default function DiscoverScreen() {
   const actualRef = useRef<Persona | undefined>(undefined);
   actualRef.current = personaActual;
 
-  useEffect(() => {
-    getSession().then(setUsuario);
-  }, []);
+  // Cada vez que se abre la pestaña se traen los deportistas actualizados.
+  useFocusEffect(
+    useCallback(() => {
+      getSession().then(setUsuario);
+      void cargarSugerencias();
+    }, [])
+  );
 
   // El aviso "Solicitud enviada" desaparece solo.
   useEffect(() => {
@@ -198,13 +210,36 @@ export default function DiscoverScreen() {
             />
 
             <Text style={styles.emptyText}>
-              Ya viste a todos los deportistas cerca de ti por ahora.
+              {estado.cargando
+                ? 'Cargando deportistas...'
+                : estado.error
+                  ? estado.error
+                  : estado.catalogo.length === 0
+                    ? 'Aún no hay otros deportistas registrados.'
+                    : 'Ya viste a todos los deportistas cerca de ti por ahora.'}
             </Text>
 
-            <TouchableOpacity style={styles.resetButton} onPress={reiniciarDemo}>
-              <Ionicons name="refresh" size={14} color={colors.accent} />
-              <Text style={styles.resetButtonText}>Reiniciar demo</Text>
-            </TouchableOpacity>
+            {!estado.cargando && (
+              <TouchableOpacity
+                style={styles.resetButton}
+                onPress={() =>
+                  estado.sesionExpirada ? router.replace('/(auth)/login') : reiniciarDemo()
+                }
+              >
+                <Ionicons
+                  name={estado.sesionExpirada ? 'log-in-outline' : 'refresh'}
+                  size={14}
+                  color={colors.accent}
+                />
+                <Text style={styles.resetButtonText}>
+                  {estado.sesionExpirada
+                    ? 'Iniciar sesión'
+                    : estado.error
+                      ? 'Reintentar'
+                      : 'Volver a ver deportistas'}
+                </Text>
+              </TouchableOpacity>
+            )}
           </View>
         )}
 

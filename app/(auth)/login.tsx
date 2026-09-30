@@ -3,7 +3,7 @@ import { router } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { KeyboardAvoidingView, Platform, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import BrandLogo from '../../components/BrandLogo';
-import { login } from '../../services/auth';
+import { EmailNotVerifiedError, login } from '../../services/auth';
 import { Colors, useAppTheme } from '../../theme/ThemeContext';
 
 export default function LoginScreen() {
@@ -14,6 +14,7 @@ export default function LoginScreen() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [mostrarPassword, setMostrarPassword] = useState(false);
+  const [enviando, setEnviando] = useState(false);
 
   async function handleLogin() {
     setError('');
@@ -21,11 +22,18 @@ export default function LoginScreen() {
       setError('Ingresa tu correo y contraseña');
       return;
     }
+    setEnviando(true);
     try {
       await login(email.trim(), password);
       router.replace('/(deportista)/(tabs)');
     } catch (e: any) {
+      if (e instanceof EmailNotVerifiedError) {
+        router.push({ pathname: '/(auth)/verify-email', params: { email: e.email } });
+        return;
+      }
       setError(e.message);
+    } finally {
+      setEnviando(false);
     }
   }
 
@@ -77,8 +85,12 @@ export default function LoginScreen() {
           <Text style={styles.registerLinkAccent}>¿Olvidaste tu contraseña?</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.loginButton} onPress={handleLogin}>
-          <Text style={styles.loginButtonText}>Iniciar sesión</Text>
+        <TouchableOpacity
+          style={[styles.loginButton, enviando && { opacity: 0.6 }]}
+          onPress={handleLogin}
+          disabled={enviando}
+        >
+          <Text style={styles.loginButtonText}>{enviando ? 'Entrando...' : 'Iniciar sesión'}</Text>
         </TouchableOpacity>
 
         <TouchableOpacity onPress={() => router.push('/(auth)/register')}>

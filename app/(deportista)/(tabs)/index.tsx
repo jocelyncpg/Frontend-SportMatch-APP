@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
-import { router } from 'expo-router';
-import { useEffect, useMemo, useState } from 'react';
+import { router, useFocusEffect } from 'expo-router';
+import { useCallback, useMemo, useState } from 'react';
 import {
   Image,
   ScrollView,
@@ -16,7 +16,7 @@ import AthleteCard from '../../../components/AthleteCard';
 import BrandLogo from '../../../components/BrandLogo';
 import TrainingRow from '../../../components/TrainingRow';
 import { Usuario, getSession } from '../../../services/auth';
-import { sugerencias, useMatches } from '../../../services/matchStore';
+import { cargarSugerencias, sugerencias, useMatches } from '../../../services/matchStore';
 import { Colors, useAppTheme } from '../../../theme/ThemeContext';
 
 export default function HomeScreen() {
@@ -29,9 +29,13 @@ export default function HomeScreen() {
 
   const [usuario, setUsuario] = useState<Usuario | null>(null);
 
-  useEffect(() => {
-    getSession().then(setUsuario);
-  }, []);
+  // Cada vez que se vuelve a esta pestaña se traen los deportistas actualizados.
+  useFocusEffect(
+    useCallback(() => {
+      getSession().then(setUsuario);
+      void cargarSugerencias();
+    }, [])
+  );
 
   const iniciales = usuario
     ? `${usuario.nombre[0]}${usuario.apellidoPaterno[0]}`
@@ -130,9 +134,24 @@ export default function HomeScreen() {
             />
           ))}
         </ScrollView>
+      ) : estado.cargando ? (
+        <Text style={styles.emptyText}>Cargando deportistas...</Text>
+      ) : estado.error ? (
+        <TouchableOpacity
+          onPress={() =>
+            estado.sesionExpirada ? router.replace('/(auth)/login') : void cargarSugerencias()
+          }
+        >
+          <Text style={styles.emptyText}>{estado.error}</Text>
+          <Text style={styles.sectionLink}>
+            {estado.sesionExpirada ? 'Iniciar sesión' : 'Reintentar'}
+          </Text>
+        </TouchableOpacity>
       ) : (
         <Text style={styles.emptyText}>
-          Ya viste a todos los deportistas cerca de ti por ahora.
+          {estado.catalogo.length === 0
+            ? 'Aún no hay otros deportistas registrados.'
+            : 'Ya viste a todos los deportistas cerca de ti por ahora.'}
         </Text>
       )}
 
