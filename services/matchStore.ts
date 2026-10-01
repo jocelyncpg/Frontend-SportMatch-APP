@@ -1,9 +1,5 @@
 import { useSyncExternalStore } from 'react';
 
-import { ApiError, apiRequest } from './api';
-import { getSession, getToken } from './auth';
-import { nombreDeporte } from './deportes';
-
 export type Persona = {
   id: string;
   name: string;
@@ -20,12 +16,10 @@ export type Persona = {
 };
 
 type Estado = {
-  /** Deportistas reales registrados (GET /users/suggestions), sin incluirte a ti. */
   catalogo: Persona[];
   cargando: boolean;
   error: string | null;
   sesionExpirada: boolean;
-  /** Dueño de los likes y descartes en memoria; si cambia la sesión, se reinician. */
   usuarioId: string | null;
   solicitudes: Persona[];
   confirmados: Persona[];
@@ -33,72 +27,32 @@ type Estado = {
   descartados: string[];
 };
 
-/** Tarjeta pública que devuelve Ms_Users. */
-type SugerenciaApi = {
-  user_id: string;
-  nombre: string;
-  apellido_inicial: string;
-  edad: number | null;
-  foto_perfil: string | null;
-  biografia: string | null;
-  deportes: { deporte_codigo: string; nivel: number }[];
-  compatibilidad: number;
-};
-
-// Solicitudes y matches siguen siendo de demostración: se reemplazan cuando
-// exista el servicio de matching (likes y matches reales).
-const DEMO_MATCHES: Persona[] = [
-  { id: 'demo-camila', name: 'Camila R.', age: 24, sport: 'Running', level: 'Intermedio', distance: '1.8 km', compatibility: 95, colorFrom: '#3648A6', bio: 'Entrenando para una media maratón. Busco compañera para trotes de fondo los fines de semana.' },
-  { id: 'demo-diego', name: 'Diego A.', age: 27, sport: 'Fútbol', level: 'Intermedio', distance: '2.3 km', compatibility: 89, colorFrom: '#1F2A5C', bio: 'Juego 2 veces por semana, busco gente para armar equipo fijo.' },
-  { id: 'demo-ignacio', name: 'Ignacio R.', age: 28, sport: 'Ciclismo', level: 'Avanzado', distance: '4.0 km', compatibility: 85, colorFrom: '#7C3AED', bio: 'Ruta y montaña. Salgo casi todos los domingos temprano.' },
-  { id: 'demo-daniela', name: 'Daniela S.', age: 24, sport: 'Yoga', level: 'Intermedio', distance: '2.9 km', compatibility: 90, colorFrom: '#22C55E', bio: 'Yoga y meditación, busco un grupo constante para practicar.' },
+// Catálogo de prueba completo (sin backend). Se reemplaza por cargarSugerencias()
+// real cuando vuelvas a usar matchStore.backend.ts.
+export const CATALOGO: Persona[] = [
+  { id: 'camila', name: 'Camila R.', age: 24, sport: 'Running', level: 'Intermedio', distance: '1.8 km', compatibility: 95, colorFrom: '#3648A6', bio: 'Entrenando para una media maratón. Busco compañera para trotes de fondo los fines de semana.' },
+  { id: 'diego', name: 'Diego A.', age: 27, sport: 'Fútbol', level: 'Intermedio', distance: '2.3 km', compatibility: 89, colorFrom: '#1F2A5C', bio: 'Juego 2 veces por semana, busco gente para armar equipo fijo.' },
+  { id: 'sofia', name: 'Sofía T.', age: 23, sport: 'Yoga', level: 'Intermedio', distance: '2.1 km', compatibility: 91, colorFrom: '#DB2777', bio: 'Practico yoga al aire libre y me encantaría sumar gente a las clases de los sábados.', leGustas: true },
+  { id: 'valentina', name: 'Valentina S.', age: 22, sport: 'Ciclismo', level: 'Intermedio', distance: '2.7 km', compatibility: 87, colorFrom: '#22C55E', bio: 'Salidas los sábados en la mañana, ritmo tranquilo pero constante.', leGustas: true },
+  { id: 'andres', name: 'Andrés M.', age: 25, sport: 'Running', level: 'Principiante', distance: '3.1 km', compatibility: 83, colorFrom: '#7C3AED', bio: 'Recién empezando a correr, busco compañía para agarrar el hábito.' },
+  { id: 'tomas', name: 'Tomás L.', age: 26, sport: 'Natación', level: 'Avanzado', distance: '3.4 km', compatibility: 80, colorFrom: '#0EA5E9', bio: 'Nado 3 veces por semana en piscina temperada. Busco alguien para entrenar series.' },
+  { id: 'matias', name: 'Matías P.', age: 29, sport: 'Fútbol', level: 'Avanzado', distance: '3.2 km', compatibility: 78, colorFrom: '#1F2A5C', bio: 'Nivel competitivo, juego en liga amateur los domingos.' },
 ];
 
-const porId = (id: string) => DEMO_MATCHES.find((p) => p.id === id)!;
-
-const COLORES = ['#3648A6', '#1F2A5C', '#DB2777', '#22C55E', '#7C3AED', '#0EA5E9'];
-
-function nombreNivel(nivel: number): string {
-  if (nivel <= 2) return 'Principiante';
-  if (nivel === 3) return 'Intermedio';
-  return 'Avanzado';
-}
-
-/** Siempre el mismo color para la misma persona. */
-function colorPara(id: string): string {
-  let suma = 0;
-  for (const letra of id) suma = (suma + letra.charCodeAt(0)) % 997;
-  return COLORES[suma % COLORES.length];
-}
-
-function aPersona(s: SugerenciaApi): Persona {
-  const principal = s.deportes[0];
-  return {
-    id: s.user_id,
-    name: `${s.nombre} ${s.apellido_inicial}`,
-    age: s.edad ?? undefined,
-    sport: principal ? nombreDeporte(principal.deporte_codigo) : 'Sin deporte aún',
-    level: principal ? nombreNivel(principal.nivel) : 'Nivel por definir',
-    // Sin ubicación en el backend todavía: la distancia no se muestra.
-    distance: undefined,
-    compatibility: s.compatibilidad,
-    colorFrom: colorPara(s.user_id),
-    bio: s.biografia ?? undefined,
-    fotoUri: s.foto_perfil,
-    // Sin servicio de matching todavía: un like queda como solicitud enviada.
-    leGustas: false,
-  };
-}
+const DEMO_MATCHES: Persona[] = [
+  { id: 'ignacio', name: 'Ignacio R.', age: 28, sport: 'Ciclismo', level: 'Avanzado', distance: '4.0 km', compatibility: 85, colorFrom: '#7C3AED', bio: 'Ruta y montaña. Salgo casi todos los domingos temprano.' },
+  { id: 'daniela', name: 'Daniela S.', age: 24, sport: 'Yoga', level: 'Intermedio', distance: '2.9 km', compatibility: 90, colorFrom: '#22C55E', bio: 'Yoga y meditación, busco un grupo constante para practicar.' },
+];
 
 function estadoInicial(usuarioId: string | null = null): Estado {
   return {
-    catalogo: [],
+    catalogo: CATALOGO,
     cargando: false,
     error: null,
     sesionExpirada: false,
     usuarioId,
-    solicitudes: [porId('demo-ignacio'), porId('demo-daniela')],
-    confirmados: [porId('demo-camila'), porId('demo-diego')],
+    solicitudes: [...DEMO_MATCHES],
+    confirmados: [CATALOGO[0], CATALOGO[1]], // Camila y Diego, como siempre
     enviadas: [],
     descartados: [],
   };
@@ -110,7 +64,6 @@ const oyentes = new Set<() => void>();
 function emitir() {
   oyentes.forEach((o) => o());
 }
-
 function suscribir(oyente: () => void) {
   oyentes.add(oyente);
   return () => {
@@ -126,40 +79,14 @@ export function useMatches(): Estado {
   return useSyncExternalStore(suscribir, getEstado, getEstado);
 }
 
-/** Trae los deportistas registrados desde el backend (frontend → gateway → Ms_Users). */
+/** Simulado: no llama al backend, solo carga el catálogo de prueba al instante. */
 export async function cargarSugerencias(): Promise<void> {
-  const [session, token] = await Promise.all([getSession(), getToken()]);
-  if (!session || !token) {
-    estado = { ...estadoInicial(), sesionExpirada: true, error: 'Inicia sesión para ver deportistas.' };
-    emitir();
-    return;
-  }
-  if (estado.usuarioId !== session.id) {
-    // Otra cuenta en el mismo teléfono: no hereda likes ni descartes.
-    estado = estadoInicial(session.id);
-  }
   estado = { ...estado, cargando: true, error: null, sesionExpirada: false };
   emitir();
-  try {
-    const tarjetas = await apiRequest<SugerenciaApi[]>('/users/suggestions?limit=50', { token });
-    estado = {
-      ...estado,
-      cargando: false,
-      // El backend ya te excluye; el filtro es una segunda barrera.
-      catalogo: tarjetas.filter((t) => t.user_id !== session.id).map(aPersona),
-    };
-  } catch (e: any) {
-    estado = {
-      ...estado,
-      cargando: false,
-      error: e.message,
-      sesionExpirada: e instanceof ApiError && e.status === 401,
-    };
-  }
+  estado = { ...estado, cargando: false, catalogo: CATALOGO };
   emitir();
 }
 
-/** Personas que todavía no has visto ni tienes como match o solicitud. */
 export function sugerencias(e: Estado): Persona[] {
   const ocupados = new Set([
     ...e.solicitudes.map((p) => p.id),
@@ -187,7 +114,6 @@ export function rechazarSolicitud(id: string) {
   emitir();
 }
 
-/** Devuelve 'match' si la otra persona ya te había dado like, o 'enviada' si queda como solicitud pendiente. */
 export function darLike(persona: Persona): 'match' | 'enviada' {
   if (persona.leGustas) {
     estado = { ...estado, confirmados: [...estado.confirmados, persona] };
@@ -204,9 +130,7 @@ export function descartar(id: string) {
   emitir();
 }
 
-/** Vuelve a mostrar a quienes descartaste o diste like, y recarga desde el backend. */
 export function reiniciarDemo() {
   estado = estadoInicial(estado.usuarioId);
   emitir();
-  void cargarSugerencias();
 }

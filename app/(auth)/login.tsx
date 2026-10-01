@@ -13,8 +13,8 @@ export default function LoginScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
-  const [mostrarPassword, setMostrarPassword] = useState(false);
   const [enviando, setEnviando] = useState(false);
+  const [mostrarPassword, setMostrarPassword] = useState(false);
 
   async function handleLogin() {
     setError('');

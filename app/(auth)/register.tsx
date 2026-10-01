@@ -33,9 +33,9 @@ export default function RegisterScreen() {
   const [mostrarPassword, setMostrarPassword] = useState(false);
   const [mostrarConfirmar, setMostrarConfirmar] = useState(false);
   const [error, setError] = useState('');
+  const [enviando, setEnviando] = useState(false);
   const [touched, setTouched] = useState<Partial<Record<Campo, boolean>>>({});
   const [submitted, setSubmitted] = useState(false);
-  const [enviando, setEnviando] = useState(false);
 
   const errors: Record<Campo, string | null> = {
     rut: validateRut(rut),
@@ -70,8 +70,11 @@ export default function RegisterScreen() {
         email: email.trim(),
         password,
       });
-      // La cuenta queda inactiva hasta ingresar el código que llega al correo.
-      router.replace({ pathname: '/(auth)/verify-email', params: { email: email.trim(), nuevo: '1' } });
+      // La cuenta queda creada pero inactiva hasta confirmar el código del correo.
+      router.replace({
+        pathname: '/(auth)/verify-email',
+        params: { email: email.trim(), nuevo: '1' },
+      });
     } catch (e: any) {
       setError(e.message);
     } finally {

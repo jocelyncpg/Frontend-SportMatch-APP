@@ -1,16 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-import { ApiError, apiRequest } from './api';
-import { codigoDeporte, nombreDeporte } from './deportes';
-
 const SESSION_KEY = 'sportmatch_session';
-const TOKEN_KEY = 'sportmatch_token';
-// La foto de perfil es un archivo del teléfono (file://...) que otros no pueden
-// abrir, así que por ahora solo vive aquí, guardada por id de usuario.
-const LOCAL_EXTRAS_KEY = 'sportmatch_local_extras';
-// La pantalla de perfil aún no pide el nivel; Ms_Users lo exige (1 a 5), así
-// que un deporte nuevo se guarda como intermedio y uno existente conserva el suyo.
-const NIVEL_POR_DEFECTO = 3;
+const USERS_KEY = 'sportmatch_mock_users';
 
 export type Usuario = {
   id: string;
@@ -36,128 +27,73 @@ type RegisterData = {
   password: string;
 };
 
-type TokenResponse = {
-  access_token: string;
-  user: { user_id: string; email: string; nombre: string; apellido_paterno: string; role: string };
-};
+type UsuarioGuardado = Usuario & { password: string; verificado: boolean };
 
-type ProfileResponse = {
-  user_id: string;
-  rut: string | null;
-  nombre: string;
-  apellido_paterno: string;
-  apellido_materno: string | null;
-  fecha_nacimiento: string | null;
-  telefono: string | null;
-  foto_perfil: string | null;
-  biografia: string | null;
-};
-
-type Zona = { comuna: string; latitud: number | null; longitud: number | null };
-
-/** GET/PUT /users/{id}/preferences. El PUT reemplaza todo, así que se envía completo. */
-type Preferences = {
-  deportes: { deporte_codigo: string; nivel: number }[];
-  zona: Zona | null;
-  [otros: string]: unknown;
-};
-
-type LocalExtras = Partial<Pick<Usuario, 'fotoPerfil'>>;
-
-/** El login falló porque la cuenta aún no confirma su correo. */
 export class EmailNotVerifiedError extends Error {
   constructor(public email: string) {
     super('Debes verificar tu correo antes de entrar.');
   }
 }
 
-async function getLocalExtras(): Promise<Record<string, LocalExtras>> {
-  const raw = await AsyncStorage.getItem(LOCAL_EXTRAS_KEY);
+async function getUsuarios(): Promise<Record<string, UsuarioGuardado>> {
+  const raw = await AsyncStorage.getItem(USERS_KEY);
   return raw ? JSON.parse(raw) : {};
 }
-
-async function saveLocalExtras(userId: string, datos: LocalExtras): Promise<void> {
-  const extras = await getLocalExtras();
-  extras[userId] = { ...extras[userId], ...datos };
-  await AsyncStorage.setItem(LOCAL_EXTRAS_KEY, JSON.stringify(extras));
+async function saveUsuarios(usuarios: Record<string, UsuarioGuardado>): Promise<void> {
+  await AsyncStorage.setItem(USERS_KEY, JSON.stringify(usuarios));
 }
 
-/** Guarda el token y arma la sesión con el perfil y las preferencias del backend. */
-async function iniciarSesion(tokens: TokenResponse): Promise<Usuario> {
-  const userId = tokens.user.user_id;
-  const [perfil, preferencias] = await Promise.all([
-    apiRequest<ProfileResponse>(`/users/${userId}/profile`, { token: tokens.access_token }),
-    apiRequest<Preferences>(`/users/${userId}/preferences`, { token: tokens.access_token }),
-  ]);
-  // De lo guardado en el teléfono solo se usa la foto; lo demás manda el backend.
-  const fotoLocal = (await getLocalExtras())[userId]?.fotoPerfil;
-  const usuario: Usuario = {
-    id: userId,
-    rut: perfil.rut ?? '',
-    nombre: perfil.nombre,
-    apellidoPaterno: perfil.apellido_paterno,
-    apellidoMaterno: perfil.apellido_materno ?? undefined,
-    email: tokens.user.email,
-    fotoPerfil: fotoLocal ?? perfil.foto_perfil ?? undefined,
-    biografia: perfil.biografia ?? undefined,
-    deportes: preferencias.deportes.map((d) => nombreDeporte(d.deporte_codigo)),
-    comuna: preferencias.zona?.comuna,
-    latitud: preferencias.zona?.latitud ?? undefined,
-    longitud: preferencias.zona?.longitud ?? undefined,
+export async function register(data: RegisterData): Promise<void> {
+  const usuarios = await getUsuarios();
+  if (usuarios[data.email.toLowerCase()]) {
+    throw new Error('Ese correo ya está registrado.');
+  }
+  usuarios[data.email.toLowerCase()] = {
+    id: 'mock-' + Date.now(),
+    rut: data.rut,
+    nombre: data.nombre,
+    apellidoPaterno: data.apellidoPaterno,
+    apellidoMaterno: data.apellidoMaterno,
+    email: data.email,
+    password: data.password,
+    verificado: false,
   };
-  await AsyncStorage.multiSet([
-    [TOKEN_KEY, tokens.access_token],
-    [SESSION_KEY, JSON.stringify(usuario)],
-  ]);
+  await saveUsuarios(usuarios);
+}
+
+// En modo simulado, cualquier código de 6 dígitos verifica la cuenta.
+export async function verifyEmail(email: string, code: string): Promise<Usuario> {
+  if (!/^\d{6}$/.test(code)) throw new Error('Código inválido.');
+  const usuarios = await getUsuarios();
+  const u = usuarios[email.toLowerCase()];
+  if (!u) throw new Error('No encontramos esa cuenta.');
+  u.verificado = true;
+  await saveUsuarios(usuarios);
+  const { password, verificado, ...usuario } = u;
+  await AsyncStorage.setItem(SESSION_KEY, JSON.stringify(usuario));
   return usuario;
 }
 
-/** Crea la cuenta. Queda inactiva hasta confirmar el código que llega al correo. */
-export async function register(data: RegisterData): Promise<void> {
-  await apiRequest('/users/auth/register', {
-    method: 'POST',
-    body: {
-      email: data.email,
-      password: data.password,
-      nombre: data.nombre,
-      apellido_paterno: data.apellidoPaterno,
-      apellido_materno: data.apellidoMaterno || undefined,
-      rut: data.rut || undefined,
-    },
-  });
-}
-
-/** Confirma el código del correo; si es correcto, la cuenta queda activa y con sesión iniciada. */
-export async function verifyEmail(email: string, code: string): Promise<Usuario> {
-  const tokens = await apiRequest<TokenResponse>('/users/auth/email-verification/confirm', {
-    method: 'POST',
-    body: { email, code },
-  });
-  return iniciarSesion(tokens);
-}
-
-/** Pide un código nuevo (el backend no reenvía si pasaron menos de 60 s). */
 export async function resendVerificationCode(email: string): Promise<void> {
-  await apiRequest('/users/auth/email-verification/request', { method: 'POST', body: { email } });
+  // Simulado: no hace falta enviar nada de verdad.
 }
 
 export async function login(email: string, password: string): Promise<Usuario> {
-  try {
-    const tokens = await apiRequest<TokenResponse>('/users/auth/login', {
-      method: 'POST',
-      body: { email, password },
-    });
-    return await iniciarSesion(tokens);
-  } catch (e) {
-    if (e instanceof ApiError && e.status === 403 && e.detail === 'email not verified') {
-      throw new EmailNotVerifiedError(email);
-    }
-    throw e;
+  const usuarios = await getUsuarios();
+  const u = usuarios[email.toLowerCase()];
+  if (!u || u.password !== password) {
+    throw new Error('Correo o contraseña incorrectos.');
   }
+  if (!u.verificado) {
+    throw new EmailNotVerifiedError(email);
+  }
+  const { password: _p, verificado: _v, ...usuario } = u;
+  await AsyncStorage.setItem(SESSION_KEY, JSON.stringify(usuario));
+  return usuario;
 }
 
 export async function logout(): Promise<void> {
-  await AsyncStorage.multiRemove([SESSION_KEY, TOKEN_KEY]);
+  await AsyncStorage.removeItem(SESSION_KEY);
 }
 
 export async function getSession(): Promise<Usuario | null> {
@@ -166,90 +102,36 @@ export async function getSession(): Promise<Usuario | null> {
 }
 
 export async function getToken(): Promise<string | null> {
-  return AsyncStorage.getItem(TOKEN_KEY);
+  return 'mock-token';
 }
 
-async function actualizarSesion(userId: string, datos: Partial<Usuario>): Promise<void> {
+async function actualizarSesionYUsuario(userId: string, datos: Partial<Usuario>): Promise<void> {
   const session = await getSession();
   if (session && session.id === userId) {
     await AsyncStorage.setItem(SESSION_KEY, JSON.stringify({ ...session, ...datos }));
   }
+  const usuarios = await getUsuarios();
+  const entry = Object.values(usuarios).find((u) => u.id === userId);
+  if (entry) {
+    Object.assign(entry, datos);
+    await saveUsuarios(usuarios);
+  }
 }
 
-async function tokenActual(): Promise<string> {
-  const token = await getToken();
-  if (!token) throw new ApiError('Tu sesión expiró. Vuelve a iniciar sesión.', 401, '');
-  return token;
-}
-
-/** Lee las preferencias, aplica el cambio y las guarda completas (el PUT reemplaza todo). */
-async function cambiarPreferencias(
-  userId: string,
-  token: string,
-  cambio: (actuales: Preferences) => Preferences
-): Promise<void> {
-  const actuales = await apiRequest<Preferences>(`/users/${userId}/preferences`, { token });
-  await apiRequest(`/users/${userId}/preferences`, { method: 'PUT', token, body: cambio(actuales) });
-}
-
-// Solo en el teléfono: ver LOCAL_EXTRAS_KEY.
 export async function updateFotoPerfil(userId: string, fotoUri: string): Promise<void> {
-  await saveLocalExtras(userId, { fotoPerfil: fotoUri });
-  await actualizarSesion(userId, { fotoPerfil: fotoUri });
+  await actualizarSesionYUsuario(userId, { fotoPerfil: fotoUri });
 }
 
-/** Guarda la comuna (y las coordenadas, si hay) como zona en Ms_Users. */
 export async function updateUbicacion(
   userId: string,
   datos: { comuna?: string; latitud?: number; longitud?: number }
 ): Promise<void> {
-  const token = await tokenActual();
-  const redondear = (n?: number) => (n === undefined ? null : Math.round(n * 1e5) / 1e5);
-  await cambiarPreferencias(userId, token, (actuales) => ({
-    ...actuales,
-    zona: datos.comuna
-      ? { comuna: datos.comuna, latitud: redondear(datos.latitud), longitud: redondear(datos.longitud) }
-      : null,
-  }));
-  await actualizarSesion(userId, datos);
+  await actualizarSesionYUsuario(userId, datos);
 }
 
-/** Guarda la biografía en el perfil y los deportes en las preferencias de Ms_Users. */
 export async function updatePerfilExtra(
   userId: string,
   datos: { biografia?: string; deportes?: string[] }
 ): Promise<void> {
-  const token = await tokenActual();
-
-  if (datos.biografia !== undefined) {
-    // PUT /profile reemplaza el perfil completo: se reenvía lo que ya tiene.
-    const p = await apiRequest<ProfileResponse>(`/users/${userId}/profile`, { token });
-    await apiRequest(`/users/${userId}/profile`, {
-      method: 'PUT',
-      token,
-      body: {
-        nombre: p.nombre,
-        apellido_paterno: p.apellido_paterno,
-        apellido_materno: p.apellido_materno,
-        fecha_nacimiento: p.fecha_nacimiento,
-        telefono: p.telefono,
-        foto_perfil: p.foto_perfil,
-        biografia: datos.biografia || null,
-      },
-    });
-  }
-
-  const deportes = datos.deportes;
-  if (deportes !== undefined) {
-    await cambiarPreferencias(userId, token, (actuales) => {
-      const niveles = new Map(actuales.deportes.map((d) => [d.deporte_codigo, d.nivel]));
-      const codigos = [...new Set(deportes.map(codigoDeporte).filter((c) => c.length > 0))];
-      return {
-        ...actuales,
-        deportes: codigos.map((c) => ({ deporte_codigo: c, nivel: niveles.get(c) ?? NIVEL_POR_DEFECTO })),
-      };
-    });
-  }
-
-  await actualizarSesion(userId, datos);
+  await actualizarSesionYUsuario(userId, datos);
 }
