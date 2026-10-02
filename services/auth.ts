@@ -3,6 +3,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 const SESSION_KEY = 'sportmatch_session';
 const USERS_KEY = 'sportmatch_mock_users';
 
+export type DeporteConNivel = { nombre: string; nivel: number };
+
 export type Usuario = {
   id: string;
   rut: string;
@@ -15,7 +17,7 @@ export type Usuario = {
   latitud?: number;
   longitud?: number;
   biografia?: string;
-  deportes?: string[];
+  deportes?: DeporteConNivel[];
 };
 
 type RegisterData = {
@@ -131,7 +133,26 @@ export async function updateUbicacion(
 
 export async function updatePerfilExtra(
   userId: string,
-  datos: { biografia?: string; deportes?: string[] }
+  datos: { biografia?: string; deportes?: DeporteConNivel[] }
 ): Promise<void> {
   await actualizarSesionYUsuario(userId, datos);
+}
+
+// ---------- Recuperar contraseña (simulado) ----------
+
+export async function requestPasswordReset(email: string): Promise<void> {
+  // No revela si el correo existe o no, igual que haría el backend real.
+}
+
+export async function confirmPasswordReset(
+  email: string,
+  code: string,
+  nuevaPassword: string
+): Promise<void> {
+  if (!/^\d{6}$/.test(code)) throw new Error('Código inválido.');
+  const usuarios = await getUsuarios();
+  const u = usuarios[email.toLowerCase()];
+  if (!u) throw new Error('No encontramos esa cuenta.');
+  u.password = nuevaPassword;
+  await saveUsuarios(usuarios);
 }

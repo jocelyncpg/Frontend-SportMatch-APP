@@ -23,6 +23,7 @@ import {
   darLike,
   descartar,
   reiniciarDemo,
+  setRadio,
   sugerencias,
   useMatches,
 } from '../../../services/matchStore';
@@ -31,6 +32,13 @@ import { Colors, useAppTheme } from '../../../theme/ThemeContext';
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const SWIPE_THRESHOLD = 120;
 const CARD_HEIGHT = 420;
+
+const RADIOS: { label: string; km: number | null }[] = [
+  { label: 'Todas', km: null },
+  { label: '2 km', km: 2 },
+  { label: '5 km', km: 5 },
+  { label: '10 km', km: 10 },
+];
 
 export default function DiscoverScreen() {
   const { colors } = useAppTheme();
@@ -74,7 +82,11 @@ export default function DiscoverScreen() {
 
   const panResponder = useRef(
     PanResponder.create({
-      onStartShouldSetPanResponder: () => !animando.current,
+      // Clave para que un botón dentro de la tarjeta reciba el toque: el responder
+      // solo se reclama cuando hay un arrastre de verdad (>5px), no con un simple tap.
+      onStartShouldSetPanResponder: () => false,
+      onMoveShouldSetPanResponder: (_, gesture) =>
+        !animando.current && (Math.abs(gesture.dx) > 5 || Math.abs(gesture.dy) > 5),
 
       onPanResponderMove: Animated.event(
         [null, { dx: pan.x, dy: pan.y }],
@@ -142,6 +154,24 @@ export default function DiscoverScreen() {
     }
   }
 
+  function verPerfil(persona: Persona) {
+    router.push({
+      pathname: '/(deportista)/perfil/[id]',
+      params: {
+        id: persona.id,
+        name: persona.name,
+        sport: persona.sport,
+        level: persona.level,
+        age: persona.age?.toString() ?? '',
+        compatibility: persona.compatibility.toString(),
+        distance: persona.distance ?? '',
+        bio: persona.bio ?? '',
+        colorFrom: persona.colorFrom,
+        fotoUri: persona.fotoUri ?? '',
+      },
+    });
+  }
+
   const rotate = pan.x.interpolate({
     inputRange: [-SCREEN_WIDTH / 2, 0, SCREEN_WIDTH / 2],
     outputRange: ['-12deg', '0deg', '12deg'],
@@ -198,6 +228,24 @@ export default function DiscoverScreen() {
         </TouchableOpacity>
       </View>
 
+      {/* FILTRO DE RADIO */}
+      <View style={styles.radioRow}>
+        {RADIOS.map((r) => {
+          const activo = estado.radioKm === r.km;
+          return (
+            <TouchableOpacity
+              key={r.label}
+              style={[styles.radioChip, activo && styles.radioChipActivo]}
+              onPress={() => setRadio(r.km)}
+            >
+              <Text style={[styles.radioChipTexto, activo && styles.radioChipTextoActivo]}>
+                {r.label}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+
       {/* DECK */}
       <View style={styles.deck}>
 
@@ -216,7 +264,9 @@ export default function DiscoverScreen() {
                   ? estado.error
                   : estado.catalogo.length === 0
                     ? 'Aún no hay otros deportistas registrados.'
-                    : 'Ya viste a todos los deportistas cerca de ti por ahora.'}
+                    : estado.radioKm !== null
+                      ? `No hay deportistas dentro de ${estado.radioKm} km por ahora.`
+                      : 'Ya viste a todos los deportistas cerca de ti por ahora.'}
             </Text>
 
             {!estado.cargando && (
@@ -310,6 +360,13 @@ export default function DiscoverScreen() {
                   {personaActual.compatibility}%
                 </Text>
               </View>
+
+              <TouchableOpacity
+                style={styles.infoButton}
+                onPress={() => verPerfil(personaActual)}
+              >
+                <Ionicons name="information-circle-outline" size={20} color="#fff" />
+              </TouchableOpacity>
 
             </Avatar>
 
@@ -416,7 +473,7 @@ const makeStyles = (c: Colors) =>
       justifyContent: 'space-between',
       alignItems: 'flex-start',
       paddingHorizontal: 20,
-      marginBottom: 16,
+      marginBottom: 14,
     },
 
     subtitle: {
@@ -448,6 +505,38 @@ const makeStyles = (c: Colors) =>
       color: c.text,
       fontSize: 12,
       fontWeight: '700',
+    },
+
+    radioRow: {
+      flexDirection: 'row',
+      gap: 8,
+      paddingHorizontal: 20,
+      marginBottom: 16,
+    },
+
+    radioChip: {
+      flex: 1,
+      alignItems: 'center',
+      paddingVertical: 8,
+      borderRadius: 20,
+      borderWidth: 1,
+      borderColor: c.border,
+      backgroundColor: c.card,
+    },
+
+    radioChipActivo: {
+      backgroundColor: c.primary,
+      borderColor: c.primary,
+    },
+
+    radioChipTexto: {
+      color: c.textMuted,
+      fontSize: 11.5,
+      fontWeight: '700',
+    },
+
+    radioChipTextoActivo: {
+      color: '#fff',
     },
 
     deck: {
@@ -522,6 +611,18 @@ const makeStyles = (c: Colors) =>
       color: '#4ADE80',
       fontSize: 12,
       fontWeight: '800',
+    },
+
+    infoButton: {
+      position: 'absolute',
+      top: 14,
+      left: 14,
+      width: 30,
+      height: 30,
+      borderRadius: 15,
+      backgroundColor: 'rgba(11,15,25,0.55)',
+      alignItems: 'center',
+      justifyContent: 'center',
     },
 
     stamp: {
