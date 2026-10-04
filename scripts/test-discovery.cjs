@@ -42,7 +42,7 @@ function loadStore(request, matchingRequest = async () => ({ incoming: [], outgo
           return request(...args);
         },
       };
-      if (name === './deportes') return { nombreDeporte: (code) => code };
+      if (name === './deportes') return { nombreDeporte: (code) => code, codigoDeporte: (name) => name.toLowerCase() };
       throw new Error(`Unexpected import: ${name}`);
     },
   });
@@ -260,4 +260,105 @@ test('a cancelled request response cannot modify a different account', async () 
   await assert.rejects(pending);
   assert.equal(store.getEstado().usuarioId, 'next-account');
   assert.equal(store.getEstado().solicitudesEnviadas.length, 1);
+});
+
+test('nearby athletes keep server ordering even if farther athletes have higher compatibility', async () => {
+  const { store } = loadStore(async () => [
+    { ...card('near'), distancia_km: 1.2, compatibilidad: 50 },
+    { ...card('far'), distancia_km: 8, compatibilidad: 100 },
+  ]);
+  await store.cargarSugerencias();
+  const suggested = store.sugerencias(store.getEstado());
+  assert.equal(suggested[0].id, 'near');
+  assert.equal(suggested[0].distance, '≈ 1.2 km');
+});
+
+test('initial recommendations use 10km and shared sports with similar levels when configured', async () => {
+  const { store, calls, auth } = loadStore(async () => []);
+  auth.session = { id: 'my-id', latitud: 0, longitud: 0, deportes: ['Running'] };
+  await store.cargarSugerencias();
+  assert.equal(calls[0][0], '/users/suggestions?limit=50&radius_km=10&shared_sports=true&level_tolerance=1');
+  assert.equal(store.getEstado().ubicacionDisponible, true);
+});
+
+test('filter changes send sport, radius and level bounds and clear obsolete cards', async () => {
+  const { store, calls } = loadStore(async () => [card()]);
+  await store.cargarSugerencias();
+  await store.aplicarFiltros({ radioKm: 5, deporte: 'running', nivelMin: 2, nivelMax: 4, nivelSimilar: false });
+  const lastSearch = calls.filter(([path]) => path.startsWith('/users/suggestions')).at(-1);
+  assert.equal(lastSearch[0], '/users/suggestions?limit=50&radius_km=5&sport=running&min_level=2&max_level=4');
+});
+
+test('an older filter request cannot overwrite newer search results', async () => {
+  let finish;
+  const pendingResponse = new Promise((resolve) => { finish = resolve; });
+  const { store } = loadStore(async (path) => path.includes('radius_km=5') ? pendingResponse : [card('new-results')]);
+  await store.cargarSugerencias();
+  const first = store.aplicarFiltros({ radioKm: 5, deporte: 'todos', nivelMin: 1, nivelMax: 5, nivelSimilar: false });
+  await new Promise((resolve) => setImmediate(resolve));
+  await store.aplicarFiltros({ radioKm: 10, deporte: 'todos', nivelMin: 1, nivelMax: 5, nivelSimilar: false });
+  finish([card('old-results')]);
+  await first;
+  assert.equal(store.getEstado().catalogo[0].id, 'new-results');
+  assert.equal(store.getEstado().filtros.radioKm, 10);
+});
+
+function loadAuth(preferences) {
+  const saved = new Map([
+    ['sportmatch_token', 'real-token'],
+    ['sportmatch_session', JSON.stringify({ id: 'my-id', nombre: 'Ana', latitud: 1, longitud: 2 })],
+  ]);
+  const calls = [];
+  const storage = {
+    getItem: async (key) => saved.get(key) ?? null,
+    setItem: async (key, value) => { saved.set(key, value); },
+  };
+  const module = { exports: {} };
+  const source = fs.readFileSync(path.join(__dirname, '../services/auth.ts'), 'utf8');
+  const code = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 } }).outputText;
+  vm.runInNewContext(code, {
+    module, exports: module.exports, Error,
+    require(name) {
+      if (name === '@react-native-async-storage/async-storage') return { default: storage };
+      if (name === './api') return { ApiError, apiRequest: async (path, options) => {
+        calls.push([path, options]);
+        if (options.method === 'PUT') { preferences = options.body; return preferences; }
+        return preferences;
+      } };
+      if (name === './deportes') return { codigoDeporte: (value) => value.toLowerCase(), nombreDeporte: (value) => value };
+      throw new Error(`Unexpected auth import: ${name}`);
+    },
+  });
+  return { auth: module.exports, calls };
+}
+
+test('saving a level preserves the other sports levels, location and preferences', async () => {
+  const prefs = { deportes: [{ deporte_codigo: 'running', nivel: 3 }, { deporte_codigo: 'tennis', nivel: 2 }],
+    zona: { comuna: 'Prueba', latitud: 1, longitud: 2 }, disponibilidad_match: true, objetivos: ['entrenar'] };
+  const { auth, calls } = loadAuth(prefs);
+  await auth.updatePerfilExtra('my-id', { deportes: ['running', 'tennis'], nivelesDeportes: { running: 5 } });
+  const body = calls.find(([, options]) => options.method === 'PUT')[1].body;
+  assert.equal(body.deportes[0].nivel, 5);
+  assert.equal(body.deportes[1].nivel, 2);
+  assert.deepEqual(body.zona, prefs.zona);
+  assert.deepEqual(body.objetivos, prefs.objetivos);
+  assert.equal((await auth.getSession()).nivelesDeportes.running, 5);
+});
+
+test('saving a manual comuna clears obsolete GPS coordinates both remotely and locally', async () => {
+  const { auth, calls } = loadAuth({ deportes: [], zona: { comuna: 'Prueba', latitud: 1, longitud: 2 } });
+  await auth.updateUbicacion('my-id', { comuna: 'Santiago' });
+  const body = calls.find(([, options]) => options.method === 'PUT')[1].body;
+  assert.equal(body.zona.latitud, null);
+  assert.equal(body.zona.longitud, null);
+  assert.equal((await auth.getSession()).latitud, undefined);
+  assert.equal((await auth.getSession()).longitud, undefined);
+});
+
+test('profile refresh reads real levels and location from the server', async () => {
+  const { auth } = loadAuth({ deportes: [{ deporte_codigo: 'running', nivel: 4 }], zona: null });
+  const session = await auth.refrescarPreferencias();
+  assert.equal(session.nivelesDeportes.running, 4);
+  assert.equal(session.deportes[0], 'running');
+  assert.equal(session.latitud, undefined);
 });

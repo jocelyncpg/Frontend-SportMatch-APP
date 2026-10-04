@@ -13,6 +13,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import AthleteCard from '../../../components/AthleteCard';
+import SuggestionFilters from '../../../components/SuggestionFilters';
 import BrandLogo from '../../../components/BrandLogo';
 import TrainingRow from '../../../components/TrainingRow';
 import { Usuario, getSession } from '../../../services/auth';
@@ -103,6 +104,8 @@ export default function HomeScreen() {
       </TouchableOpacity>
 
       {/* Sección: Deportistas recomendados */}
+      <SuggestionFilters />
+
       <View style={styles.sectionRow}>
         <Text style={styles.sectionTitle}>
           Deportistas recomendados
@@ -153,7 +156,7 @@ export default function HomeScreen() {
       ) : (
         <Text style={styles.emptyText}>
           {estado.catalogo.length === 0
-            ? 'Aún no hay otros deportistas registrados.'
+            ? 'No hay deportistas con estos filtros. Prueba ampliarlos.'
             : 'Ya viste a todos los deportistas por ahora.'}
         </Text>
       )}

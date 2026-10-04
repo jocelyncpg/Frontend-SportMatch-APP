@@ -1,10 +1,11 @@
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
-import { router } from 'expo-router';
-import { useEffect, useMemo, useState } from 'react';
+import { router, useFocusEffect } from 'expo-router';
+import { useCallback, useMemo, useState } from 'react';
 import { Alert, Image, Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { ApiError } from '../../../services/api';
-import { Usuario, getSession, logout, updateFotoPerfil, updatePerfilExtra, updateUbicacion } from '../../../services/auth';
+import { Usuario, getSession, refrescarPreferencias, logout, updateFotoPerfil, updatePerfilExtra, updateUbicacion } from '../../../services/auth';
+import { codigoDeporte } from '../../../services/deportes';
 import { GEOAPIFY_API_KEY, solicitarUbicacion } from '../../../services/location';
 import { Colors, Mode, useAppTheme } from '../../../theme/ThemeContext';
 
@@ -41,11 +42,17 @@ export default function ProfileScreen() {
   const [bioTemp, setBioTemp] = useState('');
   const [modalDeportesVisible, setModalDeportesVisible] = useState(false);
   const [deportesTemp, setDeportesTemp] = useState<string[]>([]);
+  const [nivelesTemp, setNivelesTemp] = useState<Record<string, number>>({});
+  const [guardandoDeportes, setGuardandoDeportes] = useState(false);
   const [otroDeporteTexto, setOtroDeporteTexto] = useState('');
 
-  useEffect(() => {
-    getSession().then(setUsuario);
-  }, []);
+  useFocusEffect(useCallback(() => {
+    let active = true;
+    getSession().then((session) => { if (active) setUsuario(session); });
+    refrescarPreferencias().then((session) => { if (active) setUsuario(session); })
+      .catch((e) => { if (active) avisarError('No se pudo actualizar el perfil', e); });
+    return () => { active = false; };
+  }, []));
 
   async function handleLogout() {
     await logout();
@@ -101,23 +108,20 @@ export default function ProfileScreen() {
     if (!usuario) return;
     setPidiendoUbicacion(true);
     setMapaError(false);
-    const resultado = await solicitarUbicacion();
-    setPidiendoUbicacion(false);
-
-    if (resultado.ok && resultado.ubicacion) {
-      const { latitud, longitud, comuna } = resultado.ubicacion;
-      const comunaFinal = comuna ?? 'Ubicación detectada';
-      try {
+    try {
+      const resultado = await solicitarUbicacion();
+      if (resultado.ok && resultado.ubicacion) {
+        const { latitud, longitud, comuna } = resultado.ubicacion;
+        const comunaFinal = comuna ?? 'Ubicación detectada';
         await updateUbicacion(usuario.id, { comuna: comunaFinal, latitud, longitud });
-      } catch (e) {
-        avisarError('No se pudo guardar tu ubicación', e);
-        return;
+        setUsuario({ ...usuario, comuna: comunaFinal, latitud, longitud });
+        setPermisoNegado(false);
+      } else {
+        setPermisoNegado(true);
       }
-      setUsuario({ ...usuario, comuna: comunaFinal, latitud, longitud });
-      setPermisoNegado(false);
-    } else {
-      setPermisoNegado(true);
-    }
+    } catch (e) {
+      avisarError('No se pudo obtener o guardar tu ubicación', e);
+    } finally { setPidiendoUbicacion(false); }
   }
 
   async function handleGuardarComunaManual() {
@@ -128,7 +132,7 @@ export default function ProfileScreen() {
       avisarError('No se pudo guardar la comuna', e);
       return;
     }
-    setUsuario({ ...usuario, comuna: comunaManual.trim() });
+    setUsuario({ ...usuario, comuna: comunaManual.trim(), latitud: undefined, longitud: undefined });
   }
 
   function abrirEditorBio() {
@@ -153,6 +157,7 @@ export default function ProfileScreen() {
     const enLista = actuales.filter((d) => DEPORTES_DISPONIBLES.includes(d));
     const personalizados = actuales.filter((d) => !DEPORTES_DISPONIBLES.includes(d));
     setDeportesTemp(enLista);
+    setNivelesTemp(usuario?.nivelesDeportes ?? {});
     setOtroDeporteTexto(personalizados.join(', '));
     setModalDeportesVisible(true);
   }
@@ -170,13 +175,14 @@ export default function ProfileScreen() {
       .map((d) => d.trim())
       .filter((d) => d.length > 0);
     const deportesFinales = [...deportesTemp, ...extras];
+    setGuardandoDeportes(true);
     try {
-      await updatePerfilExtra(usuario.id, { deportes: deportesFinales });
+      await updatePerfilExtra(usuario.id, { deportes: deportesFinales, nivelesDeportes: nivelesTemp });
     } catch (e) {
       avisarError('No se pudieron guardar tus deportes', e);
       return;
-    }
-    setUsuario({ ...usuario, deportes: deportesFinales });
+    } finally { setGuardandoDeportes(false); }
+    setUsuario(await getSession());
     setModalDeportesVisible(false);
   }
 
@@ -293,7 +299,7 @@ export default function ProfileScreen() {
           <View style={styles.chipsWrap}>
             {usuario.deportes.map((d) => (
               <View key={d} style={styles.deporteChip}>
-                <Text style={styles.deporteChipText}>{d}</Text>
+                <Text style={styles.deporteChipText}>{d} · Nivel {usuario.nivelesDeportes?.[codigoDeporte(d)] ?? 3}/5</Text>
               </View>
             ))}
           </View>
@@ -356,10 +362,11 @@ export default function ProfileScreen() {
       </Modal>
 
       {/* Modal: editar deportes */}
-      <Modal visible={modalDeportesVisible} transparent animationType="fade">
+      <Modal visible={modalDeportesVisible} transparent animationType="fade" onRequestClose={() => setModalDeportesVisible(false)}>
         <View style={styles.modalOverlay}>
-          <View style={styles.modalBox}>
+          <View style={[styles.modalBox, { maxHeight: '90%' }]}>
             <Text style={styles.modalTitle}>Mis deportes</Text>
+            <ScrollView>
             <View style={styles.chipsWrap}>
               {DEPORTES_DISPONIBLES.map((d) => {
                 const seleccionado = deportesTemp.includes(d);
@@ -386,12 +393,28 @@ export default function ProfileScreen() {
               />
             </View>
 
+            <Text style={styles.otroLabel}>Tu nivel por deporte: 1–2 principiante · 3 intermedio · 4–5 avanzado</Text>
+            {[...new Set([...deportesTemp, ...otroDeporteTexto.split(',').map((d) => d.trim()).filter(Boolean)])].map((sport) => {
+              const code = codigoDeporte(sport);
+              const level = nivelesTemp[code] ?? 3;
+              return <View key={code}>
+                <Text style={styles.sectionText}>{sport}</Text>
+                <View style={styles.chipsWrap}>{[1, 2, 3, 4, 5].map((value) => (
+                  <TouchableOpacity key={value} style={[styles.selectChip, value === level && styles.selectChipActive]}
+                    accessibilityLabel={`${sport}: nivel ${value}`} accessibilityState={{ selected: level === value }}
+                    onPress={() => setNivelesTemp({ ...nivelesTemp, [code]: value })}>
+                    <Text style={[styles.selectChipText, value === level && styles.selectChipTextActive]}>{value}</Text>
+                  </TouchableOpacity>
+                ))}</View>
+              </View>;
+            })}
+            </ScrollView>
             <View style={styles.modalActions}>
               <TouchableOpacity style={styles.modalCancel} onPress={() => setModalDeportesVisible(false)}>
                 <Text style={styles.modalCancelText}>Cancelar</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={styles.modalSave} onPress={guardarDeportes}>
-                <Text style={styles.loginButtonText}>Guardar</Text>
+              <TouchableOpacity style={styles.modalSave} disabled={guardandoDeportes} onPress={guardarDeportes}>
+                <Text style={styles.loginButtonText}>{guardandoDeportes ? 'Guardando...' : 'Guardar'}</Text>
               </TouchableOpacity>
             </View>
           </View>

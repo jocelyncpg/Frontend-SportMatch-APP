@@ -8,8 +8,7 @@ const TOKEN_KEY = 'sportmatch_token';
 // La foto de perfil es un archivo del teléfono (file://...) que otros no pueden
 // abrir, así que por ahora solo vive aquí, guardada por id de usuario.
 const LOCAL_EXTRAS_KEY = 'sportmatch_local_extras';
-// La pantalla de perfil aún no pide el nivel; Ms_Users lo exige (1 a 5), así
-// que un deporte nuevo se guarda como intermedio y uno existente conserva el suyo.
+// Un deporte nuevo comienza en intermedio; el usuario puede elegir su nivel.
 const NIVEL_POR_DEFECTO = 3;
 
 export type Usuario = {
@@ -25,6 +24,7 @@ export type Usuario = {
   longitud?: number;
   biografia?: string;
   deportes?: string[];
+  nivelesDeportes?: Record<string, number>;
 };
 
 type RegisterData = {
@@ -101,6 +101,7 @@ async function iniciarSesion(tokens: TokenResponse): Promise<Usuario> {
     fotoPerfil: fotoLocal ?? perfil.foto_perfil ?? undefined,
     biografia: perfil.biografia ?? undefined,
     deportes: preferencias.deportes.map((d) => nombreDeporte(d.deporte_codigo)),
+    nivelesDeportes: Object.fromEntries(preferencias.deportes.map((d) => [d.deporte_codigo, d.nivel])),
     comuna: preferencias.zona?.comuna,
     latitud: preferencias.zona?.latitud ?? undefined,
     longitud: preferencias.zona?.longitud ?? undefined,
@@ -211,13 +212,13 @@ export async function updateUbicacion(
       ? { comuna: datos.comuna, latitud: redondear(datos.latitud), longitud: redondear(datos.longitud) }
       : null,
   }));
-  await actualizarSesion(userId, datos);
+  await actualizarSesion(userId, { ...datos, latitud: datos.latitud, longitud: datos.longitud });
 }
 
 /** Guarda la biografía en el perfil y los deportes en las preferencias de Ms_Users. */
 export async function updatePerfilExtra(
   userId: string,
-  datos: { biografia?: string; deportes?: string[] }
+  datos: { biografia?: string; deportes?: string[]; nivelesDeportes?: Record<string, number> }
 ): Promise<void> {
   const token = await tokenActual();
 
@@ -240,16 +241,35 @@ export async function updatePerfilExtra(
   }
 
   const deportes = datos.deportes;
+  let nivelesGuardados: Record<string, number> | undefined;
   if (deportes !== undefined) {
     await cambiarPreferencias(userId, token, (actuales) => {
       const niveles = new Map(actuales.deportes.map((d) => [d.deporte_codigo, d.nivel]));
       const codigos = [...new Set(deportes.map(codigoDeporte).filter((c) => c.length > 0))];
+      nivelesGuardados = Object.fromEntries(codigos.map((c) => [c, datos.nivelesDeportes?.[c] ?? niveles.get(c) ?? NIVEL_POR_DEFECTO]));
       return {
         ...actuales,
-        deportes: codigos.map((c) => ({ deporte_codigo: c, nivel: niveles.get(c) ?? NIVEL_POR_DEFECTO })),
+        deportes: codigos.map((c) => ({ deporte_codigo: c, nivel: nivelesGuardados![c] })),
       };
     });
   }
 
-  await actualizarSesion(userId, datos);
+  await actualizarSesion(userId, { ...datos, ...(nivelesGuardados ? { nivelesDeportes: nivelesGuardados } : {}) });
+}
+
+/** Refresh saved sports, levels and location without replacing unrelated profile fields. */
+export async function refrescarPreferencias(): Promise<Usuario | null> {
+  const session = await getSession();
+  if (!session) return null;
+  const token = await tokenActual();
+  const preferences = await apiRequest<Preferences>(`/users/${session.id}/preferences`, { token });
+  if ((await getSession())?.id !== session.id || await getToken() !== token) return null;
+  await actualizarSesion(session.id, {
+    deportes: preferences.deportes.map((d) => nombreDeporte(d.deporte_codigo)),
+    nivelesDeportes: Object.fromEntries(preferences.deportes.map((d) => [d.deporte_codigo, d.nivel])),
+    comuna: preferences.zona?.comuna,
+    latitud: preferences.zona?.latitud ?? undefined,
+    longitud: preferences.zona?.longitud ?? undefined,
+  });
+  return getSession();
 }

@@ -17,6 +17,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Avatar from '../../../components/Avatar';
 import BrandLogo from '../../../components/BrandLogo';
 import MatchModal from '../../../components/MatchModal';
+import SuggestionFilters from '../../../components/SuggestionFilters';
 import { Usuario, getSession } from '../../../services/auth';
 import {
   Persona,
@@ -52,6 +53,8 @@ export default function DiscoverScreen() {
 
   const [usuario, setUsuario] = useState<Usuario | null>(null);
   const [nuevoMatch, setNuevoMatch] = useState<Persona | null>(null);
+  const [deckHeight, setDeckHeight] = useState(CARD_HEIGHT);
+  const cardHeight = Math.min(CARD_HEIGHT, deckHeight);
   const [aviso, setAviso] = useState<string | null>(null);
 
   const pan = useRef(new Animated.ValueXY()).current;
@@ -210,8 +213,10 @@ export default function DiscoverScreen() {
         </TouchableOpacity>
       </View>
 
+      <View style={{ paddingHorizontal: 20 }}><SuggestionFilters /></View>
+
       {/* DECK */}
-      <View style={styles.deck}>
+      <View style={styles.deck} onLayout={(event) => setDeckHeight(event.nativeEvent.layout.height)}>
 
         {!personaActual && (
           <View style={styles.emptyState}>
@@ -227,7 +232,7 @@ export default function DiscoverScreen() {
                 : estado.error
                   ? estado.error
                   : estado.catalogo.length === 0
-                    ? 'Aún no hay otros deportistas registrados.'
+                    ? 'No hay deportistas que coincidan con estos filtros. Prueba ampliar el radio o cambiar deporte y nivel.'
                     : 'Ya viste a todos los deportistas por ahora.'}
             </Text>
 
@@ -260,13 +265,14 @@ export default function DiscoverScreen() {
             style={[
               styles.card,
               styles.cardBehind,
+              { height: cardHeight },
             ]}
           >
             <Avatar
               name={siguientePersona.name}
               colorFrom={siguientePersona.colorFrom}
               uri={siguientePersona.fotoUri}
-              style={styles.photo}
+              style={[styles.photo, { height: cardHeight * 0.58 }]}
               fontSize={72}
             />
           </View>
@@ -278,6 +284,7 @@ export default function DiscoverScreen() {
             style={[
               styles.card,
               {
+                height: cardHeight,
                 transform: [
                   ...pan.getTranslateTransform(),
                   { rotate },
@@ -289,7 +296,7 @@ export default function DiscoverScreen() {
               name={personaActual.name}
               colorFrom={personaActual.colorFrom}
               uri={personaActual.fotoUri}
-              style={styles.photo}
+              style={[styles.photo, { height: cardHeight * 0.58 }]}
               fontSize={72}
             >
 
@@ -339,12 +346,14 @@ export default function DiscoverScreen() {
               </View>
 
               <View style={styles.tagsRow}>
-                <Text style={styles.tag}>
-                  {personaActual.sport}
+                <Text style={styles.tag}
+                  numberOfLines={1}>
+                  {personaActual.deportes?.map((d) => d.nombre).join(' · ') || personaActual.sport}
                 </Text>
 
-                <Text style={styles.tag}>
-                  {personaActual.level}
+                <Text style={styles.tag}
+                  numberOfLines={1}>
+                  {personaActual.nivelCoincidente ? 'Deporte y nivel en común' : personaActual.level}
                 </Text>
               </View>
 
@@ -600,6 +609,7 @@ const makeStyles = (c: Colors) =>
     },
 
     tag: {
+      flexShrink: 1,
       color: c.accent,
       backgroundColor: c.chip,
       fontSize: 10.5,

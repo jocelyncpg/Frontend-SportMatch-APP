@@ -2,7 +2,15 @@ import { useSyncExternalStore } from 'react';
 
 import { ApiError, apiRequest } from './api';
 import { getSession, getToken } from './auth';
-import { nombreDeporte } from './deportes';
+import { codigoDeporte, nombreDeporte } from './deportes';
+
+export type FiltrosSugerencias = {
+  radioKm: 5 | 10 | null;
+  deporte: 'mis_deportes' | 'todos' | string;
+  nivelMin: number;
+  nivelMax: number;
+  nivelSimilar: boolean;
+};
 
 export type Persona = {
   id: string;
@@ -12,6 +20,7 @@ export type Persona = {
   level: string;
   deportes?: { nombre: string; nivel: string }[];
   distance?: string;
+  nivelCoincidente?: boolean;
   compatibility: number;
   colorFrom: string;
   bio?: string;
@@ -39,6 +48,9 @@ type Estado = {
   ocupados: string[];
   cargandoMatches: boolean;
   matchingError: string | null;
+  filtros: FiltrosSugerencias | null;
+  ubicacionDisponible: boolean;
+  misDeportes: string[];
 };
 
 /** Tarjeta pública que devuelve Ms_Users. */
@@ -51,6 +63,8 @@ export type SugerenciaApi = {
   biografia: string | null;
   deportes: { deporte_codigo: string; nivel: number }[];
   compatibilidad: number;
+  distancia_km?: number | null;
+  nivel_coincidente?: boolean;
 };
 
 const COLORES = ['#3648A6', '#1F2A5C', '#DB2777', '#22C55E', '#7C3AED', '#0EA5E9'];
@@ -75,10 +89,10 @@ export function aPersona(s: SugerenciaApi): Persona {
     name: `${s.nombre} ${s.apellido_inicial}`,
     age: s.edad ?? undefined,
     sport: principal ? nombreDeporte(principal.deporte_codigo) : 'Sin deporte aún',
-    level: principal ? nombreNivel(principal.nivel) : 'Nivel por definir',
-    deportes: s.deportes.map((d) => ({ nombre: nombreDeporte(d.deporte_codigo), nivel: nombreNivel(d.nivel) })),
-    // El listado todavía no calcula distancias.
-    distance: undefined,
+    level: principal ? `${nombreNivel(principal.nivel)} · ${principal.nivel}/5` : 'Nivel por definir',
+    deportes: s.deportes.map((d) => ({ nombre: nombreDeporte(d.deporte_codigo), nivel: `${nombreNivel(d.nivel)} · ${d.nivel}/5` })),
+    distance: s.distancia_km == null ? undefined : s.distancia_km < 0.1 ? 'A menos de 100 m' : `≈ ${s.distancia_km.toFixed(1)} km`,
+    nivelCoincidente: s.nivel_coincidente,
     compatibility: s.compatibilidad,
     colorFrom: colorPara(s.user_id),
     bio: s.biografia ?? undefined,
@@ -102,6 +116,9 @@ function estadoInicial(usuarioId: string | null = null): Estado {
     ocupados: [],
     cargandoMatches: false,
     matchingError: null,
+    filtros: null,
+    ubicacionDisponible: false,
+    misDeportes: [],
   };
 }
 
@@ -144,9 +161,23 @@ export async function cargarSugerencias(): Promise<void> {
       // Otra cuenta en el mismo teléfono: no hereda likes ni descartes.
       estado = estadoInicial(session.id);
     }
-    estado = { ...estado, cargando: true, error: null, sesionExpirada: false };
+    const ubicacionDisponible = session.latitud != null && session.longitud != null;
+    const misDeportes = (session.deportes ?? []).map(codigoDeporte);
+    const filtros = estado.filtros ?? {
+      radioKm: ubicacionDisponible ? 10 : null,
+      deporte: misDeportes.length ? 'mis_deportes' : 'todos',
+      nivelMin: 1, nivelMax: 5, nivelSimilar: misDeportes.length > 0,
+    };
+    estado = { ...estado, cargando: true, error: null, sesionExpirada: false, filtros, ubicacionDisponible, misDeportes };
     emitir();
-    const tarjetas = await apiRequest<SugerenciaApi[]>('/users/suggestions?limit=50', { token });
+    const query = ['limit=50'];
+    if (filtros.radioKm != null) query.push(`radius_km=${filtros.radioKm}`);
+    if (filtros.deporte === 'mis_deportes') query.push('shared_sports=true');
+    else if (filtros.deporte !== 'todos') query.push(`sport=${encodeURIComponent(filtros.deporte)}`);
+    if (filtros.nivelMin !== 1) query.push(`min_level=${filtros.nivelMin}`);
+    if (filtros.nivelMax !== 5) query.push(`max_level=${filtros.nivelMax}`);
+    if (filtros.nivelSimilar) query.push('level_tolerance=1');
+    const tarjetas = await apiRequest<SugerenciaApi[]>(`/users/suggestions?${query.join('&')}`, { token });
     const [sesionActual, tokenActual] = await Promise.all([getSession(), getToken()]);
     if (carga !== cargaActual) return;
     if (sesionActual?.id !== session.id || tokenActual !== token) {
@@ -184,7 +215,13 @@ export function sugerencias(e: Estado): Persona[] {
     ...e.descartados,
     ...e.ocultos,
   ]);
-  return e.catalogo.filter((p) => !ocupados.has(p.id)).sort((a, b) => b.compatibility - a.compatibility);
+  return e.catalogo.filter((p) => !ocupados.has(p.id));
+}
+
+/** Both Home and Discover use the same server filters and preserve its distance ordering. */
+export async function aplicarFiltros(filtros: FiltrosSugerencias | null): Promise<void> {
+  estado = { ...estado, filtros, catalogo: [], descartados: [] };
+  await cargarSugerencias();
 }
 
 export type ConexionApi = {
