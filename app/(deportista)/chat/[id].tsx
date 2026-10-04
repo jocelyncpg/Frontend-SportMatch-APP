@@ -1,113 +1,157 @@
 import { Ionicons } from '@expo/vector-icons';
-import { router, useLocalSearchParams } from 'expo-router';
-import { useMemo, useRef, useState } from 'react';
-import { FlatList, KeyboardAvoidingView, Platform, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import * as Crypto from 'expo-crypto';
+import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
+import { useCallback, useMemo, useRef, useState } from 'react';
+import { AppState, FlatList, KeyboardAvoidingView, Platform, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Avatar from '../../../components/Avatar';
+import { ApiError } from '../../../services/api';
+import { enviarMensaje, getChat, getMensajes, MensajeApi } from '../../../services/chat';
+import { Persona } from '../../../services/matchStore';
 import { Colors, useAppTheme } from '../../../theme/ThemeContext';
 
-type Mensaje = { id: string; texto: string; propio: boolean };
-
-// Conversaciones de prueba para los matches que ya tenían mensajes.
-// Un match nuevo empieza con el chat vacío. Se reemplaza por la API de chat.
-const CONVERSACIONES_PREVIAS: Record<string, Mensaje[]> = {
-  camila: [
-    { id: 'c1', texto: '¡Hola! Vi que también corres los fines de semana 🏃‍♀️', propio: false },
-    { id: 'c2', texto: '¡Sí! Estoy entrenando para una media maratón. ¿Salimos mañana?', propio: true },
-    { id: 'c3', texto: '¡Dale, nos vemos a las 19:30!', propio: false },
-  ],
-  diego: [
-    { id: 'd1', texto: '¡Buenas! ¿Juegas fútbol los fines de semana?', propio: false },
-    { id: 'd2', texto: 'Sí, los sábados en la mañana. ¿Te sumas?', propio: true },
-    { id: 'd3', texto: 'Perfecto, cualquier cosa avísame', propio: false },
-  ],
-};
+function fusionar(actuales: MensajeApi[], nuevos: MensajeApi[]) {
+  return [...new Map([...actuales, ...nuevos].map((m) => [m.id, m])).values()]
+    .sort((a, b) => BigInt(a.id) < BigInt(b.id) ? -1 : BigInt(a.id) > BigInt(b.id) ? 1 : 0);
+}
 
 export default function ChatScreen() {
   const { colors } = useAppTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const insets = useSafeAreaInsets();
-
-  const { id, name, sport, colorFrom } = useLocalSearchParams<{ id: string; name: string; sport: string; colorFrom: string }>();
-  const nombre = name ?? 'Deportista';
-  const primerNombre = nombre.split(' ')[0];
-
-  const [mensajes, setMensajes] = useState<Mensaje[]>(CONVERSACIONES_PREVIAS[id ?? ''] ?? []);
+  const { id } = useLocalSearchParams<{ id: string }>();
+  const [persona, setPersona] = useState<Persona | null>(null);
+  const [miId, setMiId] = useState('');
+  const [mensajes, setMensajes] = useState<MensajeApi[]>([]);
   const [texto, setTexto] = useState('');
-  const listaRef = useRef<FlatList<Mensaje>>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [disponible, setDisponible] = useState(false);
+  const [cargando, setCargando] = useState(true);
+  const [anteriores, setAnteriores] = useState(false);
+  const [cargandoAnteriores, setCargandoAnteriores] = useState(false);
+  const [enviando, setEnviando] = useState(false);
+  const actualizarRef = useRef<() => void>(() => {});
+  const listaRef = useRef<FlatList<MensajeApi>>(null);
+  const ultimoId = useRef<string | undefined>(undefined);
+  const generacion = useRef(0);
+  const envioPendiente = useRef<{ text: string; clientId: string } | null>(null);
+  const envioEnCurso = useRef(false);
+  const desplazar = useRef(true);
 
-  const sugerencias = [
-    '¡Hola! 👋',
-    `¿Entrenamos ${sport ? sport.toLowerCase() : 'juntos'}?`,
-    '¿Qué días te acomodan?',
-  ];
+  const mostrarError = useCallback((e: unknown) => {
+    setError(e instanceof Error ? e.message : 'No se pudo conectar con el chat.');
+    if (e instanceof ApiError && [401, 403, 404].includes(e.status)) {
+      setDisponible(false);
+      setMensajes([]);
+      ultimoId.current = undefined;
+    }
+  }, []);
 
-  function enviar(contenido?: string) {
+  useFocusEffect(useCallback(() => {
+    const version = ++generacion.current;
+    let activo = true;
+    let consultando = false;
+    setPersona(null); setMensajes([]); setDisponible(false); setCargando(true); setError(null);
+    setCargandoAnteriores(false); desplazar.current = true;
+    setTexto(''); setEnviando(false); envioEnCurso.current = false; envioPendiente.current = null;
+    ultimoId.current = undefined;
+    async function actualizar() {
+      if (!activo || consultando || AppState.currentState !== 'active') return;
+      consultando = true;
+      try {
+        const chat = await getChat(id);
+        const nuevos = await getMensajes(id, { after: ultimoId.current });
+        if (!activo || version !== generacion.current) return;
+        setPersona(chat.persona); setMiId(chat.userId); setDisponible(true); setError(null);
+        if (!ultimoId.current) setAnteriores(nuevos.length === 50);
+        if (nuevos.length) {
+          ultimoId.current = nuevos[nuevos.length - 1].id;
+          setMensajes((prev) => fusionar(prev, nuevos));
+        }
+      } catch (e) {
+        if (activo && version === generacion.current) mostrarError(e);
+      } finally {
+        consultando = false;
+        if (activo && version === generacion.current) setCargando(false);
+      }
+    }
+    actualizarRef.current = () => { void actualizar(); };
+    void actualizar();
+    const timer = setInterval(() => void actualizar(), 4000);
+    const listener = AppState.addEventListener('change', (state) => { if (state === 'active') void actualizar(); });
+    return () => { activo = false; ++generacion.current; actualizarRef.current = () => {}; clearInterval(timer); listener.remove(); };
+  }, [id, mostrarError]));
+
+  async function enviar(contenido?: string) {
     const t = (contenido ?? texto).trim();
-    if (!t) return;
-    setMensajes((prev) => [...prev, { id: Date.now().toString(), texto: t, propio: true }]);
-    setTexto('');
+    if (!disponible || !t || envioEnCurso.current) return;
+    envioEnCurso.current = true; setEnviando(true);
+    const version = generacion.current;
+    // A failed request keeps the same id for a retry; the server deduplicates it.
+    if (envioPendiente.current?.text !== t) envioPendiente.current = { text: t, clientId: Crypto.randomUUID() };
+    try {
+      const mensaje = await enviarMensaje(id, t, envioPendiente.current.clientId);
+      if (version !== generacion.current) return;
+      setMensajes((prev) => fusionar(prev, [mensaje]));
+      // The polling cursor only advances from reads, so simultaneous peer messages are not skipped.
+      envioPendiente.current = null; setTexto(''); setError(null); desplazar.current = true;
+    } catch (e) {
+      if (version === generacion.current) { setTexto(t); mostrarError(e); }
+    } finally {
+      if (version === generacion.current) { envioEnCurso.current = false; setEnviando(false); }
+    }
   }
 
+  async function cargarAnteriores() {
+    if (!mensajes.length || cargandoAnteriores) return;
+    setCargandoAnteriores(true);
+    const version = generacion.current;
+    try {
+      const pagina = await getMensajes(id, { before: mensajes[0].id });
+      if (version !== generacion.current) return;
+      desplazar.current = false;
+      setMensajes((prev) => fusionar(prev, pagina)); setAnteriores(pagina.length === 50);
+    } catch (e) {
+      if (version === generacion.current) mostrarError(e);
+    } finally {
+      if (version === generacion.current) setCargandoAnteriores(false);
+    }
+  }
+
+  const nombre = persona?.name ?? 'Chat';
+  const sugerencias = ['¡Hola! 👋', '¿Entrenamos juntos?', '¿Qué días te acomodan?'];
   return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
-    >
+    <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : 'height'} keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}>
       <View style={[styles.topbar, { paddingTop: insets.top + 12 }]}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
           <Ionicons name="arrow-back" size={18} color={colors.text} />
         </TouchableOpacity>
-        <Avatar name={nombre} colorFrom={colorFrom ?? '#7C3AED'} style={styles.avatar} fontSize={13} />
-        <View>
-          <Text style={styles.name}>{nombre}</Text>
-          <Text style={styles.sport}>{sport ?? ''}</Text>
-        </View>
+        <Avatar name={nombre} colorFrom={persona?.colorFrom ?? '#7C3AED'} uri={persona?.fotoUri} style={styles.avatar} fontSize={13} />
+        <TouchableOpacity disabled={!disponible} accessibilityLabel={`Ver perfil de ${nombre}`}
+          onPress={() => router.push({ pathname: '/(deportista)/athlete/[id]', params: { id } })}>
+          <Text style={styles.name}>{nombre}</Text><Text style={styles.sport}>{persona ? 'Ver perfil' : ''}</Text>
+        </TouchableOpacity>
       </View>
-
-      <FlatList
-        ref={listaRef}
-        data={mensajes}
-        keyExtractor={(m) => m.id}
+      {error && <TouchableOpacity onPress={() => actualizarRef.current()}><Text style={styles.introTexto}>{error} · Reintentar</Text></TouchableOpacity>}
+      <FlatList ref={listaRef} data={mensajes} keyExtractor={(m) => m.id}
         contentContainerStyle={[styles.list, mensajes.length === 0 && styles.listVacia]}
-        onContentSizeChange={() => listaRef.current?.scrollToEnd({ animated: true })}
+        onContentSizeChange={() => { if (desplazar.current) listaRef.current?.scrollToEnd({ animated: true }); }}
+        ListHeaderComponent={anteriores ? <TouchableOpacity disabled={cargandoAnteriores} onPress={cargarAnteriores}><Text style={styles.introTexto}>{cargandoAnteriores ? 'Cargando...' : 'Ver mensajes anteriores'}</Text></TouchableOpacity> : null}
         ListEmptyComponent={
           <View style={styles.intro}>
-            <View style={styles.introIcono}>
-              <Ionicons name="heart" size={22} color="#fff" />
-            </View>
-            <Text style={styles.introTitulo}>Hiciste match con {primerNombre}</Text>
-            <Text style={styles.introTexto}>Rompe el hielo y coordinen su primer entrenamiento.</Text>
-            <View style={styles.sugerencias}>
-              {sugerencias.map((s) => (
-                <TouchableOpacity key={s} style={styles.sugerencia} onPress={() => enviar(s)}>
-                  <Text style={styles.sugerenciaTexto}>{s}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
+            {cargando ? <Text style={styles.introTexto}>Cargando conversación...</Text> : disponible ? <>
+              <View style={styles.introIcono}><Ionicons name="heart" size={22} color="#fff" /></View>
+              <Text style={styles.introTitulo}>Hiciste match con {nombre.split(' ')[0]}</Text>
+              <Text style={styles.introTexto}>Rompe el hielo y coordinen su primer entrenamiento.</Text>
+              <View style={styles.sugerencias}>{sugerencias.map((s) => <TouchableOpacity key={s} disabled={enviando} style={styles.sugerencia} onPress={() => enviar(s)}><Text style={styles.sugerenciaTexto}>{s}</Text></TouchableOpacity>)}</View>
+            </> : <Text style={styles.introTexto}>El chat estará disponible cuando ambos tengan un match aceptado.</Text>}
           </View>
         }
-        renderItem={({ item }) => (
-          <View style={[styles.bubble, item.propio ? styles.bubbleOwn : styles.bubbleOther]}>
-            <Text style={item.propio ? styles.bubbleTextOwn : styles.bubbleTextOther}>{item.texto}</Text>
-          </View>
-        )}
+        renderItem={({ item }) => <View style={[styles.bubble, item.sender_id === miId ? styles.bubbleOwn : styles.bubbleOther]}><Text style={item.sender_id === miId ? styles.bubbleTextOwn : styles.bubbleTextOther}>{item.text}</Text></View>}
       />
-
       <View style={[styles.inputRow, { paddingBottom: insets.bottom + 12 }]}>
-        <TextInput
-          placeholder="Escribe un mensaje..."
-          placeholderTextColor={colors.textMuted}
-          style={styles.input}
-          value={texto}
-          onChangeText={setTexto}
-          onSubmitEditing={() => enviar()}
-          returnKeyType="send"
-        />
-        <TouchableOpacity style={styles.sendButton} onPress={() => enviar()}>
-          <Ionicons name="send" size={16} color="#fff" />
-        </TouchableOpacity>
+        <TextInput placeholder="Escribe un mensaje..." placeholderTextColor={colors.textMuted} style={styles.input} value={texto} onChangeText={setTexto} onSubmitEditing={() => enviar()} returnKeyType="send" editable={disponible && !enviando} maxLength={2000} />
+        <TouchableOpacity style={[styles.sendButton, (!disponible || enviando) && { opacity: 0.5 }]} disabled={!disponible || enviando || !texto.trim()} onPress={() => enviar()} accessibilityLabel="Enviar mensaje"><Ionicons name="send" size={16} color="#fff" /></TouchableOpacity>
       </View>
     </KeyboardAvoidingView>
   );

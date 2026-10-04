@@ -4,33 +4,23 @@ import { useMemo } from 'react';
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Avatar from '../../../components/Avatar';
-import { Persona, useMatches } from '../../../services/matchStore';
+import { Persona, cargarMatching, useMatches } from '../../../services/matchStore';
+import { useMatchingRefresh } from '../../../hooks/useMatchingRefresh';
 import { Colors, useAppTheme } from '../../../theme/ThemeContext';
-
-// Conversaciones de prueba que ya tenían mensajes. Se reemplaza por la API de chat.
-const ULTIMOS_MENSAJES: Record<string, { texto: string; hora: string }> = {
-  camila: { texto: '¡Dale, nos vemos a las 19:30!', hora: '18:42' },
-  diego: { texto: 'Perfecto, cualquier cosa avísame', hora: 'Ayer' },
-};
 
 export default function ChatListScreen() {
   const { colors } = useAppTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const insets = useSafeAreaInsets();
 
-  const { confirmados } = useMatches();
-
-  // Los matches nuevos (sin mensajes todavía) van arriba, el más reciente primero.
-  const chats = useMemo(() => {
-    const conMensajes = confirmados.filter((p) => ULTIMOS_MENSAJES[p.id]);
-    const nuevos = confirmados.filter((p) => !ULTIMOS_MENSAJES[p.id]).reverse();
-    return [...nuevos, ...conMensajes];
-  }, [confirmados]);
+  useMatchingRefresh();
+  const { confirmados: chats, matchingError, cargandoMatches, sesionExpirada } = useMatches();
 
   function abrirChat(persona: Persona) {
+    if (!persona.matchId) return;
     router.push({
       pathname: '/(deportista)/chat/[id]',
-      params: { id: persona.id, name: persona.name, sport: persona.sport, colorFrom: persona.colorFrom },
+      params: { id: persona.matchId },
     });
   }
 
@@ -41,8 +31,14 @@ export default function ChatListScreen() {
       </View>
 
       <ScrollView contentContainerStyle={styles.list}>
-        {chats.map((persona) => {
-          const ultimo = ULTIMOS_MENSAJES[persona.id];
+        {matchingError && (
+          <TouchableOpacity onPress={() => sesionExpirada ? router.replace('/(auth)/login') : void cargarMatching()}>
+            <Text style={styles.emptyText}>{matchingError} · {sesionExpirada ? 'Iniciar sesión' : 'Reintentar'}</Text>
+          </TouchableOpacity>
+        )}
+        {!matchingError && chats.map((persona) => {
+          const ultimo = persona.ultimoMensaje ? { texto: persona.ultimoMensaje,
+            hora: persona.ultimoMensajeFecha ? new Date(persona.ultimoMensajeFecha).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '' } : null;
           return (
             <TouchableOpacity key={persona.id} style={styles.card} onPress={() => abrirChat(persona)}>
               <Avatar
@@ -69,10 +65,10 @@ export default function ChatListScreen() {
           );
         })}
 
-        {chats.length === 0 && (
+        {!matchingError && chats.length === 0 && (
           <View style={styles.emptyState}>
             <Ionicons name="chatbubbles-outline" size={44} color={colors.textMuted} />
-            <Text style={styles.emptyTitle}>Aún no tienes conversaciones</Text>
+            <Text style={styles.emptyTitle}>{cargandoMatches ? 'Cargando conversaciones...' : 'Aún no tienes conversaciones'}</Text>
             <Text style={styles.emptyText}>Cuando hagas match con alguien, podrás escribirle desde aquí.</Text>
           </View>
         )}

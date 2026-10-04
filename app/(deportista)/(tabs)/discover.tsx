@@ -1,8 +1,9 @@
 import { Ionicons } from '@expo/vector-icons';
-import { router, useFocusEffect } from 'expo-router';
+import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
   Animated,
+  Alert,
   Dimensions,
   Image,
   PanResponder,
@@ -22,7 +23,7 @@ import {
   cargarSugerencias,
   darLike,
   descartar,
-  reiniciarDemo,
+  recargarDeportistas,
   sugerencias,
   useMatches,
 } from '../../../services/matchStore';
@@ -33,14 +34,21 @@ const SWIPE_THRESHOLD = 120;
 const CARD_HEIGHT = 420;
 
 export default function DiscoverScreen() {
+  const { userId } = useLocalSearchParams<{ userId?: string }>();
   const { colors } = useAppTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const insets = useSafeAreaInsets();
 
   const estado = useMatches();
-  const deck = useMemo(() => sugerencias(estado), [estado]);
-  const personaActual = deck[0];
-  const siguientePersona = deck[1];
+  const deck = useMemo(() => {
+    const personas = sugerencias(estado);
+    const seleccionada = personas.find((persona) => persona.id === userId);
+    return seleccionada
+      ? [seleccionada, ...personas.filter((persona) => persona.id !== userId)]
+      : personas;
+  }, [estado, userId]);
+  const personaActual = estado.error ? undefined : deck[0];
+  const siguientePersona = estado.error ? undefined : deck[1];
 
   const [usuario, setUsuario] = useState<Usuario | null>(null);
   const [nuevoMatch, setNuevoMatch] = useState<Persona | null>(null);
@@ -70,7 +78,7 @@ export default function DiscoverScreen() {
   // Cuando cambia la tarjeta, se centra la nueva antes de pintar (evita el parpadeo).
   useLayoutEffect(() => {
     pan.setValue({ x: 0, y: 0 });
-  }, [personaActual?.id]);
+  }, [pan, personaActual?.id]);
 
   const panResponder = useRef(
     PanResponder.create({
@@ -108,18 +116,24 @@ export default function DiscoverScreen() {
       },
       duration: 220,
       useNativeDriver: false,
-    }).start(() => {
-      animando.current = false;
-
-      if (direction === 'right') {
-        const resultado = darLike(persona);
-        if (resultado === 'match') {
-          setNuevoMatch(persona);
+    }).start(async ({ finished }) => {
+      try {
+        if (!finished) return;
+        if (direction === 'right') {
+          const resultado = await darLike(persona);
+          if (resultado.matchId) {
+            setNuevoMatch(resultado);
+          } else {
+            setAviso(`Solicitud pendiente con ${persona.name.split(' ')[0]}`);
+          }
         } else {
-          setAviso(`Solicitud enviada a ${persona.name.split(' ')[0]}`);
+          descartar(persona.id);
         }
-      } else {
-        descartar(persona.id);
+      } catch (e) {
+        Alert.alert('No se pudo enviar la solicitud', e instanceof Error ? e.message : 'Inténtalo de nuevo.');
+        resetPosition();
+      } finally {
+        animando.current = false;
       }
     });
   }
@@ -137,7 +151,7 @@ export default function DiscoverScreen() {
     if (persona) {
       router.push({
         pathname: '/(deportista)/chat/[id]',
-        params: { id: persona.id, name: persona.name, sport: persona.sport, colorFrom: persona.colorFrom },
+        params: { id: persona.matchId! },
       });
     }
   }
@@ -173,9 +187,7 @@ export default function DiscoverScreen() {
           <BrandLogo width={200} />
 
           <Text style={styles.subtitle}>
-            {usuario?.comuna
-              ? `Cerca de ${usuario.comuna}`
-              : 'Desliza para conectar'}
+            Deportistas de SportMatch
           </Text>
         </View>
 
@@ -216,14 +228,14 @@ export default function DiscoverScreen() {
                   ? estado.error
                   : estado.catalogo.length === 0
                     ? 'Aún no hay otros deportistas registrados.'
-                    : 'Ya viste a todos los deportistas cerca de ti por ahora.'}
+                    : 'Ya viste a todos los deportistas por ahora.'}
             </Text>
 
             {!estado.cargando && (
               <TouchableOpacity
                 style={styles.resetButton}
                 onPress={() =>
-                  estado.sesionExpirada ? router.replace('/(auth)/login') : reiniciarDemo()
+                  estado.sesionExpirada ? router.replace('/(auth)/login') : recargarDeportistas()
                 }
               >
                 <Ionicons

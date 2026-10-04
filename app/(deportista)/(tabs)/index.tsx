@@ -115,7 +115,18 @@ export default function HomeScreen() {
         </TouchableOpacity>
       </View>
 
-      {recomendados.length > 0 ? (
+      {estado.error ? (
+        <TouchableOpacity
+          onPress={() =>
+            estado.sesionExpirada ? router.replace('/(auth)/login') : void cargarSugerencias()
+          }
+        >
+          <Text style={styles.emptyText}>{estado.error}</Text>
+          <Text style={styles.sectionLink}>
+            {estado.sesionExpirada ? 'Iniciar sesión' : 'Reintentar'}
+          </Text>
+        </TouchableOpacity>
+      ) : recomendados.length > 0 ? (
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
@@ -130,28 +141,20 @@ export default function HomeScreen() {
               compatibility={persona.compatibility}
               colorFrom={persona.colorFrom}
               fotoUri={persona.fotoUri}
-              onPress={() => router.push('/(deportista)/(tabs)/discover')}
+              onPress={() => router.push({
+                pathname: '/(deportista)/(tabs)/discover',
+                params: { userId: persona.id },
+              })}
             />
           ))}
         </ScrollView>
       ) : estado.cargando ? (
         <Text style={styles.emptyText}>Cargando deportistas...</Text>
-      ) : estado.error ? (
-        <TouchableOpacity
-          onPress={() =>
-            estado.sesionExpirada ? router.replace('/(auth)/login') : void cargarSugerencias()
-          }
-        >
-          <Text style={styles.emptyText}>{estado.error}</Text>
-          <Text style={styles.sectionLink}>
-            {estado.sesionExpirada ? 'Iniciar sesión' : 'Reintentar'}
-          </Text>
-        </TouchableOpacity>
       ) : (
         <Text style={styles.emptyText}>
           {estado.catalogo.length === 0
             ? 'Aún no hay otros deportistas registrados.'
-            : 'Ya viste a todos los deportistas cerca de ti por ahora.'}
+            : 'Ya viste a todos los deportistas por ahora.'}
         </Text>
       )}
 

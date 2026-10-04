@@ -1,69 +1,119 @@
 import { useSyncExternalStore } from 'react';
 
+import { ApiError, apiRequest } from './api';
+import { getSession, getToken } from './auth';
+import { nombreDeporte } from './deportes';
+
 export type Persona = {
   id: string;
   name: string;
   age?: number;
   sport: string;
   level: string;
+  deportes?: { nombre: string; nivel: string }[];
   distance?: string;
   compatibility: number;
   colorFrom: string;
   bio?: string;
   fotoUri?: string | null;
-  /** Simulación: esta persona ya te dio like, así que si le das like también es match. */
-  leGustas?: boolean;
+  requestId?: string;
+  matchId?: string;
+  ultimoMensaje?: string;
+  ultimoMensajeFecha?: string;
 };
 
 type Estado = {
+  /** Deportistas reales registrados (GET /users/suggestions), sin incluirte a ti. */
   catalogo: Persona[];
   cargando: boolean;
   error: string | null;
   sesionExpirada: boolean;
+  /** Dueño de los likes y descartes en memoria; si cambia la sesión, se reinician. */
   usuarioId: string | null;
   solicitudes: Persona[];
+  solicitudesEnviadas: Persona[];
   confirmados: Persona[];
   enviadas: string[];
   descartados: string[];
+  ocultos: string[];
+  ocupados: string[];
+  cargandoMatches: boolean;
+  matchingError: string | null;
 };
 
-// Catálogo de prueba completo (sin backend). Se reemplaza por cargarSugerencias()
-// real cuando vuelvas a usar matchStore.backend.ts.
-export const CATALOGO: Persona[] = [
-  { id: 'camila', name: 'Camila R.', age: 24, sport: 'Running', level: 'Intermedio', distance: '1.8 km', compatibility: 95, colorFrom: '#3648A6', bio: 'Entrenando para una media maratón. Busco compañera para trotes de fondo los fines de semana.' },
-  { id: 'diego', name: 'Diego A.', age: 27, sport: 'Fútbol', level: 'Intermedio', distance: '2.3 km', compatibility: 89, colorFrom: '#1F2A5C', bio: 'Juego 2 veces por semana, busco gente para armar equipo fijo.' },
-  { id: 'sofia', name: 'Sofía T.', age: 23, sport: 'Yoga', level: 'Intermedio', distance: '2.1 km', compatibility: 91, colorFrom: '#DB2777', bio: 'Practico yoga al aire libre y me encantaría sumar gente a las clases de los sábados.', leGustas: true },
-  { id: 'valentina', name: 'Valentina S.', age: 22, sport: 'Ciclismo', level: 'Intermedio', distance: '2.7 km', compatibility: 87, colorFrom: '#22C55E', bio: 'Salidas los sábados en la mañana, ritmo tranquilo pero constante.', leGustas: true },
-  { id: 'andres', name: 'Andrés M.', age: 25, sport: 'Running', level: 'Principiante', distance: '3.1 km', compatibility: 83, colorFrom: '#7C3AED', bio: 'Recién empezando a correr, busco compañía para agarrar el hábito.' },
-  { id: 'tomas', name: 'Tomás L.', age: 26, sport: 'Natación', level: 'Avanzado', distance: '3.4 km', compatibility: 80, colorFrom: '#0EA5E9', bio: 'Nado 3 veces por semana en piscina temperada. Busco alguien para entrenar series.' },
-  { id: 'matias', name: 'Matías P.', age: 29, sport: 'Fútbol', level: 'Avanzado', distance: '3.2 km', compatibility: 78, colorFrom: '#1F2A5C', bio: 'Nivel competitivo, juego en liga amateur los domingos.' },
-];
+/** Tarjeta pública que devuelve Ms_Users. */
+export type SugerenciaApi = {
+  user_id: string;
+  nombre: string;
+  apellido_inicial: string;
+  edad: number | null;
+  foto_perfil: string | null;
+  biografia: string | null;
+  deportes: { deporte_codigo: string; nivel: number }[];
+  compatibilidad: number;
+};
 
-const DEMO_MATCHES: Persona[] = [
-  { id: 'ignacio', name: 'Ignacio R.', age: 28, sport: 'Ciclismo', level: 'Avanzado', distance: '4.0 km', compatibility: 85, colorFrom: '#7C3AED', bio: 'Ruta y montaña. Salgo casi todos los domingos temprano.' },
-  { id: 'daniela', name: 'Daniela S.', age: 24, sport: 'Yoga', level: 'Intermedio', distance: '2.9 km', compatibility: 90, colorFrom: '#22C55E', bio: 'Yoga y meditación, busco un grupo constante para practicar.' },
-];
+const COLORES = ['#3648A6', '#1F2A5C', '#DB2777', '#22C55E', '#7C3AED', '#0EA5E9'];
+
+function nombreNivel(nivel: number): string {
+  if (nivel <= 2) return 'Principiante';
+  if (nivel === 3) return 'Intermedio';
+  return 'Avanzado';
+}
+
+/** Siempre el mismo color para la misma persona. */
+function colorPara(id: string): string {
+  let suma = 0;
+  for (const letra of id) suma = (suma + letra.charCodeAt(0)) % 997;
+  return COLORES[suma % COLORES.length];
+}
+
+export function aPersona(s: SugerenciaApi): Persona {
+  const principal = s.deportes[0];
+  return {
+    id: s.user_id,
+    name: `${s.nombre} ${s.apellido_inicial}`,
+    age: s.edad ?? undefined,
+    sport: principal ? nombreDeporte(principal.deporte_codigo) : 'Sin deporte aún',
+    level: principal ? nombreNivel(principal.nivel) : 'Nivel por definir',
+    deportes: s.deportes.map((d) => ({ nombre: nombreDeporte(d.deporte_codigo), nivel: nombreNivel(d.nivel) })),
+    // El listado todavía no calcula distancias.
+    distance: undefined,
+    compatibility: s.compatibilidad,
+    colorFrom: colorPara(s.user_id),
+    bio: s.biografia ?? undefined,
+    fotoUri: s.foto_perfil,
+  };
+}
 
 function estadoInicial(usuarioId: string | null = null): Estado {
   return {
-    catalogo: CATALOGO,
+    catalogo: [],
     cargando: false,
     error: null,
     sesionExpirada: false,
     usuarioId,
-    solicitudes: [...DEMO_MATCHES],
-    confirmados: [CATALOGO[0], CATALOGO[1]], // Camila y Diego, como siempre
+    solicitudes: [],
+    solicitudesEnviadas: [],
+    confirmados: [],
     enviadas: [],
     descartados: [],
+    ocultos: [],
+    ocupados: [],
+    cargandoMatches: false,
+    matchingError: null,
   };
 }
 
 let estado: Estado = estadoInicial();
+let cargaActual = 0;
+let cargaMatching = 0;
 const oyentes = new Set<() => void>();
 
 function emitir() {
   oyentes.forEach((o) => o());
 }
+
 function suscribir(oyente: () => void) {
   oyentes.add(oyente);
   return () => {
@@ -79,50 +129,193 @@ export function useMatches(): Estado {
   return useSyncExternalStore(suscribir, getEstado, getEstado);
 }
 
-/** Simulado: no llama al backend, solo carga el catálogo de prueba al instante. */
+/** Trae los deportistas registrados desde el backend (frontend → gateway → Ms_Users). */
 export async function cargarSugerencias(): Promise<void> {
-  estado = { ...estado, cargando: true, error: null, sesionExpirada: false };
-  emitir();
-  estado = { ...estado, cargando: false, catalogo: CATALOGO };
+  const carga = ++cargaActual;
+  try {
+    const [session, token] = await Promise.all([getSession(), getToken()]);
+    if (carga !== cargaActual) return;
+    if (!session || !token) {
+      estado = { ...estadoInicial(), sesionExpirada: true, error: 'Inicia sesión para ver deportistas.' };
+      emitir();
+      return;
+    }
+    if (estado.usuarioId !== session.id) {
+      // Otra cuenta en el mismo teléfono: no hereda likes ni descartes.
+      estado = estadoInicial(session.id);
+    }
+    estado = { ...estado, cargando: true, error: null, sesionExpirada: false };
+    emitir();
+    const tarjetas = await apiRequest<SugerenciaApi[]>('/users/suggestions?limit=50', { token });
+    const [sesionActual, tokenActual] = await Promise.all([getSession(), getToken()]);
+    if (carga !== cargaActual) return;
+    if (sesionActual?.id !== session.id || tokenActual !== token) {
+      estado = estadoInicial();
+      emitir();
+      return;
+    }
+    estado = {
+      ...estado,
+      cargando: false,
+      // El backend ya te excluye; el filtro es una segunda barrera.
+      catalogo: tarjetas.filter((t) => t.user_id !== session.id).map(aPersona),
+    };
+    emitir();
+    await cargarMatching();
+  } catch (e: unknown) {
+    if (carga !== cargaActual) return;
+    const sesionExpirada = e instanceof ApiError && e.status === 401;
+    estado = {
+      ...(sesionExpirada ? estadoInicial() : estado),
+      cargando: false,
+      error: e instanceof Error ? e.message : 'No se pudieron cargar los deportistas. Inténtalo de nuevo.',
+      sesionExpirada,
+    };
+  }
   emitir();
 }
 
+/** Personas que todavía no has visto ni tienes como match o solicitud. */
 export function sugerencias(e: Estado): Persona[] {
   const ocupados = new Set([
     ...e.solicitudes.map((p) => p.id),
     ...e.confirmados.map((p) => p.id),
     ...e.enviadas,
     ...e.descartados,
+    ...e.ocultos,
   ]);
   return e.catalogo.filter((p) => !ocupados.has(p.id)).sort((a, b) => b.compatibility - a.compatibility);
 }
 
-export function aceptarSolicitud(id: string): Persona | undefined {
-  const persona = estado.solicitudes.find((p) => p.id === id);
-  if (!persona) return undefined;
-  estado = {
-    ...estado,
-    solicitudes: estado.solicitudes.filter((p) => p.id !== id),
-    confirmados: [...estado.confirmados, persona],
-  };
-  emitir();
-  return persona;
+export type ConexionApi = {
+  id: string; sender_id: string; recipient_id: string;
+  status: 'pending' | 'accepted' | 'rejected'; athlete: SugerenciaApi;
+  last_message: string | null; last_message_at: string | null;
+};
+
+type MatchingApi = {
+  incoming: ConexionApi[]; outgoing: ConexionApi[]; matches: ConexionApi[]; hidden_user_ids: string[];
+};
+
+export function personaConexion(c: ConexionApi): Persona {
+  return { ...aPersona(c.athlete), requestId: c.id,
+    matchId: c.status === 'accepted' ? c.id : undefined,
+    ultimoMensaje: c.last_message ?? undefined, ultimoMensajeFecha: c.last_message_at ?? undefined };
 }
 
-export function rechazarSolicitud(id: string) {
-  estado = { ...estado, solicitudes: estado.solicitudes.filter((p) => p.id !== id) };
-  emitir();
+async function credenciales() {
+  const [session, token] = await Promise.all([getSession(), getToken()]);
+  if (!session || !token) throw new ApiError('Inicia sesión para hacer match.', 401, '');
+  return { session, token };
 }
 
-export function darLike(persona: Persona): 'match' | 'enviada' {
-  if (persona.leGustas) {
-    estado = { ...estado, confirmados: [...estado.confirmados, persona] };
+async function mismaSesion(id: string, token: string) {
+  const [current, currentToken] = await Promise.all([getSession(), getToken()]);
+  return current?.id === id && currentToken === token;
+}
+
+export async function cargarMatching(): Promise<void> {
+  if (estado.ocupados.length) return;
+  const carga = ++cargaMatching;
+  try {
+    const { session, token } = await credenciales();
+    if (carga !== cargaMatching) return;
+    if (estado.usuarioId !== session.id) estado = estadoInicial(session.id);
+    estado = { ...estado, cargandoMatches: true };
     emitir();
-    return 'match';
+    const data = await apiRequest<MatchingApi>('/matching/state', { token });
+    const vigente = await mismaSesion(session.id, token);
+    if (carga !== cargaMatching) return;
+    if (!vigente) { estado = estadoInicial(); emitir(); return; }
+    estado = { ...estado, solicitudes: data.incoming.map(personaConexion),
+      solicitudesEnviadas: data.outgoing.map(personaConexion),
+      confirmados: data.matches.map(personaConexion), enviadas: data.outgoing.map((c) => c.athlete.user_id),
+      ocultos: data.hidden_user_ids, cargandoMatches: false, matchingError: null, sesionExpirada: false };
+  } catch (e) {
+    if (carga !== cargaMatching) return;
+    const expired = e instanceof ApiError && e.status === 401;
+    estado = { ...(expired ? estadoInicial() : estado), cargandoMatches: false,
+      matchingError: e instanceof Error ? e.message : 'No se pudieron cargar tus matches.', sesionExpirada: expired };
   }
-  estado = { ...estado, enviadas: [...estado.enviadas, persona.id] };
   emitir();
-  return 'enviada';
+}
+
+async function cambiarConexion(id: string, path: string, body: unknown): Promise<Persona> {
+  const { session, token } = await credenciales();
+  if (estado.usuarioId !== session.id) estado = estadoInicial(session.id);
+  if (estado.ocupados.includes(id)) throw new Error('La solicitud se está procesando.');
+  ++cargaMatching;
+  estado = { ...estado, ocupados: [...estado.ocupados, id], cargandoMatches: false };
+  emitir();
+  try {
+    const c = await apiRequest<ConexionApi>(path, { method: 'POST', token, body });
+    if (!await mismaSesion(session.id, token)) throw new Error('La sesión cambió. Vuelve a cargar tus matches.');
+    ++cargaMatching;
+    const p = personaConexion(c);
+    estado = { ...estado,
+      solicitudes: estado.solicitudes.filter((p) => p.id !== id),
+      solicitudesEnviadas: estado.solicitudesEnviadas.filter((p) => p.id !== id),
+      confirmados: estado.confirmados.filter((p) => p.id !== id),
+      enviadas: estado.enviadas.filter((uid) => uid !== id), matchingError: null };
+    if (c.status === 'accepted') estado.confirmados = [p, ...estado.confirmados];
+    else if (c.status === 'rejected') estado.ocultos = [...estado.ocultos, id];
+    else if (c.recipient_id === session.id) estado.solicitudes = [p, ...estado.solicitudes];
+    else {
+      estado.enviadas = [...estado.enviadas, id];
+      estado.solicitudesEnviadas = [p, ...estado.solicitudesEnviadas];
+    }
+    return p;
+  } finally {
+    if (estado.usuarioId === session.id) {
+      estado = { ...estado, ocupados: estado.ocupados.filter((uid) => uid !== id) };
+      emitir();
+    }
+  }
+}
+
+export async function aceptarSolicitud(id: string): Promise<Persona> {
+  const requestId = estado.solicitudes.find((p) => p.id === id)?.requestId;
+  if (!requestId) throw new Error('La solicitud ya no está disponible. Actualiza la lista.');
+  return cambiarConexion(id, `/matching/requests/${requestId}/decision`, { action: 'accept' });
+}
+
+export async function rechazarSolicitud(id: string): Promise<void> {
+  const requestId = estado.solicitudes.find((p) => p.id === id)?.requestId;
+  if (!requestId) throw new Error('La solicitud ya no está disponible. Actualiza la lista.');
+  await cambiarConexion(id, `/matching/requests/${requestId}/decision`, { action: 'reject' });
+}
+
+export async function darLike(persona: Persona): Promise<Persona> {
+  return cambiarConexion(persona.id, '/matching/requests', { recipient_id: persona.id });
+}
+
+export async function cancelarSolicitud(id: string): Promise<void> {
+  const { session, token } = await credenciales();
+  if (estado.usuarioId !== session.id) estado = estadoInicial(session.id);
+  const requestId = estado.solicitudesEnviadas.find((p) => p.id === id)?.requestId;
+  if (!requestId) throw new Error('La solicitud ya no está disponible. Actualiza la lista.');
+  if (estado.ocupados.includes(id)) throw new Error('La solicitud se está procesando.');
+  ++cargaMatching;
+  estado = { ...estado, ocupados: [...estado.ocupados, id], cargandoMatches: false };
+  emitir();
+  let actualizar = false;
+  try {
+    await apiRequest<void>(`/matching/requests/${encodeURIComponent(requestId)}`, { method: 'DELETE', token });
+    if (!await mismaSesion(session.id, token)) throw new Error('La sesión cambió. Vuelve a cargar tus matches.');
+    ++cargaMatching;
+    estado = { ...estado,
+      solicitudesEnviadas: estado.solicitudesEnviadas.filter((p) => p.requestId !== requestId),
+      enviadas: estado.enviadas.filter((uid) => uid !== id), matchingError: null };
+  } catch (e) {
+    actualizar = e instanceof ApiError && [404, 409].includes(e.status);
+    throw e;
+  } finally {
+    if (estado.usuarioId === session.id) {
+      estado = { ...estado, ocupados: estado.ocupados.filter((uid) => uid !== id) };
+      emitir();
+      if (actualizar && await mismaSesion(session.id, token)) await cargarMatching();
+    }
+  }
 }
 
 export function descartar(id: string) {
@@ -130,7 +323,9 @@ export function descartar(id: string) {
   emitir();
 }
 
-export function reiniciarDemo() {
-  estado = estadoInicial(estado.usuarioId);
+/** Vuelve a mostrar descartados; las solicitudes y matches se conservan en el servidor. */
+export function recargarDeportistas() {
+  estado = { ...estado, descartados: [] };
   emitir();
+  void cargarSugerencias();
 }

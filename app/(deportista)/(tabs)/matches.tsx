@@ -1,13 +1,14 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
-import { Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Avatar from '../../../components/Avatar';
 import BrandLogo from '../../../components/BrandLogo';
 import MatchModal from '../../../components/MatchModal';
 import { Usuario, getSession } from '../../../services/auth';
-import { Persona, aceptarSolicitud, rechazarSolicitud, useMatches } from '../../../services/matchStore';
+import { Persona, aceptarSolicitud, rechazarSolicitud, cancelarSolicitud, cargarMatching, useMatches } from '../../../services/matchStore';
+import { useMatchingRefresh } from '../../../hooks/useMatchingRefresh';
 import { Colors, useAppTheme } from '../../../theme/ThemeContext';
 
 export default function MatchesScreen() {
@@ -15,8 +16,9 @@ export default function MatchesScreen() {
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const insets = useSafeAreaInsets();
 
-  const { solicitudes, confirmados } = useMatches();
-  const [tab, setTab] = useState<'solicitudes' | 'confirmados'>('solicitudes');
+  useMatchingRefresh();
+  const { solicitudes, solicitudesEnviadas, confirmados, ocupados, cargandoMatches, matchingError, sesionExpirada } = useMatches();
+  const [tab, setTab] = useState<'solicitudes' | 'enviadas' | 'confirmados'>('solicitudes');
   const [usuario, setUsuario] = useState<Usuario | null>(null);
   const [nuevoMatch, setNuevoMatch] = useState<Persona | null>(null);
 
@@ -24,19 +26,40 @@ export default function MatchesScreen() {
     getSession().then(setUsuario);
   }, []);
 
-  function aceptar(id: string) {
-    const persona = aceptarSolicitud(id);
-    if (persona) setNuevoMatch(persona);
+  async function aceptar(id: string) {
+    try {
+      setNuevoMatch(await aceptarSolicitud(id));
+    } catch (e) {
+      Alert.alert('No se pudo aceptar', e instanceof Error ? e.message : 'Inténtalo de nuevo.');
+    }
   }
 
-  function rechazar(id: string) {
-    rechazarSolicitud(id);
+  async function rechazar(id: string) {
+    try {
+      await rechazarSolicitud(id);
+    } catch (e) {
+      Alert.alert('No se pudo rechazar', e instanceof Error ? e.message : 'Inténtalo de nuevo.');
+    }
+  }
+
+  async function cancelar(id: string) {
+    try {
+      await cancelarSolicitud(id);
+    } catch (e) {
+      Alert.alert('No se pudo cancelar', e instanceof Error ? e.message : 'Inténtalo de nuevo.');
+    }
+  }
+
+  function abrirPerfil(persona: Persona) {
+    if (!persona.matchId) return;
+    router.push({ pathname: '/(deportista)/athlete/[id]', params: { id: persona.matchId } });
   }
 
   function abrirChat(persona: Persona) {
+    if (!persona.matchId) return;
     router.push({
       pathname: '/(deportista)/chat/[id]',
-      params: { id: persona.id, name: persona.name, sport: persona.sport, colorFrom: persona.colorFrom },
+      params: { id: persona.matchId },
     });
   }
 
@@ -46,7 +69,7 @@ export default function MatchesScreen() {
     if (persona) abrirChat(persona);
   }
 
-  const lista = tab === 'solicitudes' ? solicitudes : confirmados;
+  const lista = tab === 'solicitudes' ? solicitudes : tab === 'enviadas' ? solicitudesEnviadas : confirmados;
   const iniciales = usuario
     ? `${usuario.nombre[0]}${usuario.apellidoPaterno[0]}`
     : '..';
@@ -74,46 +97,29 @@ export default function MatchesScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* TABS */}
       <View style={styles.tabs}>
-        <TouchableOpacity
-          style={[
-            styles.tab,
-            tab === 'solicitudes' && styles.tabActive,
-          ]}
-          onPress={() => setTab('solicitudes')}
-        >
-          <Text
-            style={[
-              styles.tabText,
-              tab === 'solicitudes' && styles.tabTextActive,
-            ]}
-          >
-            Solicitudes {solicitudes.length > 0 ? `(${solicitudes.length})` : ''}
-          </Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[
-            styles.tab,
-            tab === 'confirmados' && styles.tabActive,
-          ]}
-          onPress={() => setTab('confirmados')}
-        >
-          <Text
-            style={[
-              styles.tabText,
-              tab === 'confirmados' && styles.tabTextActive,
-            ]}
-          >
-            Confirmados {confirmados.length > 0 ? `(${confirmados.length})` : ''}
-          </Text>
-        </TouchableOpacity>
+        {([
+          ['solicitudes', 'Recibidas', solicitudes.length],
+          ['enviadas', 'Enviadas', solicitudesEnviadas.length],
+          ['confirmados', 'Matches', confirmados.length],
+        ] as const).map(([key, label, count]) => (
+          <TouchableOpacity key={key} style={[styles.tab, tab === key && styles.tabActive]}
+            onPress={() => setTab(key)} accessibilityRole="tab" accessibilityState={{ selected: tab === key }}>
+            <Text style={[styles.tabText, tab === key && styles.tabTextActive]}>
+              {label}{count > 0 ? ` (${count})` : ''}
+            </Text>
+          </TouchableOpacity>
+        ))}
       </View>
 
       {/* LISTA */}
       <ScrollView contentContainerStyle={styles.list}>
-        {lista.map((persona) => (
+        {matchingError && (
+          <TouchableOpacity onPress={() => sesionExpirada ? router.replace('/(auth)/login') : void cargarMatching()}>
+            <Text style={styles.emptyText}>{matchingError} · {sesionExpirada ? 'Iniciar sesión' : 'Reintentar'}</Text>
+          </TouchableOpacity>
+        )}
+        {!matchingError && lista.map((persona) => (
           <View key={persona.id} style={styles.card}>
 
             <Avatar
@@ -131,7 +137,9 @@ export default function MatchesScreen() {
               </View>
             </Avatar>
 
-            <View style={styles.cardInfo}>
+            <TouchableOpacity style={styles.cardInfo} disabled={tab !== 'confirmados'}
+              onPress={() => abrirPerfil(persona)} accessibilityLabel={`Ver perfil de ${persona.name}`}>
+
               <Text style={styles.cardName}>
                 {persona.name}
               </Text>
@@ -139,7 +147,9 @@ export default function MatchesScreen() {
               <Text style={styles.cardMeta}>
                 {persona.sport} · {persona.level}
               </Text>
-            </View>
+              {tab === 'confirmados' && <Text style={styles.profileLink}>Ver perfil</Text>}
+              {tab === 'enviadas' && <Text style={styles.cardMeta}>Pendiente de respuesta</Text>}
+            </TouchableOpacity>
 
             {tab === 'solicitudes' ? (
               <View style={styles.actions}>
@@ -147,6 +157,8 @@ export default function MatchesScreen() {
                 <TouchableOpacity
                   style={styles.rejectButton}
                   onPress={() => rechazar(persona.id)}
+                  disabled={ocupados.includes(persona.id)}
+                  accessibilityLabel={`Rechazar solicitud de ${persona.name}`}
                 >
                   <Ionicons
                     name="close"
@@ -158,6 +170,8 @@ export default function MatchesScreen() {
                 <TouchableOpacity
                   style={styles.acceptButton}
                   onPress={() => aceptar(persona.id)}
+                  disabled={ocupados.includes(persona.id)}
+                  accessibilityLabel={`Aceptar solicitud de ${persona.name}`}
                 >
                   <Ionicons
                     name="checkmark"
@@ -167,8 +181,13 @@ export default function MatchesScreen() {
                 </TouchableOpacity>
 
               </View>
+            ) : tab === 'enviadas' ? (
+              <TouchableOpacity style={styles.cancelButton} onPress={() => cancelar(persona.id)}
+                disabled={ocupados.includes(persona.id)} accessibilityLabel={`Cancelar solicitud a ${persona.name}`}>
+                <Text style={styles.cancelText}>{ocupados.includes(persona.id) ? 'Cancelando...' : 'Cancelar'}</Text>
+              </TouchableOpacity>
             ) : (
-              <TouchableOpacity style={styles.chatButton} onPress={() => abrirChat(persona)}>
+              <TouchableOpacity style={styles.chatButton} onPress={() => abrirChat(persona)} accessibilityLabel={`Abrir chat con ${persona.name}`}>
                 <Ionicons
                   name="chatbubble-outline"
                   size={16}
@@ -180,10 +199,11 @@ export default function MatchesScreen() {
           </View>
         ))}
 
-        {lista.length === 0 && (
+        {!matchingError && lista.length === 0 && (
           <Text style={styles.emptyText}>
-            {tab === 'solicitudes'
+            {cargandoMatches ? 'Cargando matches...' : tab === 'solicitudes'
               ? 'No tienes solicitudes pendientes.'
+              : tab === 'enviadas' ? 'No tienes solicitudes enviadas pendientes.'
               : 'Todavía no tienes matches confirmados.'}
           </Text>
         )}
@@ -331,6 +351,10 @@ const makeStyles = (c: Colors) =>
       fontSize: 10.5,
       marginTop: 2,
     },
+
+    profileLink: { color: c.accent, fontSize: 12, fontWeight: '600', marginTop: 6 },
+    cancelButton: { backgroundColor: c.subtle, paddingHorizontal: 10, paddingVertical: 12, borderRadius: 10 },
+    cancelText: { color: c.text, fontSize: 12, fontWeight: '600' },
 
     actions: {
       flexDirection: 'row',
