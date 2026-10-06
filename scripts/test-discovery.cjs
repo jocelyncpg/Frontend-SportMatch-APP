@@ -275,7 +275,7 @@ test('nearby athletes keep server ordering even if farther athletes have higher 
 
 test('initial recommendations use 10km and shared sports with similar levels when configured', async () => {
   const { store, calls, auth } = loadStore(async () => []);
-  auth.session = { id: 'my-id', latitud: 0, longitud: 0, deportes: ['Running'] };
+  auth.session = { id: 'my-id', latitud: 0, longitud: 0, deportes: [{ nombre: 'Running', nivel: 3 }] };
   await store.cargarSugerencias();
   assert.equal(calls[0][0], '/users/suggestions?limit=50&radius_km=10&shared_sports=true&level_tolerance=1');
   assert.equal(store.getEstado().ubicacionDisponible, true);
@@ -303,10 +303,10 @@ test('an older filter request cannot overwrite newer search results', async () =
   assert.equal(store.getEstado().filtros.radioKm, 10);
 });
 
-function loadAuth(preferences) {
+function loadAuth(preferences, initialSession = {}) {
   const saved = new Map([
     ['sportmatch_token', 'real-token'],
-    ['sportmatch_session', JSON.stringify({ id: 'my-id', nombre: 'Ana', latitud: 1, longitud: 2 })],
+    ['sportmatch_session', JSON.stringify({ id: 'my-id', nombre: 'Ana', latitud: 1, longitud: 2, ...initialSession })],
   ]);
   const calls = [];
   const storage = {
@@ -359,6 +359,81 @@ test('profile refresh reads real levels and location from the server', async () 
   const { auth } = loadAuth({ deportes: [{ deporte_codigo: 'running', nivel: 4 }], zona: null });
   const session = await auth.refrescarPreferencias();
   assert.equal(session.nivelesDeportes.running, 4);
-  assert.equal(session.deportes[0], 'running');
+  assert.equal(session.deportes[0].nombre, 'running');
+  assert.equal(session.deportes[0].nivel, 4);
   assert.equal(session.latitud, undefined);
+});
+
+test('legacy sessions convert sport names to the teammate view format without losing levels', async () => {
+  const { auth } = loadAuth({}, { deportes: ['running', 'tennis'], nivelesDeportes: { running: 5, tennis: 2 } });
+  const session = await auth.getSession();
+  assert.equal(session.deportes[0].nombre, 'running');
+  assert.equal(session.deportes[0].nivel, 5);
+  assert.equal(session.deportes[1].nivel, 2);
+});
+
+test('the teammate editor saves object sports to the real API and preserves unrelated preferences', async () => {
+  const { auth, calls } = loadAuth({ deportes: [{ deporte_codigo: 'running', nivel: 3 }], zona: null, objetivos: ['entrenar'] });
+  await auth.updatePerfilExtra('my-id', { deportes: [{ nombre: 'Running', nivel: 5 }, { nombre: 'Tennis', nivel: 2 }] });
+  const request = calls.find(([, options]) => options.method === 'PUT');
+  assert.equal(request[0], '/users/my-id/preferences');
+  assert.equal(request[1].token, 'real-token');
+  assert.equal(request[1].body.deportes[0].deporte_codigo, 'running');
+  assert.equal(request[1].body.deportes[0].nivel, 5);
+  assert.equal(request[1].body.deportes[1].nivel, 2);
+  assert.equal(request[1].body.objetivos[0], 'entrenar');
+  const session = await auth.getSession();
+  assert.equal(session.deportes[0].nombre, 'running');
+  assert.equal(session.deportes[0].nivel, 5);
+});
+
+test('the 2km quick filter uses the backend and preserves sport and level choices', async () => {
+  const { store, calls } = loadStore(async () => []);
+  await store.cargarSugerencias();
+  await store.aplicarFiltros({ radioKm: 10, deporte: 'running', nivelMin: 2, nivelMax: 4, nivelSimilar: true });
+  await store.setRadio(2);
+  const last = calls.filter(([path]) => path.startsWith('/users/suggestions')).at(-1);
+  assert.equal(last[0], '/users/suggestions?limit=50&radius_km=2&sport=running&min_level=2&max_level=4&level_tolerance=1');
+  assert.equal(store.getEstado().filtros.radioKm, 2);
+});
+
+function loadAthletes(request) {
+  const auth = { session: { id: 'me' }, token: 'token' };
+  const module = { exports: {} };
+  const source = fs.readFileSync(path.join(__dirname, '../services/athletes.ts'), 'utf8');
+  const code = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 } }).outputText;
+  vm.runInNewContext(code, { module, exports: module.exports, Error,
+    require(name) {
+      if (name === './api') return { ApiError, apiRequest: request };
+      if (name === './auth') return { getSession: async () => auth.session, getToken: async () => auth.token };
+      if (name === './matchStore') return { aPersona: (card) => ({ id: card.user_id, name: card.nombre }), getEstado: () => ({ usuarioId: null, catalogo: [] }) };
+      throw new Error(`Unexpected import: ${name}`);
+    },
+  });
+  return { service: module.exports, auth };
+}
+
+test('public profile loads server data by ID and requires an authenticated session', async () => {
+  let calls = 0;
+  const { service, auth } = loadAthletes(async (path, options) => {
+    ++calls;
+    assert.equal(path, '/users/athletes/real-id');
+    assert.equal(options.token, 'token');
+    return { user_id: 'real-id', nombre: 'Nombre real' };
+  });
+  assert.equal((await service.getAthleteProfile('real-id')).name, 'Nombre real');
+  auth.token = null;
+  await assert.rejects(service.getAthleteProfile('real-id'));
+  assert.equal(calls, 1);
+});
+
+test('a public profile request cannot expose data after an account change', async () => {
+  let finish;
+  const response = new Promise((resolve) => { finish = resolve; });
+  const { service, auth } = loadAthletes(async () => response);
+  const pending = service.getAthleteProfile('real-id');
+  await new Promise((resolve) => setImmediate(resolve));
+  auth.session = { id: 'another-user' };
+  finish({ user_id: 'real-id', nombre: 'Nombre real' });
+  await assert.rejects(pending);
 });

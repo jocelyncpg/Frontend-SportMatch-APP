@@ -11,6 +11,8 @@ const LOCAL_EXTRAS_KEY = 'sportmatch_local_extras';
 // Un deporte nuevo comienza en intermedio; el usuario puede elegir su nivel.
 const NIVEL_POR_DEFECTO = 3;
 
+export type DeporteConNivel = { nombre: string; nivel: number };
+
 export type Usuario = {
   id: string;
   rut: string;
@@ -23,7 +25,7 @@ export type Usuario = {
   latitud?: number;
   longitud?: number;
   biografia?: string;
-  deportes?: string[];
+  deportes?: DeporteConNivel[];
   nivelesDeportes?: Record<string, number>;
 };
 
@@ -100,7 +102,7 @@ async function iniciarSesion(tokens: TokenResponse): Promise<Usuario> {
     email: tokens.user.email,
     fotoPerfil: fotoLocal ?? perfil.foto_perfil ?? undefined,
     biografia: perfil.biografia ?? undefined,
-    deportes: preferencias.deportes.map((d) => nombreDeporte(d.deporte_codigo)),
+    deportes: preferencias.deportes.map((d) => ({ nombre: nombreDeporte(d.deporte_codigo), nivel: d.nivel })),
     nivelesDeportes: Object.fromEntries(preferencias.deportes.map((d) => [d.deporte_codigo, d.nivel])),
     comuna: preferencias.zona?.comuna,
     latitud: preferencias.zona?.latitud ?? undefined,
@@ -163,7 +165,12 @@ export async function logout(): Promise<void> {
 
 export async function getSession(): Promise<Usuario | null> {
   const raw = await AsyncStorage.getItem(SESSION_KEY);
-  return raw ? JSON.parse(raw) : null;
+  if (!raw) return null;
+  const saved = JSON.parse(raw) as Omit<Usuario, 'deportes'> & { deportes?: (string | DeporteConNivel)[] };
+  // Sessions from before the merge stored sport names and levels separately.
+  return { ...saved, deportes: saved.deportes?.map((sport) => typeof sport === 'string'
+    ? { nombre: sport, nivel: saved.nivelesDeportes?.[codigoDeporte(sport)] ?? NIVEL_POR_DEFECTO }
+    : sport) };
 }
 
 export async function getToken(): Promise<string | null> {
@@ -218,7 +225,7 @@ export async function updateUbicacion(
 /** Guarda la biografía en el perfil y los deportes en las preferencias de Ms_Users. */
 export async function updatePerfilExtra(
   userId: string,
-  datos: { biografia?: string; deportes?: string[]; nivelesDeportes?: Record<string, number> }
+  datos: { biografia?: string; deportes?: (string | DeporteConNivel)[]; nivelesDeportes?: Record<string, number> }
 ): Promise<void> {
   const token = await tokenActual();
 
@@ -241,12 +248,18 @@ export async function updatePerfilExtra(
   }
 
   const deportes = datos.deportes;
+  let deportesGuardados: DeporteConNivel[] | undefined;
   let nivelesGuardados: Record<string, number> | undefined;
   if (deportes !== undefined) {
     await cambiarPreferencias(userId, token, (actuales) => {
       const niveles = new Map(actuales.deportes.map((d) => [d.deporte_codigo, d.nivel]));
-      const codigos = [...new Set(deportes.map(codigoDeporte).filter((c) => c.length > 0))];
-      nivelesGuardados = Object.fromEntries(codigos.map((c) => [c, datos.nivelesDeportes?.[c] ?? niveles.get(c) ?? NIVEL_POR_DEFECTO]));
+      const elegidos = new Map(deportes.map((sport) => [codigoDeporte(typeof sport === 'string' ? sport : sport.nombre), sport]));
+      const codigos = [...elegidos.keys()].filter(Boolean);
+      nivelesGuardados = Object.fromEntries(codigos.map((c) => {
+        const sport = elegidos.get(c)!;
+        return [c, typeof sport === 'string' ? datos.nivelesDeportes?.[c] ?? niveles.get(c) ?? NIVEL_POR_DEFECTO : sport.nivel];
+      }));
+      deportesGuardados = codigos.map((c) => ({ nombre: nombreDeporte(c), nivel: nivelesGuardados![c] }));
       return {
         ...actuales,
         deportes: codigos.map((c) => ({ deporte_codigo: c, nivel: nivelesGuardados![c] })),
@@ -254,7 +267,8 @@ export async function updatePerfilExtra(
     });
   }
 
-  await actualizarSesion(userId, { ...datos, ...(nivelesGuardados ? { nivelesDeportes: nivelesGuardados } : {}) });
+  await actualizarSesion(userId, { ...(datos.biografia !== undefined ? { biografia: datos.biografia } : {}),
+    ...(deportesGuardados ? { deportes: deportesGuardados, nivelesDeportes: nivelesGuardados } : {}) });
 }
 
 /** Refresh saved sports, levels and location without replacing unrelated profile fields. */
@@ -265,7 +279,7 @@ export async function refrescarPreferencias(): Promise<Usuario | null> {
   const preferences = await apiRequest<Preferences>(`/users/${session.id}/preferences`, { token });
   if ((await getSession())?.id !== session.id || await getToken() !== token) return null;
   await actualizarSesion(session.id, {
-    deportes: preferences.deportes.map((d) => nombreDeporte(d.deporte_codigo)),
+    deportes: preferences.deportes.map((d) => ({ nombre: nombreDeporte(d.deporte_codigo), nivel: d.nivel })),
     nivelesDeportes: Object.fromEntries(preferences.deportes.map((d) => [d.deporte_codigo, d.nivel])),
     comuna: preferences.zona?.comuna,
     latitud: preferences.zona?.latitud ?? undefined,

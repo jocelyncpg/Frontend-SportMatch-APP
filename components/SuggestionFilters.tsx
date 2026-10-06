@@ -10,7 +10,7 @@ import { Colors, useAppTheme } from '../theme/ThemeContext';
 
 const ALL: FiltrosSugerencias = { radioKm: null, deporte: 'todos', nivelMin: 1, nivelMax: 5, nivelSimilar: false };
 
-export default function SuggestionFilters() {
+export default function SuggestionFilters({ compact = false }: { compact?: boolean }) {
   const { colors } = useAppTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const { filtros, ubicacionDisponible, misDeportes, cargando } = useMatches();
@@ -51,7 +51,7 @@ export default function SuggestionFilters() {
   return <View style={styles.container}>
     <TouchableOpacity style={styles.open} onPress={() => { setDraft(active); setVisible(true); }} accessibilityLabel="Filtrar deportistas">
       <Ionicons name="options-outline" size={20} color={colors.accent} />
-      <View style={styles.summary}><Text style={styles.title}>Filtrar deportistas</Text><Text style={styles.help}>{resumen}</Text></View>
+      <View style={styles.summary}><Text style={styles.title}>{compact ? 'Deporte y nivel' : 'Filtrar deportistas'}</Text>{!compact && <Text style={styles.help}>{resumen}</Text>}</View>
     </TouchableOpacity>
     {!ubicacionDisponible && <TouchableOpacity onPress={activarUbicacion} disabled={locating}>
       <Text style={styles.location}>{locating ? 'Obteniendo ubicación...' : 'Activa tu ubicación para encontrar deportistas a 5 o 10 km'}</Text>
@@ -64,7 +64,7 @@ export default function SuggestionFilters() {
         <ScrollView contentContainerStyle={styles.fields}>
           <Text style={styles.title}>Distancia desde tu ubicación guardada</Text>
           <View style={styles.wrap}>
-            {([5, 10, null] as const).map((radius) => chip(radius ? `${radius} km` : 'Sin límite', draft.radioKm === radius,
+            {([2, 5, 10, null] as const).map((radius) => chip(radius ? `${radius} km` : 'Sin límite', draft.radioKm === radius,
               () => setDraft({ ...draft, radioKm: radius }), radius != null && !ubicacionDisponible))}
           </View>
           <Text style={styles.help}>Distancia aproximada en línea recta. Con un radio activo solo aparecen deportistas con ubicación.</Text>
@@ -79,7 +79,7 @@ export default function SuggestionFilters() {
           </View>
           {!misDeportes.length && <TouchableOpacity onPress={() => { setVisible(false); router.push('/(deportista)/(tabs)/profile'); }}><Text style={styles.location}>Agrega tus deportes y niveles en el perfil</Text></TouchableOpacity>}
           <Text style={styles.title}>Nivel del otro deportista</Text>
-          <Text style={styles.help}>1–2 principiante · 3 intermedio · 4–5 avanzado. El rango se aplica al deporte seleccionado.</Text>
+          <Text style={styles.help}>1 principiante · 2 básico · 3 intermedio · 4 avanzado · 5 experto. El rango se aplica al deporte seleccionado.</Text>
           <Text style={styles.help}>Desde {draft.nivelMin}</Text>
           <View style={styles.wrap}>{[1, 2, 3, 4, 5].map((level) => chip(String(level), draft.nivelMin === level,
             () => setDraft({ ...draft, nivelMin: level, nivelMax: Math.max(level, draft.nivelMax) })))}</View>

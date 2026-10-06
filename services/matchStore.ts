@@ -5,7 +5,7 @@ import { getSession, getToken } from './auth';
 import { codigoDeporte, nombreDeporte } from './deportes';
 
 export type FiltrosSugerencias = {
-  radioKm: 5 | 10 | null;
+  radioKm: 2 | 5 | 10 | null;
   deporte: 'mis_deportes' | 'todos' | string;
   nivelMin: number;
   nivelMax: number;
@@ -20,6 +20,7 @@ export type Persona = {
   level: string;
   deportes?: { nombre: string; nivel: string }[];
   distance?: string;
+  distanceKm?: number;
   nivelCoincidente?: boolean;
   compatibility: number;
   colorFrom: string;
@@ -70,9 +71,7 @@ export type SugerenciaApi = {
 const COLORES = ['#3648A6', '#1F2A5C', '#DB2777', '#22C55E', '#7C3AED', '#0EA5E9'];
 
 function nombreNivel(nivel: number): string {
-  if (nivel <= 2) return 'Principiante';
-  if (nivel === 3) return 'Intermedio';
-  return 'Avanzado';
+  return ({ 1: 'Principiante', 2: 'Básico', 3: 'Intermedio', 4: 'Avanzado', 5: 'Experto' } as Record<number, string>)[nivel] ?? 'Nivel por definir';
 }
 
 /** Siempre el mismo color para la misma persona. */
@@ -92,6 +91,7 @@ export function aPersona(s: SugerenciaApi): Persona {
     level: principal ? `${nombreNivel(principal.nivel)} · ${principal.nivel}/5` : 'Nivel por definir',
     deportes: s.deportes.map((d) => ({ nombre: nombreDeporte(d.deporte_codigo), nivel: `${nombreNivel(d.nivel)} · ${d.nivel}/5` })),
     distance: s.distancia_km == null ? undefined : s.distancia_km < 0.1 ? 'A menos de 100 m' : `≈ ${s.distancia_km.toFixed(1)} km`,
+    distanceKm: s.distancia_km ?? undefined,
     nivelCoincidente: s.nivel_coincidente,
     compatibility: s.compatibilidad,
     colorFrom: colorPara(s.user_id),
@@ -162,7 +162,7 @@ export async function cargarSugerencias(): Promise<void> {
       estado = estadoInicial(session.id);
     }
     const ubicacionDisponible = session.latitud != null && session.longitud != null;
-    const misDeportes = (session.deportes ?? []).map(codigoDeporte);
+    const misDeportes = (session.deportes ?? []).map((sport) => codigoDeporte(sport.nombre));
     const filtros = estado.filtros ?? {
       radioKm: ubicacionDisponible ? 10 : null,
       deporte: misDeportes.length ? 'mis_deportes' : 'todos',
@@ -222,6 +222,13 @@ export function sugerencias(e: Estado): Persona[] {
 export async function aplicarFiltros(filtros: FiltrosSugerencias | null): Promise<void> {
   estado = { ...estado, filtros, catalogo: [], descartados: [] };
   await cargarSugerencias();
+}
+
+/** Quick distance chips from the shared design use the same server filters. */
+export async function setRadio(km: 2 | 5 | 10 | null): Promise<void> {
+  if (!estado.filtros) await cargarSugerencias();
+  if (!estado.filtros) return;
+  await aplicarFiltros({ ...estado.filtros, radioKm: km });
 }
 
 export type ConexionApi = {

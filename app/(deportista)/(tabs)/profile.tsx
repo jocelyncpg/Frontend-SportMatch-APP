@@ -4,12 +4,14 @@ import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useMemo, useState } from 'react';
 import { Alert, Image, Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { ApiError } from '../../../services/api';
-import { Usuario, getSession, refrescarPreferencias, logout, updateFotoPerfil, updatePerfilExtra, updateUbicacion } from '../../../services/auth';
+import { DeporteConNivel, Usuario, getSession, refrescarPreferencias, logout, updateFotoPerfil, updatePerfilExtra, updateUbicacion } from '../../../services/auth';
 import { codigoDeporte } from '../../../services/deportes';
 import { GEOAPIFY_API_KEY, solicitarUbicacion } from '../../../services/location';
 import { Colors, Mode, useAppTheme } from '../../../theme/ThemeContext';
 
 const DEPORTES_DISPONIBLES = ['Running', 'Fútbol', 'Ciclismo', 'Yoga', 'Tenis', 'Natación', 'Trekking'];
+const NIVELES = [1, 2, 3, 4, 5];
+const NOMBRES_NIVEL: Record<number, string> = { 1: 'Principiante', 2: 'Básico', 3: 'Intermedio', 4: 'Avanzado', 5: 'Experto' };
 
 /** Los cambios del perfil ahora se guardan en el servidor, así que pueden fallar. */
 function avisarError(titulo: string, e: unknown) {
@@ -41,14 +43,13 @@ export default function ProfileScreen() {
   const [modalBioVisible, setModalBioVisible] = useState(false);
   const [bioTemp, setBioTemp] = useState('');
   const [modalDeportesVisible, setModalDeportesVisible] = useState(false);
-  const [deportesTemp, setDeportesTemp] = useState<string[]>([]);
-  const [nivelesTemp, setNivelesTemp] = useState<Record<string, number>>({});
+  const [deportesTemp, setDeportesTemp] = useState<DeporteConNivel[]>([]);
   const [guardandoDeportes, setGuardandoDeportes] = useState(false);
-  const [otroDeporteTexto, setOtroDeporteTexto] = useState('');
+  const [nuevoDeporteTexto, setNuevoDeporteTexto] = useState('');
 
   useFocusEffect(useCallback(() => {
     let active = true;
-    getSession().then((session) => { if (active) setUsuario(session); });
+    setUsuario(null);
     refrescarPreferencias().then((session) => { if (active) setUsuario(session); })
       .catch((e) => { if (active) avisarError('No se pudo actualizar el perfil', e); });
     return () => { active = false; };
@@ -153,31 +154,45 @@ export default function ProfileScreen() {
   }
 
   function abrirEditorDeportes() {
-    const actuales = usuario?.deportes ?? [];
-    const enLista = actuales.filter((d) => DEPORTES_DISPONIBLES.includes(d));
-    const personalizados = actuales.filter((d) => !DEPORTES_DISPONIBLES.includes(d));
-    setDeportesTemp(enLista);
-    setNivelesTemp(usuario?.nivelesDeportes ?? {});
-    setOtroDeporteTexto(personalizados.join(', '));
+    // Ahora todo (predefinidos y personalizados) vive junto en una sola lista con nivel.
+    setDeportesTemp(usuario?.deportes ?? []);
+    setNuevoDeporteTexto('');
     setModalDeportesVisible(true);
   }
 
   function toggleDeporte(deporte: string) {
-    setDeportesTemp((prev) =>
-      prev.includes(deporte) ? prev.filter((d) => d !== deporte) : [...prev, deporte]
-    );
+    setDeportesTemp((prev) => {
+      const yaEsta = prev.find((d) => d.nombre === deporte);
+      if (yaEsta) return prev.filter((d) => d.nombre !== deporte);
+      return [...prev, { nombre: deporte, nivel: 3 }]; // Intermedio por defecto al agregar
+    });
+  }
+
+  function agregarDeportePersonalizado() {
+    const nombre = nuevoDeporteTexto.trim();
+    if (!nombre) return;
+    const yaExiste = deportesTemp.some((d) => codigoDeporte(d.nombre) === codigoDeporte(nombre));
+    if (yaExiste) {
+      setNuevoDeporteTexto('');
+      return;
+    }
+    setDeportesTemp((prev) => [...prev, { nombre, nivel: 3 }]);
+    setNuevoDeporteTexto('');
+  }
+
+  function quitarDeporte(nombre: string) {
+    setDeportesTemp((prev) => prev.filter((d) => d.nombre !== nombre));
+  }
+
+  function cambiarNivel(deporte: string, nivel: number) {
+    setDeportesTemp((prev) => prev.map((d) => (d.nombre === deporte ? { ...d, nivel } : d)));
   }
 
   async function guardarDeportes() {
-    if (!usuario) return;
-    const extras = otroDeporteTexto
-      .split(',')
-      .map((d) => d.trim())
-      .filter((d) => d.length > 0);
-    const deportesFinales = [...deportesTemp, ...extras];
+    if (!usuario || guardandoDeportes) return;
     setGuardandoDeportes(true);
     try {
-      await updatePerfilExtra(usuario.id, { deportes: deportesFinales, nivelesDeportes: nivelesTemp });
+      await updatePerfilExtra(usuario.id, { deportes: deportesTemp });
     } catch (e) {
       avisarError('No se pudieron guardar tus deportes', e);
       return;
@@ -235,7 +250,7 @@ export default function ProfileScreen() {
               </TouchableOpacity>
             </View>
 
-            {usuario.latitud && usuario.longitud && !mapaError && (
+            {usuario.latitud != null && usuario.longitud != null && !mapaError && (
               <Image
                 source={{
                   uri: `https://maps.geoapify.com/v1/staticmap?style=osm-bright&width=400&height=180&center=lonlat:${usuario.longitud},${usuario.latitud}&zoom=15&marker=lonlat:${usuario.longitud},${usuario.latitud};color:%23ff0000;size:large&apiKey=${GEOAPIFY_API_KEY}`,
@@ -298,8 +313,8 @@ export default function ProfileScreen() {
         {usuario?.deportes && usuario.deportes.length > 0 ? (
           <View style={styles.chipsWrap}>
             {usuario.deportes.map((d) => (
-              <View key={d} style={styles.deporteChip}>
-                <Text style={styles.deporteChipText}>{d} · Nivel {usuario.nivelesDeportes?.[codigoDeporte(d)] ?? 3}/5</Text>
+              <View key={d.nombre} style={styles.deporteChip}>
+                <Text style={styles.deporteChipText}>{d.nombre} · {NOMBRES_NIVEL[d.nivel] ?? d.nivel}</Text>
               </View>
             ))}
           </View>
@@ -366,10 +381,12 @@ export default function ProfileScreen() {
         <View style={styles.modalOverlay}>
           <View style={[styles.modalBox, { maxHeight: '90%' }]}>
             <Text style={styles.modalTitle}>Mis deportes</Text>
-            <ScrollView>
+
+            <ScrollView keyboardShouldPersistTaps="handled">
+            <Text style={styles.otroLabel}>Deportes sugeridos</Text>
             <View style={styles.chipsWrap}>
               {DEPORTES_DISPONIBLES.map((d) => {
-                const seleccionado = deportesTemp.includes(d);
+                const seleccionado = deportesTemp.some((x) => x.nombre === d);
                 return (
                   <TouchableOpacity
                     key={d}
@@ -383,31 +400,50 @@ export default function ProfileScreen() {
             </View>
 
             <Text style={styles.otroLabel}>¿Practicas otro deporte?</Text>
-            <View style={styles.inputBoxSmall}>
-              <TextInput
-                placeholder="Ej: Escalada, Box, Pádel..."
-                placeholderTextColor={colors.textMuted}
-                style={styles.input}
-                value={otroDeporteTexto}
-                onChangeText={setOtroDeporteTexto}
-              />
+            <View style={styles.agregarRow}>
+              <View style={[styles.inputBoxSmall, { flex: 1, marginTop: 0, marginBottom: 0 }]}>
+                <TextInput
+                  placeholder="Ej: Escalada, Box, Pádel..."
+                  placeholderTextColor={colors.textMuted}
+                  style={styles.input}
+                  value={nuevoDeporteTexto}
+                  onChangeText={setNuevoDeporteTexto}
+                  onSubmitEditing={agregarDeportePersonalizado}
+                  returnKeyType="done"
+                />
+              </View>
+              <TouchableOpacity style={styles.agregarBoton} onPress={agregarDeportePersonalizado}>
+                <Ionicons name="add" size={20} color="#fff" />
+              </TouchableOpacity>
             </View>
 
-            <Text style={styles.otroLabel}>Tu nivel por deporte: 1–2 principiante · 3 intermedio · 4–5 avanzado</Text>
-            {[...new Set([...deportesTemp, ...otroDeporteTexto.split(',').map((d) => d.trim()).filter(Boolean)])].map((sport) => {
-              const code = codigoDeporte(sport);
-              const level = nivelesTemp[code] ?? 3;
-              return <View key={code}>
-                <Text style={styles.sectionText}>{sport}</Text>
-                <View style={styles.chipsWrap}>{[1, 2, 3, 4, 5].map((value) => (
-                  <TouchableOpacity key={value} style={[styles.selectChip, value === level && styles.selectChipActive]}
-                    accessibilityLabel={`${sport}: nivel ${value}`} accessibilityState={{ selected: level === value }}
-                    onPress={() => setNivelesTemp({ ...nivelesTemp, [code]: value })}>
-                    <Text style={[styles.selectChipText, value === level && styles.selectChipTextActive]}>{value}</Text>
-                  </TouchableOpacity>
-                ))}</View>
-              </View>;
-            })}
+            {deportesTemp.length > 0 && (
+              <View style={styles.nivelesBox}>
+                <Text style={styles.otroLabel}>Nivel por deporte</Text>
+                {deportesTemp.map((d) => (
+                  <View key={d.nombre} style={styles.nivelRow}>
+                    <View style={styles.nivelNombreRow}>
+                      <Text style={styles.nivelNombre}>{d.nombre}</Text>
+                      <TouchableOpacity onPress={() => quitarDeporte(d.nombre)}>
+                        <Ionicons name="close-circle" size={16} color={colors.textMuted} />
+                      </TouchableOpacity>
+                    </View>
+                    <View style={styles.nivelBotones}>
+                      {NIVELES.map((n) => (
+                        <TouchableOpacity
+                          key={n}
+                          style={[styles.nivelBoton, d.nivel === n && styles.nivelBotonActivo]}
+                          onPress={() => cambiarNivel(d.nombre, n)}
+                        >
+                          <Text style={[styles.nivelBotonTexto, d.nivel === n && styles.nivelBotonTextoActivo]}>{n}</Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  </View>
+                ))}
+              </View>
+            )}
+
             </ScrollView>
             <View style={styles.modalActions}>
               <TouchableOpacity style={styles.modalCancel} onPress={() => setModalDeportesVisible(false)}>
@@ -507,6 +543,26 @@ const makeStyles = (c: Colors) =>
     selectChipText: { color: c.textMuted, fontSize: 12, fontWeight: '600' },
     selectChipTextActive: { color: '#fff' },
     otroLabel: { color: c.textMuted, fontSize: 11, fontWeight: '600', marginTop: 4, marginBottom: 6 },
+
+    agregarRow: { flexDirection: 'row', gap: 8, alignItems: 'center', marginBottom: 14 },
+    agregarBoton: {
+      width: 38, height: 38, borderRadius: 12, backgroundColor: c.primary,
+      alignItems: 'center', justifyContent: 'center',
+    },
+
+    nivelesBox: { width: '100%', marginBottom: 6 },
+    nivelRow: { marginBottom: 12 },
+    nivelNombreRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 5 },
+    nivelNombre: { color: c.text, fontSize: 12, fontWeight: '700' },
+    nivelBotones: { flexDirection: 'row', gap: 6 },
+    nivelBoton: {
+      width: 32, height: 32, borderRadius: 8, borderWidth: 1, borderColor: c.border,
+      backgroundColor: c.inputBg, alignItems: 'center', justifyContent: 'center',
+    },
+    nivelBotonActivo: { backgroundColor: c.primary, borderColor: c.primary },
+    nivelBotonTexto: { color: c.textMuted, fontSize: 12, fontWeight: '700' },
+    nivelBotonTextoActivo: { color: '#fff' },
+
     modalActions: { flexDirection: 'row', gap: 10, marginTop: 8 },
     modalCancel: { flex: 1, paddingVertical: 12, borderRadius: 12, borderWidth: 1, borderColor: c.border, alignItems: 'center' },
     modalCancelText: { color: c.textMuted, fontSize: 13, fontWeight: '700' },
