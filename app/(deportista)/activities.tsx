@@ -1,49 +1,48 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useMemo } from 'react';
-import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import TrainingRow from '../../components/TrainingRow';
+import { ActivityIndicator, FlatList, RefreshControl, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import ActivityCard from '../../components/ActivityCard';
+import { useActivities } from '../../hooks/useActivities';
 import { Colors, useAppTheme } from '../../theme/ThemeContext';
-
-const ACTIVIDADES = [
-  { icon: '🏃', title: 'Running en Parque Bicentenario', time: 'Hoy, 19:30', distance: '1.2 km', colorBg: '#1B3324' },
-  { icon: '⚽', title: 'Fútbol 7 — Maipú', time: 'Mañana, 20:00', distance: '2.8 km', colorBg: '#1B2144' },
-  { icon: '🧘', title: 'Yoga al aire libre', time: 'Sábado, 09:00', distance: '3.4 km', colorBg: '#2B1B44' },
-  { icon: '🚴', title: 'Ciclismo ruta costera', time: 'Domingo, 08:00', distance: '4.1 km', colorBg: '#1B2A2E' },
-  { icon: '🏊', title: 'Natación piscina municipal', time: 'Lunes, 18:00', distance: '2.0 km', colorBg: '#1B2440' },
-  { icon: '🥊', title: 'Box grupal Ñuñoa', time: 'Martes, 19:00', distance: '3.6 km', colorBg: '#2A1B1E' },
-];
 
 export default function ActivitiesScreen() {
   const { colors } = useAppTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
-
-  return (
-    <View style={styles.container}>
-      <View style={styles.topbar}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-          <Ionicons name="arrow-back" size={18} color={colors.text} />
-        </TouchableOpacity>
-        <Text style={styles.title}>Entrenamientos cerca de ti</Text>
-      </View>
-
-      <ScrollView contentContainerStyle={styles.list}>
-        {ACTIVIDADES.map((a, i) => (
-          <TrainingRow key={i} icon={a.icon} title={a.title} time={a.time} distance={a.distance} colorBg={a.colorBg} />
-        ))}
-      </ScrollView>
+  const insets = useSafeAreaInsets();
+  const data = useActivities();
+  return <View style={[styles.container, { paddingTop: insets.top + 16 }]}>
+    <View style={styles.topbar}>
+      <TouchableOpacity accessibilityLabel="Volver" onPress={() => router.back()} style={styles.backButton}>
+        <Ionicons name="arrow-back" size={18} color={colors.text} />
+      </TouchableOpacity>
+      <Text style={styles.title}>Actividades deportivas</Text>
     </View>
-  );
+    <TouchableOpacity style={styles.createButton} onPress={() => router.push('/(deportista)/create-activity')}>
+      <Ionicons name="add-circle-outline" size={20} color={colors.accent} />
+      <Text style={styles.link}>Crear actividad</Text>
+    </TouchableOpacity>
+    <FlatList data={data.items} keyExtractor={(item) => item.id} renderItem={({ item }) => <ActivityCard activity={item} />}
+      contentContainerStyle={[styles.list, { paddingBottom: insets.bottom + 24 }]}
+      refreshControl={<RefreshControl refreshing={data.loading} onRefresh={data.refresh} tintColor={colors.accent} />}
+      ListHeaderComponent={<Text style={styles.note}>Próximas actividades, ordenadas por fecha. Toca una para ver el detalle.</Text>}
+      ListEmptyComponent={!data.loading && !data.error ? <Text style={styles.note}>Todavía no hay actividades próximas. ¡Publica la primera!</Text> : null}
+      ListFooterComponent={<View style={styles.footer}>
+        {data.error && <><Text style={styles.note}>{data.error}</Text><TouchableOpacity onPress={() => data.sessionExpired ? router.replace('/(auth)/login') : void (data.cursor ? data.more() : data.refresh())}>
+          <Text style={styles.link}>{data.sessionExpired ? 'Iniciar sesión' : 'Reintentar'}</Text></TouchableOpacity></>}
+        {data.loading ? <ActivityIndicator color={colors.accent} /> : data.cursor && !data.error ?
+          <TouchableOpacity onPress={data.more}><Text style={styles.link}>Ver más actividades</Text></TouchableOpacity> : null}
+      </View>} />
+  </View>;
 }
-
-const makeStyles = (c: Colors) =>
-  StyleSheet.create({
-    container: { flex: 1, backgroundColor: c.bg, paddingTop: 60 },
-    topbar: { flexDirection: 'row', alignItems: 'center', gap: 14, paddingHorizontal: 20, marginBottom: 20 },
-    backButton: {
-      width: 34, height: 34, borderRadius: 17, backgroundColor: c.card,
-      borderWidth: 1, borderColor: c.border, alignItems: 'center', justifyContent: 'center',
-    },
-    title: { color: c.text, fontSize: 17, fontWeight: '700' },
-    list: { paddingHorizontal: 20, paddingBottom: 30 },
-  });
+const makeStyles = (c: Colors) => StyleSheet.create({
+  container: { flex: 1, backgroundColor: c.bg },
+  topbar: { flexDirection: 'row', alignItems: 'center', gap: 14, paddingHorizontal: 20, marginBottom: 20 },
+  backButton: { width: 34, height: 34, borderRadius: 17, backgroundColor: c.card, borderWidth: 1, borderColor: c.border, alignItems: 'center', justifyContent: 'center' },
+  title: { color: c.text, fontSize: 17, fontWeight: '700', flex: 1 },
+  createButton: { marginHorizontal: 20, marginBottom: 16, borderRadius: 13, borderWidth: 1, borderColor: c.border, backgroundColor: c.card, padding: 14, flexDirection: 'row', alignItems: 'center', gap: 10 },
+  link: { color: c.accent, fontWeight: '700' },
+  note: { color: c.textMuted, marginBottom: 14, lineHeight: 21 },
+  list: { paddingHorizontal: 20 }, footer: { paddingVertical: 16 },
+});

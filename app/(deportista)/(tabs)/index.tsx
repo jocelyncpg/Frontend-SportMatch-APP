@@ -15,7 +15,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AthleteCard from '../../../components/AthleteCard';
 import SuggestionFilters from '../../../components/SuggestionFilters';
 import BrandLogo from '../../../components/BrandLogo';
-import TrainingRow from '../../../components/TrainingRow';
+import ActivityCard from '../../../components/ActivityCard';
+import { useActivities } from '../../../hooks/useActivities';
 import { Usuario, getSession } from '../../../services/auth';
 import { cargarSugerencias, sugerencias, useMatches } from '../../../services/matchStore';
 import { Colors, useAppTheme } from '../../../theme/ThemeContext';
@@ -25,6 +26,7 @@ export default function HomeScreen() {
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const insets = useSafeAreaInsets();
 
+  const activities = useActivities(3);
   const estado = useMatches();
   const recomendados = useMemo(() => sugerencias(estado).slice(0, 5), [estado]);
 
@@ -161,10 +163,10 @@ export default function HomeScreen() {
         </Text>
       )}
 
-      {/* Sección: Entrenamientos cerca de ti */}
+      {/* Sección: Próximas actividades */}
       <View style={[styles.sectionRow, { marginTop: 24 }]}>
         <Text style={styles.sectionTitle}>
-          Entrenamientos cerca de ti
+          Próximas actividades
         </Text>
 
         <TouchableOpacity onPress={() => router.push('/(deportista)/activities')}>
@@ -174,29 +176,15 @@ export default function HomeScreen() {
         </TouchableOpacity>
       </View>
 
-      <TrainingRow
-        icon="🏃"
-        title="Running en Parque Bicentenario"
-        time="Hoy, 19:30"
-        distance="1.2 km"
-        colorBg="#1B3324"
-      />
-
-      <TrainingRow
-        icon="⚽"
-        title="Fútbol 7 — Maipú"
-        time="Mañana, 20:00"
-        distance="2.8 km"
-        colorBg="#1B2144"
-      />
-
-      <TrainingRow
-        icon="🧘"
-        title="Yoga al aire libre"
-        time="Sábado, 09:00"
-        distance="3.4 km"
-        colorBg="#2B1B44"
-      />
+      {activities.items.map((activity) => <ActivityCard key={activity.id} activity={activity} />)}
+      {activities.error ? <TouchableOpacity onPress={() => activities.sessionExpired ? router.replace('/(auth)/login') : void activities.refresh()}>
+        <Text style={styles.emptyText}>{activities.error}</Text>
+        <Text style={styles.sectionLink}>{activities.sessionExpired ? 'Iniciar sesión' : 'Reintentar'}</Text>
+      </TouchableOpacity> : activities.loading ? <Text style={styles.emptyText}>Cargando actividades…</Text> : activities.items.length === 0 ?
+        <Text style={styles.emptyText}>Aún no hay actividades próximas.</Text> : null}
+      <TouchableOpacity onPress={() => router.push('/(deportista)/create-activity')} style={{ marginTop: 12 }}>
+        <Text style={styles.sectionLink}>+ Crear actividad</Text>
+      </TouchableOpacity>
     </ScrollView>
   );
 }
