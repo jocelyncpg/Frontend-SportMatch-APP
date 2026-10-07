@@ -3,9 +3,21 @@ import * as ImagePicker from 'expo-image-picker';
 import { router } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 import { Alert, Image, Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import ComunaPicker from '../../../components/ComunaPicker';
 import { ApiError } from '../../../services/api';
 import { DeporteConNivel, Usuario, getSession, logout, updateFotoPerfil, updatePerfilExtra, updateUbicacion } from '../../../services/auth';
+import {
+  DIAS,
+  Disponibilidad,
+  FRANJAS,
+  OBJETIVOS_DISPONIBLES,
+  resumenDisponibilidad,
+  tieneFranja,
+  toggleFranja,
+} from '../../../services/disponibilidad';
 import { GEOAPIFY_API_KEY, solicitarUbicacion } from '../../../services/location';
+import { useMatches } from '../../../services/matchStore';
+import { formatearPromedio, promedioEstrellas } from '../../../services/reputacion';
 import { Colors, Mode, useAppTheme } from '../../../theme/ThemeContext';
 
 const DEPORTES_DISPONIBLES = ['Running', 'Fútbol', 'Ciclismo', 'Yoga', 'Tenis', 'Natación', 'Trekking'];
@@ -34,7 +46,7 @@ export default function ProfileScreen() {
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
   const [usuario, setUsuario] = useState<Usuario | null>(null);
-  const [comunaManual, setComunaManual] = useState('');
+  const [pickerVisible, setPickerVisible] = useState(false);
   const [pidiendoUbicacion, setPidiendoUbicacion] = useState(false);
   const [permisoNegado, setPermisoNegado] = useState(false);
   const [mapaError, setMapaError] = useState(false);
@@ -44,6 +56,17 @@ export default function ProfileScreen() {
   const [modalDeportesVisible, setModalDeportesVisible] = useState(false);
   const [deportesTemp, setDeportesTemp] = useState<DeporteConNivel[]>([]);
   const [nuevoDeporteTexto, setNuevoDeporteTexto] = useState('');
+  const [modalDispVisible, setModalDispVisible] = useState(false);
+  const [dispTemp, setDispTemp] = useState<Disponibilidad>({});
+  const [modalObjVisible, setModalObjVisible] = useState(false);
+  const [objTemp, setObjTemp] = useState<string[]>([]);
+
+  // Reputación: Conexiones = tus matches confirmados; Valoración = promedio de lo que recibes.
+  const { confirmados, calificacionesRecibidas } = useMatches();
+  const conexiones = confirmados.length;
+  const promedio = promedioEstrellas(calificacionesRecibidas);
+  const valoracion = formatearPromedio(promedio);
+  const hayEjemplos = calificacionesRecibidas.some((c) => c.simulada);
 
   useEffect(() => {
     getSession().then(setUsuario);
@@ -122,15 +145,19 @@ export default function ProfileScreen() {
     }
   }
 
-  async function handleGuardarComunaManual() {
-    if (!usuario || !comunaManual.trim()) return;
+  /** La comuna elegida de la lista pasa a ser la ubicación base; se descarta el punto GPS anterior. */
+  async function handleElegirComuna(comuna: string) {
+    if (!usuario) return;
     try {
-      await updateUbicacion(usuario.id, { comuna: comunaManual.trim() });
+      await updateUbicacion(usuario.id, { comuna, latitud: undefined, longitud: undefined });
     } catch (e) {
       avisarError('No se pudo guardar la comuna', e);
       return;
     }
-    setUsuario({ ...usuario, comuna: comunaManual.trim() });
+    setUsuario({ ...usuario, comuna, latitud: undefined, longitud: undefined });
+    setPermisoNegado(false);
+    setMapaError(false);
+    setPickerVisible(false);
   }
 
   function abrirEditorBio() {
@@ -151,7 +178,6 @@ export default function ProfileScreen() {
   }
 
   function abrirEditorDeportes() {
-    // Ahora todo (predefinidos y personalizados) vive junto en una sola lista con nivel.
     setDeportesTemp(usuario?.deportes ?? []);
     setNuevoDeporteTexto('');
     setModalDeportesVisible(true);
@@ -161,7 +187,7 @@ export default function ProfileScreen() {
     setDeportesTemp((prev) => {
       const yaEsta = prev.find((d) => d.nombre === deporte);
       if (yaEsta) return prev.filter((d) => d.nombre !== deporte);
-      return [...prev, { nombre: deporte, nivel: 3 }]; // Intermedio por defecto al agregar
+      return [...prev, { nombre: deporte, nivel: 3 }];
     });
   }
 
@@ -197,8 +223,47 @@ export default function ProfileScreen() {
     setModalDeportesVisible(false);
   }
 
+  function abrirEditorDisponibilidad() {
+    setDispTemp(usuario?.disponibilidad ?? {});
+    setModalDispVisible(true);
+  }
+
+  async function guardarDisponibilidad() {
+    if (!usuario) return;
+    try {
+      await updatePerfilExtra(usuario.id, { disponibilidad: dispTemp });
+    } catch (e) {
+      avisarError('No se pudo guardar tu disponibilidad', e);
+      return;
+    }
+    setUsuario({ ...usuario, disponibilidad: dispTemp });
+    setModalDispVisible(false);
+  }
+
+  function abrirEditorObjetivos() {
+    setObjTemp(usuario?.objetivos ?? []);
+    setModalObjVisible(true);
+  }
+
+  function toggleObjetivo(objetivo: string) {
+    setObjTemp((prev) => (prev.includes(objetivo) ? prev.filter((o) => o !== objetivo) : [...prev, objetivo]));
+  }
+
+  async function guardarObjetivos() {
+    if (!usuario) return;
+    try {
+      await updatePerfilExtra(usuario.id, { objetivos: objTemp });
+    } catch (e) {
+      avisarError('No se pudieron guardar tus objetivos', e);
+      return;
+    }
+    setUsuario({ ...usuario, objetivos: objTemp });
+    setModalObjVisible(false);
+  }
+
   const nombreCompleto = usuario ? `${usuario.nombre} ${usuario.apellidoPaterno}` : 'Cargando...';
   const iniciales = usuario ? `${usuario.nombre[0]}${usuario.apellidoPaterno[0]}` : '..';
+  const resumenDisp = resumenDisponibilidad(usuario?.disponibilidad);
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
@@ -225,15 +290,19 @@ export default function ProfileScreen() {
           <Text style={styles.statLabel}>Entrenamientos</Text>
         </View>
         <View style={styles.statBox}>
-          <Text style={styles.statNumber}>0</Text>
+          <Text style={styles.statNumber}>{conexiones}</Text>
           <Text style={styles.statLabel}>Conexiones</Text>
         </View>
         <View style={styles.statBox}>
-          <Text style={styles.statNumber}>—</Text>
+          <View style={styles.statValueRow}>
+            {promedio !== null ? <Ionicons name="star" size={13} color="#FACC15" /> : null}
+            <Text style={styles.statNumber}>{valoracion}</Text>
+          </View>
           <Text style={styles.statLabel}>Valoración</Text>
         </View>
       </View>
 
+      {/* Ubicación */}
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Ubicación</Text>
         {usuario?.comuna ? (
@@ -241,9 +310,14 @@ export default function ProfileScreen() {
             <View style={styles.locationRow}>
               <Ionicons name="location" size={14} color={colors.success} />
               <Text style={styles.locationText}>{usuario.comuna}</Text>
-              <TouchableOpacity onPress={handleActivarUbicacion} disabled={pidiendoUbicacion}>
-                <Text style={styles.updateLink}>{pidiendoUbicacion ? 'Actualizando...' : 'Actualizar'}</Text>
-              </TouchableOpacity>
+              <View style={styles.locationLinks}>
+                <TouchableOpacity onPress={() => setPickerVisible(true)}>
+                  <Text style={styles.linkInline}>Cambiar comuna</Text>
+                </TouchableOpacity>
+                <TouchableOpacity onPress={handleActivarUbicacion} disabled={pidiendoUbicacion}>
+                  <Text style={styles.linkInline}>{pidiendoUbicacion ? 'Actualizando...' : 'Usar GPS'}</Text>
+                </TouchableOpacity>
+              </View>
             </View>
 
             {usuario.latitud && usuario.longitud && !mapaError && (
@@ -259,29 +333,24 @@ export default function ProfileScreen() {
           </View>
         ) : (
           <>
-            <TouchableOpacity style={styles.locationButton} onPress={handleActivarUbicacion} disabled={pidiendoUbicacion}>
-              <Ionicons name="navigate-outline" size={15} color={colors.accent} />
-              <Text style={styles.locationButtonText}>
-                {pidiendoUbicacion ? 'Detectando...' : 'Activar mi ubicación'}
-              </Text>
-            </TouchableOpacity>
+            <View style={styles.locationButtonsRow}>
+              <TouchableOpacity style={styles.locationButton} onPress={handleActivarUbicacion} disabled={pidiendoUbicacion}>
+                <Ionicons name="navigate-outline" size={15} color={colors.accent} />
+                <Text style={styles.locationButtonText}>
+                  {pidiendoUbicacion ? 'Detectando...' : 'Activar mi ubicación'}
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity style={styles.locationButton} onPress={() => setPickerVisible(true)}>
+                <Ionicons name="list-outline" size={15} color={colors.accent} />
+                <Text style={styles.locationButtonText}>Elegir mi comuna</Text>
+              </TouchableOpacity>
+            </View>
 
             {permisoNegado && (
-              <View style={styles.manualLocation}>
-                <Text style={styles.sectionText}>No diste permiso de ubicación. Escribe tu comuna:</Text>
-                <View style={styles.inputBoxSmall}>
-                  <TextInput
-                    placeholder="Ej: Providencia"
-                    placeholderTextColor={colors.textMuted}
-                    style={styles.input}
-                    value={comunaManual}
-                    onChangeText={setComunaManual}
-                  />
-                </View>
-                <TouchableOpacity style={styles.saveComunaButton} onPress={handleGuardarComunaManual}>
-                  <Text style={styles.loginButtonText}>Guardar comuna</Text>
-                </TouchableOpacity>
-              </View>
+              <Text style={[styles.sectionText, { marginTop: 10 }]}>
+                No diste permiso de ubicación. Puedes elegir tu comuna de la lista para seguir usando la búsqueda por cercanía.
+              </Text>
             )}
           </>
         )}
@@ -319,6 +388,83 @@ export default function ProfileScreen() {
         )}
       </View>
 
+      {/* Disponibilidad */}
+      <View style={styles.section}>
+        <View style={styles.sectionHeaderRow}>
+          <Text style={styles.sectionTitle}>Disponibilidad</Text>
+          <TouchableOpacity onPress={abrirEditorDisponibilidad}>
+            <Text style={styles.updateLink}>Editar</Text>
+          </TouchableOpacity>
+        </View>
+        {resumenDisp.length > 0 ? (
+          <View style={styles.chipsWrap}>
+            {resumenDisp.map((r) => (
+              <View key={r.dia} style={styles.deporteChip}>
+                <Text style={styles.deporteChipText}>{r.dia} · {r.texto}</Text>
+              </View>
+            ))}
+          </View>
+        ) : (
+          <Text style={styles.sectionText}>Aún no has indicado cuándo puedes entrenar.</Text>
+        )}
+      </View>
+
+      {/* Objetivos */}
+      <View style={styles.section}>
+        <View style={styles.sectionHeaderRow}>
+          <Text style={styles.sectionTitle}>Objetivos</Text>
+          <TouchableOpacity onPress={abrirEditorObjetivos}>
+            <Text style={styles.updateLink}>Editar</Text>
+          </TouchableOpacity>
+        </View>
+        {usuario?.objetivos && usuario.objetivos.length > 0 ? (
+          <View style={styles.chipsWrap}>
+            {usuario.objetivos.map((o) => (
+              <View key={o} style={styles.deporteChip}>
+                <Text style={styles.deporteChipText}>{o}</Text>
+              </View>
+            ))}
+          </View>
+        ) : (
+          <Text style={styles.sectionText}>Todavía no has elegido tus objetivos deportivos.</Text>
+        )}
+      </View>
+
+      {/* Calificaciones recibidas */}
+      <View style={styles.section}>
+        <View style={styles.sectionHeaderRow}>
+          <Text style={styles.sectionTitle}>Calificaciones recibidas</Text>
+          {hayEjemplos ? (
+            <View style={styles.ejemploTag}>
+              <Text style={styles.ejemploTagText}>Ejemplo</Text>
+            </View>
+          ) : null}
+        </View>
+        {calificacionesRecibidas.length > 0 ? (
+          calificacionesRecibidas.map((r) => (
+            <View key={r.id} style={styles.resenaCard}>
+              <View style={styles.resenaTop}>
+                <Text style={styles.resenaNombre}>{r.de}</Text>
+                <View style={styles.estrellasRow}>
+                  {[1, 2, 3, 4, 5].map((n) => (
+                    <Ionicons
+                      key={n}
+                      name={n <= r.estrellas ? 'star' : 'star-outline'}
+                      size={12}
+                      color={n <= r.estrellas ? '#FACC15' : colors.textMuted}
+                    />
+                  ))}
+                </View>
+              </View>
+              {r.comentario ? <Text style={styles.resenaTexto}>{r.comentario}</Text> : null}
+              <Text style={styles.resenaCuando}>{r.cuando}</Text>
+            </View>
+          ))
+        ) : (
+          <Text style={styles.sectionText}>Todavía no has recibido calificaciones.</Text>
+        )}
+      </View>
+
       {/* Apariencia */}
       <View style={styles.section}>
         <Text style={[styles.sectionTitle, { marginBottom: 10 }]}>Apariencia</Text>
@@ -331,7 +477,7 @@ export default function ProfileScreen() {
                 style={[styles.themeOption, activo && styles.themeOptionActive]}
                 onPress={() => setMode(op.key)}
               >
-                <Ionicons name={op.icon} size={18} color={activo ? '#fff' : colors.textMuted} />
+                <Ionicons name={op.icon} size={14} color={activo ? '#fff' : colors.textMuted} />
                 <Text style={[styles.themeOptionText, activo && styles.themeOptionTextActive]}>{op.label}</Text>
               </TouchableOpacity>
             );
@@ -344,8 +490,16 @@ export default function ProfileScreen() {
         <Text style={styles.logoutText}>Cerrar sesión</Text>
       </TouchableOpacity>
 
+      {/* Selector de comuna */}
+      <ComunaPicker
+        visible={pickerVisible}
+        seleccionada={usuario?.comuna}
+        onElegir={handleElegirComuna}
+        onCerrar={() => setPickerVisible(false)}
+      />
+
       {/* Modal: editar biografía */}
-      <Modal visible={modalBioVisible} transparent animationType="fade">
+      <Modal visible={modalBioVisible} transparent animationType="fade" onRequestClose={() => setModalBioVisible(false)}>
         <View style={styles.modalOverlay}>
           <View style={styles.modalBox}>
             <Text style={styles.modalTitle}>Sobre mí</Text>
@@ -373,77 +527,152 @@ export default function ProfileScreen() {
       </Modal>
 
       {/* Modal: editar deportes */}
-      <Modal visible={modalDeportesVisible} transparent animationType="fade">
+      <Modal visible={modalDeportesVisible} transparent animationType="fade" onRequestClose={() => setModalDeportesVisible(false)}>
         <View style={styles.modalOverlay}>
           <View style={styles.modalBox}>
             <Text style={styles.modalTitle}>Mis deportes</Text>
 
-            <Text style={styles.otroLabel}>Deportes sugeridos</Text>
-            <View style={styles.chipsWrap}>
-              {DEPORTES_DISPONIBLES.map((d) => {
-                const seleccionado = deportesTemp.some((x) => x.nombre === d);
-                return (
-                  <TouchableOpacity
-                    key={d}
-                    style={[styles.selectChip, seleccionado && styles.selectChipActive]}
-                    onPress={() => toggleDeporte(d)}
-                  >
-                    <Text style={[styles.selectChipText, seleccionado && styles.selectChipTextActive]}>{d}</Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-
-            <Text style={styles.otroLabel}>¿Practicas otro deporte?</Text>
-            <View style={styles.agregarRow}>
-              <View style={[styles.inputBoxSmall, { flex: 1, marginTop: 0, marginBottom: 0 }]}>
-                <TextInput
-                  placeholder="Ej: Escalada, Box, Pádel..."
-                  placeholderTextColor={colors.textMuted}
-                  style={styles.input}
-                  value={nuevoDeporteTexto}
-                  onChangeText={setNuevoDeporteTexto}
-                  onSubmitEditing={agregarDeportePersonalizado}
-                  returnKeyType="done"
-                />
+            <ScrollView style={styles.modalScroll} keyboardShouldPersistTaps="handled">
+              <Text style={styles.otroLabel}>Deportes sugeridos</Text>
+              <View style={styles.chipsWrap}>
+                {DEPORTES_DISPONIBLES.map((d) => {
+                  const seleccionado = deportesTemp.some((x) => x.nombre === d);
+                  return (
+                    <TouchableOpacity
+                      key={d}
+                      style={[styles.selectChip, seleccionado && styles.selectChipActive]}
+                      onPress={() => toggleDeporte(d)}
+                    >
+                      <Text style={[styles.selectChipText, seleccionado && styles.selectChipTextActive]}>{d}</Text>
+                    </TouchableOpacity>
+                  );
+                })}
               </View>
-              <TouchableOpacity style={styles.agregarBoton} onPress={agregarDeportePersonalizado}>
-                <Ionicons name="add" size={20} color="#fff" />
-              </TouchableOpacity>
-            </View>
 
-            {deportesTemp.length > 0 && (
-              <View style={styles.nivelesBox}>
-                <Text style={styles.otroLabel}>Nivel por deporte</Text>
-                {deportesTemp.map((d) => (
-                  <View key={d.nombre} style={styles.nivelRow}>
-                    <View style={styles.nivelNombreRow}>
-                      <Text style={styles.nivelNombre}>{d.nombre}</Text>
-                      <TouchableOpacity onPress={() => quitarDeporte(d.nombre)}>
-                        <Ionicons name="close-circle" size={16} color={colors.textMuted} />
-                      </TouchableOpacity>
-                    </View>
-                    <View style={styles.nivelBotones}>
-                      {NIVELES.map((n) => (
-                        <TouchableOpacity
-                          key={n}
-                          style={[styles.nivelBoton, d.nivel === n && styles.nivelBotonActivo]}
-                          onPress={() => cambiarNivel(d.nombre, n)}
-                        >
-                          <Text style={[styles.nivelBotonTexto, d.nivel === n && styles.nivelBotonTextoActivo]}>{n}</Text>
+              <Text style={styles.otroLabel}>¿Practicas otro deporte?</Text>
+              <View style={styles.agregarRow}>
+                <View style={[styles.inputBoxSmall, { flex: 1, marginTop: 0, marginBottom: 0 }]}>
+                  <TextInput
+                    placeholder="Ej: Escalada, Box, Pádel..."
+                    placeholderTextColor={colors.textMuted}
+                    style={styles.input}
+                    value={nuevoDeporteTexto}
+                    onChangeText={setNuevoDeporteTexto}
+                    onSubmitEditing={agregarDeportePersonalizado}
+                    returnKeyType="done"
+                  />
+                </View>
+                <TouchableOpacity style={styles.agregarBoton} onPress={agregarDeportePersonalizado}>
+                  <Ionicons name="add" size={20} color="#fff" />
+                </TouchableOpacity>
+              </View>
+
+              {deportesTemp.length > 0 && (
+                <View style={styles.nivelesBox}>
+                  <Text style={styles.otroLabel}>Nivel por deporte</Text>
+                  {deportesTemp.map((d) => (
+                    <View key={d.nombre} style={styles.nivelRow}>
+                      <View style={styles.nivelNombreRow}>
+                        <Text style={styles.nivelNombre}>{d.nombre}</Text>
+                        <TouchableOpacity onPress={() => quitarDeporte(d.nombre)}>
+                          <Ionicons name="close-circle" size={16} color={colors.textMuted} />
                         </TouchableOpacity>
-                      ))}
+                      </View>
+                      <View style={styles.nivelBotones}>
+                        {NIVELES.map((n) => (
+                          <TouchableOpacity
+                            key={n}
+                            style={[styles.nivelBoton, d.nivel === n && styles.nivelBotonActivo]}
+                            onPress={() => cambiarNivel(d.nombre, n)}
+                          >
+                            <Text style={[styles.nivelBotonTexto, d.nivel === n && styles.nivelBotonTextoActivo]}>{n}</Text>
+                          </TouchableOpacity>
+                        ))}
+                      </View>
                     </View>
-                  </View>
-                ))}
-              </View>
-            )}
+                  ))}
+                </View>
+              )}
+            </ScrollView>
 
             <View style={styles.modalActions}>
               <TouchableOpacity style={styles.modalCancel} onPress={() => setModalDeportesVisible(false)}>
                 <Text style={styles.modalCancelText}>Cancelar</Text>
               </TouchableOpacity>
               <TouchableOpacity style={styles.modalSave} onPress={guardarDeportes}>
+                <Text style={styles.loginButtonText}>Guardar</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Modal: editar disponibilidad */}
+      <Modal visible={modalDispVisible} transparent animationType="fade" onRequestClose={() => setModalDispVisible(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalBox}>
+            <Text style={styles.modalTitle}>¿Cuándo puedes entrenar?</Text>
+            <Text style={styles.modalHint}>Marca las franjas en las que sueles estar disponible.</Text>
+
+            <ScrollView style={styles.modalScroll}>
+              {DIAS.map((dia) => (
+                <View key={dia.key} style={styles.diaRow}>
+                  <Text style={styles.diaLabel}>{dia.corto}</Text>
+                  {FRANJAS.map((f) => {
+                    const activa = tieneFranja(dispTemp, dia.key, f.key);
+                    return (
+                      <TouchableOpacity
+                        key={f.key}
+                        style={[styles.franjaBoton, activa && styles.franjaBotonActivo]}
+                        onPress={() => setDispTemp((prev) => toggleFranja(prev, dia.key, f.key))}
+                      >
+                        <Text style={[styles.franjaTexto, activa && styles.franjaTextoActivo]}>{f.label}</Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              ))}
+            </ScrollView>
+
+            <View style={styles.modalActions}>
+              <TouchableOpacity style={styles.modalCancel} onPress={() => setModalDispVisible(false)}>
+                <Text style={styles.modalCancelText}>Cancelar</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.modalSave} onPress={guardarDisponibilidad}>
+                <Text style={styles.loginButtonText}>Guardar</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Modal: editar objetivos */}
+      <Modal visible={modalObjVisible} transparent animationType="fade" onRequestClose={() => setModalObjVisible(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalBox}>
+            <Text style={styles.modalTitle}>Mis objetivos</Text>
+            <Text style={styles.modalHint}>Elige uno o varios. Ayudan a sugerirte compañeros afines.</Text>
+
+            <View style={styles.chipsWrap}>
+              {OBJETIVOS_DISPONIBLES.map((o) => {
+                const seleccionado = objTemp.includes(o);
+                return (
+                  <TouchableOpacity
+                    key={o}
+                    style={[styles.selectChip, seleccionado && styles.selectChipActive]}
+                    onPress={() => toggleObjetivo(o)}
+                  >
+                    <Text style={[styles.selectChipText, seleccionado && styles.selectChipTextActive]}>{o}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+
+            <View style={styles.modalActions}>
+              <TouchableOpacity style={styles.modalCancel} onPress={() => setModalObjVisible(false)}>
+                <Text style={styles.modalCancelText}>Cancelar</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.modalSave} onPress={guardarObjetivos}>
                 <Text style={styles.loginButtonText}>Guardar</Text>
               </TouchableOpacity>
             </View>
@@ -480,6 +709,7 @@ const makeStyles = (c: Colors) =>
       borderWidth: 1, borderColor: c.border, borderRadius: 14, paddingVertical: 14, marginBottom: 20,
     },
     statBox: { flex: 1, alignItems: 'center' },
+    statValueRow: { flexDirection: 'row', alignItems: 'center', gap: 3 },
     statNumber: { color: c.text, fontSize: 17, fontWeight: '700' },
     statLabel: { color: c.textMuted, fontSize: 9.5, marginTop: 2 },
     section: { width: '100%', marginBottom: 16 },
@@ -487,22 +717,23 @@ const makeStyles = (c: Colors) =>
     sectionTitle: { color: c.text, fontSize: 13, fontWeight: '700' },
     sectionText: { color: c.textMuted, fontSize: 12, lineHeight: 17 },
     locationRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-    locationText: { color: c.text, fontSize: 12.5, fontWeight: '600' },
+    locationText: { color: c.text, fontSize: 12.5, fontWeight: '600', flexShrink: 1 },
+    locationLinks: { marginLeft: 'auto', flexDirection: 'row', gap: 12 },
+    linkInline: { color: c.accent, fontSize: 10.5, fontWeight: '700' },
     updateLink: { color: c.accent, fontSize: 10.5, fontWeight: '700', marginLeft: 'auto' },
     mapImage: { width: '100%', height: 140, borderRadius: 12, marginTop: 10, backgroundColor: c.card },
+    locationButtonsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
     locationButton: {
       flexDirection: 'row', alignItems: 'center', gap: 8,
       backgroundColor: c.card, borderWidth: 1, borderColor: c.border,
-      borderRadius: 12, paddingVertical: 10, paddingHorizontal: 14, alignSelf: 'flex-start',
+      borderRadius: 12, paddingVertical: 10, paddingHorizontal: 14,
     },
     locationButtonText: { color: c.accent, fontSize: 12, fontWeight: '700' },
-    manualLocation: { marginTop: 12, width: '100%' },
     inputBoxSmall: {
       backgroundColor: c.inputBg, borderWidth: 1, borderColor: c.border,
       borderRadius: 12, paddingHorizontal: 14, paddingVertical: 10, marginTop: 8, marginBottom: 10,
     },
     input: { color: c.text, fontSize: 13 },
-    saveComunaButton: { backgroundColor: c.primary, borderRadius: 12, paddingVertical: 10, alignItems: 'center' },
     loginButtonText: { color: '#fff', fontSize: 13, fontWeight: '700' },
     logoutButton: {
       flexDirection: 'row', alignItems: 'center', gap: 8,
@@ -515,28 +746,42 @@ const makeStyles = (c: Colors) =>
     deporteChip: { backgroundColor: c.chip, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 6 },
     deporteChipText: { color: c.accent, fontSize: 11.5, fontWeight: '700' },
 
-    themeRow: { flexDirection: 'row', gap: 8 },
+    ejemploTag: { backgroundColor: c.chip, borderRadius: 8, paddingHorizontal: 8, paddingVertical: 2 },
+    ejemploTagText: { color: c.textMuted, fontSize: 9.5, fontWeight: '700' },
+    resenaCard: {
+      backgroundColor: c.card, borderWidth: 1, borderColor: c.border,
+      borderRadius: 12, padding: 12, marginBottom: 8,
+    },
+    resenaTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 },
+    resenaNombre: { color: c.text, fontSize: 12.5, fontWeight: '700' },
+    estrellasRow: { flexDirection: 'row', gap: 1 },
+    resenaTexto: { color: c.textMuted, fontSize: 12, lineHeight: 17 },
+    resenaCuando: { color: c.textMuted, fontSize: 10, marginTop: 6 },
+
+    themeRow: { flexDirection: 'row', gap: 6, alignSelf: 'flex-start' },
     themeOption: {
-      flex: 1, alignItems: 'center', gap: 4, paddingVertical: 10,
-      backgroundColor: c.card, borderWidth: 1, borderColor: c.border, borderRadius: 12,
+      flexDirection: 'row', alignItems: 'center', gap: 5, paddingVertical: 6, paddingHorizontal: 12,
+      backgroundColor: c.card, borderWidth: 1, borderColor: c.border, borderRadius: 18,
     },
     themeOptionActive: { backgroundColor: c.primary, borderColor: c.primary },
-    themeOptionText: { color: c.textMuted, fontSize: 11.5, fontWeight: '600' },
+    themeOptionText: { color: c.textMuted, fontSize: 10.5, fontWeight: '600' },
     themeOptionTextActive: { color: '#fff' },
 
     modalOverlay: { flex: 1, backgroundColor: c.overlay, justifyContent: 'center', padding: 24 },
     modalBox: { backgroundColor: c.card, borderRadius: 18, padding: 20, borderWidth: 1, borderColor: c.border },
-    modalTitle: { color: c.text, fontSize: 16, fontWeight: '700', marginBottom: 14 },
+    modalTitle: { color: c.text, fontSize: 16, fontWeight: '700', marginBottom: 6 },
+    modalHint: { color: c.textMuted, fontSize: 11.5, marginBottom: 14, lineHeight: 16 },
+    modalScroll: { maxHeight: 360, marginBottom: 6 },
     bioInput: {
       backgroundColor: c.bg, borderWidth: 1, borderColor: c.border, borderRadius: 12,
       padding: 12, color: c.text, fontSize: 13, height: 90, textAlignVertical: 'top',
     },
     charCount: { color: c.textMuted, fontSize: 10, textAlign: 'right', marginTop: 4, marginBottom: 10 },
-    selectChip: { borderWidth: 1, borderColor: c.border, borderRadius: 20, paddingHorizontal: 14, paddingVertical: 8, marginBottom: 12 },
+    selectChip: { borderWidth: 1, borderColor: c.border, borderRadius: 20, paddingHorizontal: 14, paddingVertical: 8, marginBottom: 4 },
     selectChipActive: { backgroundColor: c.primary, borderColor: c.primary },
     selectChipText: { color: c.textMuted, fontSize: 12, fontWeight: '600' },
     selectChipTextActive: { color: '#fff' },
-    otroLabel: { color: c.textMuted, fontSize: 11, fontWeight: '600', marginTop: 4, marginBottom: 6 },
+    otroLabel: { color: c.textMuted, fontSize: 11, fontWeight: '600', marginTop: 8, marginBottom: 6 },
 
     agregarRow: { flexDirection: 'row', gap: 8, alignItems: 'center', marginBottom: 14 },
     agregarBoton: {
@@ -556,6 +801,16 @@ const makeStyles = (c: Colors) =>
     nivelBotonActivo: { backgroundColor: c.primary, borderColor: c.primary },
     nivelBotonTexto: { color: c.textMuted, fontSize: 12, fontWeight: '700' },
     nivelBotonTextoActivo: { color: '#fff' },
+
+    diaRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 8 },
+    diaLabel: { width: 32, color: c.text, fontSize: 12, fontWeight: '700' },
+    franjaBoton: {
+      flex: 1, alignItems: 'center', paddingVertical: 9, borderRadius: 10,
+      borderWidth: 1, borderColor: c.border, backgroundColor: c.inputBg,
+    },
+    franjaBotonActivo: { backgroundColor: c.primary, borderColor: c.primary },
+    franjaTexto: { color: c.textMuted, fontSize: 10.5, fontWeight: '600' },
+    franjaTextoActivo: { color: '#fff' },
 
     modalActions: { flexDirection: 'row', gap: 10, marginTop: 8 },
     modalCancel: { flex: 1, paddingVertical: 12, borderRadius: 12, borderWidth: 1, borderColor: c.border, alignItems: 'center' },

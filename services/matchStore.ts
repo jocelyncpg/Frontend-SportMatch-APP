@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from 'react';
+import type { CalificacionRecibida } from './reputacion';
 
 export type Persona = {
   id: string;
@@ -16,6 +17,8 @@ export type Persona = {
   leGustas?: boolean;
 };
 
+export type Calificacion = { estrellas: number; comentario?: string };
+
 type Estado = {
   catalogo: Persona[];
   cargando: boolean;
@@ -28,6 +31,10 @@ type Estado = {
   descartados: string[];
   /** Radio de búsqueda en km; null = sin filtro (ver a todos). */
   radioKm: number | null;
+  /** Calificaciones que TÚ diste a tus matches, por id de persona. */
+  calificaciones: Record<string, Calificacion>;
+  /** Calificaciones que TÚ recibiste de otros deportistas. */
+  calificacionesRecibidas: CalificacionRecibida[];
 };
 
 // Catálogo de prueba completo (sin backend). Se reemplaza por cargarSugerencias()
@@ -47,6 +54,14 @@ const DEMO_MATCHES: Persona[] = [
   { id: 'daniela', name: 'Daniela S.', age: 24, sport: 'Yoga', level: 'Intermedio', distance: '2.9 km', distanceKm: 2.9, compatibility: 90, colorFrom: '#22C55E', bio: 'Yoga y meditación, busco un grupo constante para practicar.' },
 ];
 
+// DATOS DE EJEMPLO: con un solo usuario de prueba no existen calificaciones reales recibidas.
+// Vienen de Camila y Diego, que son los matches confirmados desde el inicio de la demo.
+// Se marcan `simulada: true` para que la pantalla muestre la etiqueta "Ejemplo".
+const CALIFICACIONES_RECIBIDAS_DEMO: CalificacionRecibida[] = [
+  { id: 'rec-camila', de: 'Camila R.', estrellas: 5, comentario: 'Excelente compañera de running, siempre puntual.', cuando: 'Hace 2 semanas', simulada: true },
+  { id: 'rec-diego', de: 'Diego A.', estrellas: 4, comentario: 'Buen ritmo y muy buena onda.', cuando: 'Hace 1 mes', simulada: true },
+];
+
 function estadoInicial(usuarioId: string | null = null): Estado {
   return {
     catalogo: CATALOGO,
@@ -59,6 +74,8 @@ function estadoInicial(usuarioId: string | null = null): Estado {
     enviadas: [],
     descartados: [],
     radioKm: null,
+    calificaciones: {},
+    calificacionesRecibidas: [...CALIFICACIONES_RECIBIDAS_DEMO],
   };
 }
 
@@ -93,10 +110,8 @@ export async function cargarSugerencias(): Promise<void> {
 
 /**
  * Define el radio de búsqueda en km (null = sin filtro, ver a todos).
- * Nota: el backend real todavía no entrega distancia en /users/suggestions
- * (ver comentario de Benjamín en matchStore.backend.ts). Mientras eso no
- * exista, las personas sin distanceKm nunca se excluyen por radio, para no
- * ocultar gente solo porque falta el dato.
+ * Las personas sin distanceKm nunca se excluyen por radio, para no ocultar
+ * gente solo porque falta el dato (el backend real aún no lo entrega).
  */
 export function setRadio(km: number | null) {
   estado = { ...estado, radioKm: km };
@@ -147,6 +162,23 @@ export function darLike(persona: Persona): 'match' | 'enviada' {
 export function descartar(id: string) {
   estado = { ...estado, descartados: [...estado.descartados, id] };
   emitir();
+}
+
+/** Califica (o actualiza la calificación) de un match confirmado. Una sola entrada por persona. */
+export function calificar(personaId: string, estrellas: number, comentario?: string) {
+  estado = {
+    ...estado,
+    calificaciones: {
+      ...estado.calificaciones,
+      [personaId]: { estrellas, comentario: comentario || undefined },
+    },
+  };
+  emitir();
+}
+
+/** Devuelve la calificación que ya diste a esa persona, si existe. */
+export function calificacionDe(e: Estado, personaId: string): Calificacion | undefined {
+  return e.calificaciones[personaId];
 }
 
 export function reiniciarDemo() {

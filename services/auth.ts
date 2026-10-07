@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import type { Disponibilidad } from './disponibilidad';
 
 const SESSION_KEY = 'sportmatch_session';
 const USERS_KEY = 'sportmatch_mock_users';
@@ -18,6 +19,8 @@ export type Usuario = {
   longitud?: number;
   biografia?: string;
   deportes?: DeporteConNivel[];
+  disponibilidad?: Disponibilidad;
+  objetivos?: string[];
 };
 
 type RegisterData = {
@@ -133,7 +136,12 @@ export async function updateUbicacion(
 
 export async function updatePerfilExtra(
   userId: string,
-  datos: { biografia?: string; deportes?: DeporteConNivel[] }
+  datos: {
+    biografia?: string;
+    deportes?: DeporteConNivel[];
+    disponibilidad?: Disponibilidad;
+    objetivos?: string[];
+  }
 ): Promise<void> {
   await actualizarSesionYUsuario(userId, datos);
 }
