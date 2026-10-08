@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
-import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Avatar from '../../../components/Avatar';
 import MatchModal from '../../../components/MatchModal';
@@ -12,6 +12,7 @@ import {
   aceptarSolicitud,
   calificacionDe,
   calificar,
+  cancelarSolicitud,
   darLike,
   descartar,
   rechazarSolicitud,
@@ -60,6 +61,7 @@ export default function PerfilDeportistaScreen() {
 
   const esMatch = estado.confirmados.some((p) => p.id === persona.id);
   const esSolicitud = estado.solicitudes.some((p) => p.id === persona.id);
+  const esEnviada = estado.enviadas.includes(persona.id);
   const miCalificacion = calificacionDe(estado, persona.id);
 
   function irAlChat(reemplazar: boolean) {
@@ -90,6 +92,21 @@ export default function PerfilDeportistaScreen() {
   function handleRechazar() {
     rechazarSolicitud(persona.id);
     router.back();
+  }
+
+  function handleCancelarSolicitud() {
+    const primerNombre = persona.name.split(' ')[0];
+    Alert.alert('Cancelar solicitud', `¿Quieres cancelar tu solicitud a ${primerNombre}?`, [
+      { text: 'No', style: 'cancel' },
+      {
+        text: 'Sí, cancelar',
+        style: 'destructive',
+        onPress: () => {
+          cancelarSolicitud(persona.id);
+          router.back();
+        },
+      },
+    ]);
   }
 
   function handleEnviarCalificacion(estrellas: number, comentario: string) {
@@ -169,6 +186,16 @@ export default function PerfilDeportistaScreen() {
             </TouchableOpacity>
             <TouchableOpacity style={styles.aceptarButton} onPress={handleAceptar}>
               <Ionicons name="checkmark" size={26} color="#fff" />
+            </TouchableOpacity>
+          </>
+        ) : esEnviada ? (
+          <>
+            <View style={styles.pillSecundario}>
+              <Ionicons name="paper-plane-outline" size={16} color={colors.accent} />
+              <Text style={styles.pillSecundarioTexto}>Solicitud enviada</Text>
+            </View>
+            <TouchableOpacity style={styles.pillCancelar} onPress={handleCancelarSolicitud}>
+              <Text style={styles.pillCancelarTexto}>Cancelar solicitud</Text>
             </TouchableOpacity>
           </>
         ) : (
@@ -262,4 +289,9 @@ const makeStyles = (c: Colors) =>
       backgroundColor: c.card, borderWidth: 1, borderColor: c.border, borderRadius: 14, paddingVertical: 14,
     },
     pillSecundarioTexto: { color: c.text, fontSize: 13, fontWeight: '700' },
+    pillCancelar: {
+      flex: 1, alignItems: 'center', justifyContent: 'center',
+      borderWidth: 1, borderColor: c.danger, borderRadius: 14, paddingVertical: 14,
+    },
+    pillCancelarTexto: { color: c.danger, fontSize: 13, fontWeight: '700' },
   });

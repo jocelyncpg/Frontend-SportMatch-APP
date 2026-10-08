@@ -6,7 +6,6 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
@@ -15,8 +14,16 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AthleteCard from '../../../components/AthleteCard';
 import BrandLogo from '../../../components/BrandLogo';
 import TrainingRow from '../../../components/TrainingRow';
+import {
+  FILTROS_ACTIVIDADES_VACIOS,
+  filtrarActividades,
+  formatearCuando,
+  useActividades,
+  visualDeporte,
+} from '../../../services/actividades';
 import { Usuario, getSession } from '../../../services/auth';
 import { cargarSugerencias, sugerencias, useMatches } from '../../../services/matchStore';
+import { useNotificaciones } from '../../../services/notificaciones';
 import { Colors, useAppTheme } from '../../../theme/ThemeContext';
 
 export default function HomeScreen() {
@@ -25,6 +32,9 @@ export default function HomeScreen() {
   const insets = useSafeAreaInsets();
 
   const estado = useMatches();
+  const { noLeidas } = useNotificaciones();
+  const actividades = useActividades();
+  const proximas = filtrarActividades(actividades, FILTROS_ACTIVIDADES_VACIOS).slice(0, 3);
   const recomendados = useMemo(() => sugerencias(estado).slice(0, 5), [estado]);
 
   const [usuario, setUsuario] = useState<Usuario | null>(null);
@@ -50,23 +60,39 @@ export default function HomeScreen() {
       <View style={styles.header}>
         <BrandLogo width={200} />
 
-        <TouchableOpacity
-          onPress={() =>
-            router.push('/(deportista)/(tabs)/profile')
-          }
-          style={styles.miniAvatar}
-        >
-          {usuario?.fotoPerfil ? (
-            <Image
-              source={{ uri: usuario.fotoPerfil }}
-              style={styles.miniAvatarImage}
-            />
-          ) : (
-            <Text style={styles.miniAvatarText}>
-              {iniciales}
-            </Text>
-          )}
-        </TouchableOpacity>
+        <View style={styles.headerAcciones}>
+          {/* Campanita: abre la bandeja y muestra cuántos avisos faltan por leer */}
+          <TouchableOpacity
+            onPress={() => router.push('/(deportista)/notificaciones')}
+            style={styles.bell}
+            accessibilityLabel="Notificaciones"
+          >
+            <Ionicons name="notifications-outline" size={17} color={colors.text} />
+            {noLeidas > 0 ? (
+              <View style={styles.bellBadge}>
+                <Text style={styles.bellBadgeText}>{noLeidas > 9 ? '9+' : noLeidas}</Text>
+              </View>
+            ) : null}
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            onPress={() =>
+              router.push('/(deportista)/(tabs)/profile')
+            }
+            style={styles.miniAvatar}
+          >
+            {usuario?.fotoPerfil ? (
+              <Image
+                source={{ uri: usuario.fotoPerfil }}
+                style={styles.miniAvatarImage}
+              />
+            ) : (
+              <Text style={styles.miniAvatarText}>
+                {iniciales}
+              </Text>
+            )}
+          </TouchableOpacity>
+        </View>
       </View>
 
       <Text style={styles.greeting}>
@@ -77,20 +103,28 @@ export default function HomeScreen() {
         ¿Qué deporte quieres practicar hoy?
       </Text>
 
-      {/* Buscador */}
-      <View style={styles.searchBox}>
+      {/* Buscador: abre la pantalla de búsqueda con filtros */}
+      <TouchableOpacity
+        style={styles.searchBox}
+        onPress={() => router.push('/(deportista)/buscar')}
+        activeOpacity={0.7}
+      >
         <Ionicons
           name="search"
           size={16}
           color={colors.textMuted}
         />
 
-        <TextInput
-          placeholder="Buscar deporte, personas o clubes..."
-          placeholderTextColor={colors.textMuted}
-          style={styles.searchInput}
+        <Text style={styles.searchPlaceholder} numberOfLines={1}>
+          Buscar deportistas por nombre, deporte o nivel...
+        </Text>
+
+        <Ionicons
+          name="options-outline"
+          size={16}
+          color={colors.accent}
         />
-      </View>
+      </TouchableOpacity>
 
       {/* Acceso al directorio de clubes */}
       <TouchableOpacity
@@ -168,29 +202,28 @@ export default function HomeScreen() {
         </TouchableOpacity>
       </View>
 
-      <TrainingRow
-        icon="🏃"
-        title="Running en Parque Bicentenario"
-        time="Hoy, 19:30"
-        distance="1.2 km"
-        colorBg="#1B3324"
-      />
-
-      <TrainingRow
-        icon="⚽"
-        title="Fútbol 7 — Maipú"
-        time="Mañana, 20:00"
-        distance="2.8 km"
-        colorBg="#1B2144"
-      />
-
-      <TrainingRow
-        icon="🧘"
-        title="Yoga al aire libre"
-        time="Sábado, 09:00"
-        distance="3.4 km"
-        colorBg="#2B1B44"
-      />
+      {proximas.length > 0 ? (
+        proximas.map((a) => {
+          const visual = visualDeporte(a.deporte);
+          return (
+            <TouchableOpacity
+              key={a.id}
+              activeOpacity={0.7}
+              onPress={() => router.push({ pathname: '/(deportista)/activity/[id]', params: { id: a.id } })}
+            >
+              <TrainingRow
+                icon={visual.icon}
+                title={a.titulo}
+                time={formatearCuando(a.fecha)}
+                distance={a.comuna}
+                colorBg={visual.colorBg}
+              />
+            </TouchableOpacity>
+          );
+        })
+      ) : (
+        <Text style={styles.emptyText}>No hay actividades abiertas por ahora.</Text>
+      )}
     </ScrollView>
   );
 }
@@ -213,6 +246,42 @@ const makeStyles = (c: Colors) =>
       alignItems: 'center',
       justifyContent: 'space-between',
       marginBottom: 20,
+    },
+
+    headerAcciones: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+    },
+
+    bell: {
+      width: 34,
+      height: 34,
+      borderRadius: 17,
+      backgroundColor: c.card,
+      borderWidth: 1,
+      borderColor: c.border,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+
+    bellBadge: {
+      position: 'absolute',
+      top: -4,
+      right: -4,
+      minWidth: 16,
+      height: 16,
+      borderRadius: 8,
+      paddingHorizontal: 4,
+      backgroundColor: '#DB2777',
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+
+    bellBadgeText: {
+      color: '#fff',
+      fontSize: 9,
+      fontWeight: '800',
     },
 
     miniAvatar: {
@@ -264,8 +333,8 @@ const makeStyles = (c: Colors) =>
       marginBottom: 14,
     },
 
-    searchInput: {
-      color: c.text,
+    searchPlaceholder: {
+      color: c.textMuted,
       fontSize: 13,
       flex: 1,
     },

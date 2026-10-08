@@ -1,5 +1,4 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import type { Disponibilidad } from './disponibilidad';
 
 const SESSION_KEY = 'sportmatch_session';
 const USERS_KEY = 'sportmatch_mock_users';
@@ -19,7 +18,8 @@ export type Usuario = {
   longitud?: number;
   biografia?: string;
   deportes?: DeporteConNivel[];
-  disponibilidad?: Disponibilidad;
+  /** Texto libre: "Lunes y miércoles en la tarde, sábados en la mañana". */
+  disponibilidad?: string;
   objetivos?: string[];
 };
 
@@ -139,7 +139,7 @@ export async function updatePerfilExtra(
   datos: {
     biografia?: string;
     deportes?: DeporteConNivel[];
-    disponibilidad?: Disponibilidad;
+    disponibilidad?: string;
     objetivos?: string[];
   }
 ): Promise<void> {

@@ -164,6 +164,20 @@ export function descartar(id: string) {
   emitir();
 }
 
+/** Personas a las que ya enviaste una solicitud y siguen sin responder. */
+export function solicitudesEnviadas(e: Estado): Persona[] {
+  return e.enviadas
+    .map((id) => e.catalogo.find((p) => p.id === id))
+    .filter((p): p is Persona => p !== undefined);
+}
+
+/** Cancela una solicitud enviada antes de que la respondan (HU-21). La persona vuelve a aparecer en Descubrir. */
+export function cancelarSolicitud(id: string) {
+  if (!estado.enviadas.includes(id)) return;
+  estado = { ...estado, enviadas: estado.enviadas.filter((x) => x !== id) };
+  emitir();
+}
+
 /** Califica (o actualiza la calificación) de un match confirmado. Una sola entrada por persona. */
 export function calificar(personaId: string, estrellas: number, comentario?: string) {
   estado = {
