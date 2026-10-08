@@ -3,21 +3,22 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 import { Alert, Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import ReportarModal from '../../../components/ReportarModal';
 import {
-    NOMBRES_NIVEL,
-    YO,
-    cancelarActividad,
-    cuposTomados,
-    estadoActividad,
-    formatearCuando,
-    postulantes,
-    postular,
-    puedePostular,
-    relacionConActividad,
-    responderPostulacion,
-    retirarse,
-    useActividades,
-    visualDeporte,
+  NOMBRES_NIVEL,
+  YO,
+  cancelarActividad,
+  cuposTomados,
+  estadoActividad,
+  formatearCuando,
+  postulantes,
+  postular,
+  puedePostular,
+  relacionConActividad,
+  responderPostulacion,
+  retirarse,
+  useActividades,
+  visualDeporte,
 } from '../../../services/actividades';
 import { Usuario, getSession } from '../../../services/auth';
 import { Colors, useAppTheme } from '../../../theme/ThemeContext';
@@ -34,6 +35,7 @@ export default function ActividadDetalleScreen() {
   const [modalPostular, setModalPostular] = useState(false);
   const [mensaje, setMensaje] = useState('');
   const [cumplo, setCumplo] = useState(false);
+  const [modalReporte, setModalReporte] = useState(false);
 
   useEffect(() => {
     getSession().then(setUsuario);
@@ -195,6 +197,15 @@ export default function ActividadDetalleScreen() {
   return (
     <View style={[styles.container, { paddingTop: insets.top + 12 }]}>
       {atras}
+      {a.organizadorId !== YO ? (
+        <TouchableOpacity
+          onPress={() => setModalReporte(true)}
+          style={[styles.reportButton, { top: insets.top + 12 }]}
+          accessibilityLabel="Reportar actividad"
+        >
+          <Ionicons name="flag-outline" size={17} color={colors.textMuted} />
+        </TouchableOpacity>
+      ) : null}
 
       <ScrollView contentContainerStyle={styles.content}>
         <View style={styles.hero}>
@@ -315,6 +326,15 @@ export default function ActividadDetalleScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* Reportar actividad (HU-42) */}
+      <ReportarModal
+        visible={modalReporte}
+        onClose={() => setModalReporte(false)}
+        tipo="actividad"
+        objetivoId={a.id}
+        objetivoNombre={a.titulo}
+      />
     </View>
   );
 }
@@ -324,6 +344,10 @@ const makeStyles = (c: Colors) =>
     container: { flex: 1, backgroundColor: c.bg },
     backButton: {
       position: 'absolute', left: 20, zIndex: 2, width: 36, height: 36, borderRadius: 18,
+      backgroundColor: c.card, borderWidth: 1, borderColor: c.border, alignItems: 'center', justifyContent: 'center',
+    },
+    reportButton: {
+      position: 'absolute', right: 20, zIndex: 2, width: 36, height: 36, borderRadius: 18,
       backgroundColor: c.card, borderWidth: 1, borderColor: c.border, alignItems: 'center', justifyContent: 'center',
     },
     noEncontrada: { flex: 1, alignItems: 'center', justifyContent: 'center' },

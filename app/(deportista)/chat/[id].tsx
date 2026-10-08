@@ -4,9 +4,13 @@ import { useMemo, useRef, useState } from 'react';
 import { FlatList, KeyboardAvoidingView, Platform, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Avatar from '../../../components/Avatar';
+import ReportarModal from '../../../components/ReportarModal';
+import type { TipoReporte } from '../../../services/reportes';
 import { Colors, useAppTheme } from '../../../theme/ThemeContext';
 
 type Mensaje = { id: string; texto: string; propio: boolean };
+/** Lo que se está reportando desde el chat (HU-42): la persona o un mensaje suyo. */
+type ObjetivoReporte = { tipo: TipoReporte; id: string; nombre: string };
 
 // Conversaciones de prueba para los matches que ya tenían mensajes.
 // Un match nuevo empieza con el chat vacío. Se reemplaza por la API de chat.
@@ -35,6 +39,10 @@ export default function ChatScreen() {
   const [mensajes, setMensajes] = useState<Mensaje[]>(CONVERSACIONES_PREVIAS[id ?? ''] ?? []);
   const [texto, setTexto] = useState('');
   const listaRef = useRef<FlatList<Mensaje>>(null);
+  const [reporte, setReporte] = useState<ObjetivoReporte | null>(null);
+  // Se recuerda el último objetivo para que el formulario no cambie de texto mientras se cierra.
+  const ultimoReporte = useRef<ObjetivoReporte>({ tipo: 'usuario', id: id ?? '', nombre: nombre });
+  if (reporte) ultimoReporte.current = reporte;
 
   const sugerencias = [
     '¡Hola! 👋',
@@ -49,6 +57,11 @@ export default function ChatScreen() {
     setTexto('');
   }
 
+  function reportarMensaje(m: Mensaje) {
+    const resumen = m.texto.length > 60 ? `${m.texto.slice(0, 60)}…` : m.texto;
+    setReporte({ tipo: 'mensaje', id: `${id ?? ''}:${m.id}`, nombre: `Mensaje de ${primerNombre}: "${resumen}"` });
+  }
+
   return (
     <KeyboardAvoidingView
       style={styles.container}
@@ -60,10 +73,17 @@ export default function ChatScreen() {
           <Ionicons name="arrow-back" size={18} color={colors.text} />
         </TouchableOpacity>
         <Avatar name={nombre} colorFrom={colorFrom ?? '#7C3AED'} style={styles.avatar} fontSize={13} />
-        <View>
+        <View style={styles.topbarTextos}>
           <Text style={styles.name}>{nombre}</Text>
           <Text style={styles.sport}>{sport ?? ''}</Text>
         </View>
+        <TouchableOpacity
+          onPress={() => setReporte({ tipo: 'usuario', id: id ?? '', nombre })}
+          style={styles.reportButton}
+          accessibilityLabel={`Reportar a ${nombre}`}
+        >
+          <Ionicons name="flag-outline" size={16} color={colors.textMuted} />
+        </TouchableOpacity>
       </View>
 
       <FlatList
@@ -88,11 +108,24 @@ export default function ChatScreen() {
             </View>
           </View>
         }
-        renderItem={({ item }) => (
-          <View style={[styles.bubble, item.propio ? styles.bubbleOwn : styles.bubbleOther]}>
-            <Text style={item.propio ? styles.bubbleTextOwn : styles.bubbleTextOther}>{item.texto}</Text>
-          </View>
-        )}
+        renderItem={({ item }) =>
+          item.propio ? (
+            <View style={[styles.bubble, styles.bubbleOwn]}>
+              <Text style={styles.bubbleTextOwn}>{item.texto}</Text>
+            </View>
+          ) : (
+            // Mantén presionado un mensaje de la otra persona para reportarlo.
+            <TouchableOpacity
+              activeOpacity={0.8}
+              delayLongPress={350}
+              onLongPress={() => reportarMensaje(item)}
+              style={[styles.bubble, styles.bubbleOther]}
+              accessibilityHint="Mantén presionado para reportar este mensaje"
+            >
+              <Text style={styles.bubbleTextOther}>{item.texto}</Text>
+            </TouchableOpacity>
+          )
+        }
       />
 
       <View style={[styles.inputRow, { paddingBottom: insets.bottom + 12 }]}>
@@ -109,6 +142,15 @@ export default function ChatScreen() {
           <Ionicons name="send" size={16} color="#fff" />
         </TouchableOpacity>
       </View>
+
+      {/* Reportar persona o mensaje (HU-42) */}
+      <ReportarModal
+        visible={reporte !== null}
+        onClose={() => setReporte(null)}
+        tipo={ultimoReporte.current.tipo}
+        objetivoId={ultimoReporte.current.id}
+        objetivoNombre={ultimoReporte.current.nombre}
+      />
     </KeyboardAvoidingView>
   );
 }
@@ -118,6 +160,8 @@ const makeStyles = (c: Colors) =>
     container: { flex: 1, backgroundColor: c.bg },
     topbar: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 20, paddingBottom: 16, borderBottomWidth: 1, borderColor: c.border },
     backButton: { width: 34, height: 34, borderRadius: 17, backgroundColor: c.card, borderWidth: 1, borderColor: c.border, alignItems: 'center', justifyContent: 'center' },
+    topbarTextos: { flex: 1 },
+    reportButton: { width: 34, height: 34, borderRadius: 17, backgroundColor: c.card, borderWidth: 1, borderColor: c.border, alignItems: 'center', justifyContent: 'center' },
     avatar: { width: 36, height: 36, borderRadius: 18 },
     name: { color: c.text, fontSize: 14, fontWeight: '700' },
     sport: { color: c.textMuted, fontSize: 11 },

@@ -45,6 +45,9 @@ export type DatosActividad = {
   cupos: number; descripcion: string; requisitos: string;
 };
 export type ResultadoCrear = { ok: true; id: string } | { ok: false; motivo: string };
+export type CambioActividad = 'horario' | 'lugar' | 'cancelada';
+/** Aviso para quien participa (o postuló) cuando el organizador cambia o cancela la actividad (HU-37). */
+export type AvisoActividad = { id: string; actividadId: string; cambio: CambioActividad; titulo: string; detalle: string; ts: number };
 export type Postulante = { id: string; nombre: string; estado: EstadoPostulacion; mensaje: string };
 
 export const NOMBRES_NIVEL: Record<number, string> = { 1: 'Principiante', 2: 'Básico', 3: 'Intermedio', 4: 'Avanzado', 5: 'Experto' };
@@ -289,6 +292,40 @@ export function retirarse(id: string): Resultado {
 }
 
 let contador = 1;
+let avisos: AvisoActividad[] = [];
+export const getAvisos = () => avisos;
+export function useAvisos(): AvisoActividad[] {
+  return useSyncExternalStore(suscribir, getAvisos, getAvisos);
+}
+
+/**
+ * SOLO DEMO: simula que quien organiza una actividad en la que participas cambia el horario,
+ * cambia el lugar o la cancela, para ver la alerta (HU-37). En la app real esto lo dispara el backend.
+ */
+export function simularCambioDelOrganizador(id: string, cambio: CambioActividad, ahora: number = Date.now()): Resultado {
+  const a = actividades.find((x) => x.id === id);
+  if (!a) return { ok: false, motivo: 'No encontramos esta actividad.' };
+  const relacion = relacionConActividad(a);
+  if (relacion !== 'aprobada' && relacion !== 'pendiente') return { ok: false, motivo: 'No participas en esta actividad.' };
+  const estado = estadoActividad(a, ahora);
+  if (estado === 'cancelada') return { ok: false, motivo: 'Esta actividad ya estaba cancelada.' };
+  if (estado === 'vencida') return { ok: false, motivo: 'Esta actividad ya finalizó.' };
+  const aviso = (titulo: string, detalle: string): AvisoActividad => ({ id: `av-${avisos.length + 1}`, actividadId: id, cambio, titulo, detalle, ts: ahora });
+  if (cambio === 'horario') {
+    const nueva = a.fecha + 60 * 60 * 1000;
+    actualizar(id, (x) => ({ ...x, fecha: nueva }));
+    avisos = [...avisos, aviso(`Cambió el horario de "${a.titulo}"`, `Ahora: ${formatearCuando(nueva, ahora)} (antes: ${formatearCuando(a.fecha, ahora)})`)];
+  } else if (cambio === 'lugar') {
+    const nuevo = `${a.lugar} (acceso sur)`;
+    actualizar(id, (x) => ({ ...x, lugar: nuevo }));
+    avisos = [...avisos, aviso(`Cambió el lugar de "${a.titulo}"`, `Nuevo lugar: ${nuevo}`)];
+  } else {
+    actualizar(id, (x) => ({ ...x, cancelada: true }));
+    avisos = [...avisos, aviso(`Se canceló "${a.titulo}"`, `${a.organizadorNombre} canceló la actividad.`)];
+  }
+  emitir();
+  return { ok: true };
+}
 
 /** Publica una actividad nueva, abierta a postulaciones (HU-23). */
 export function crearActividad(datos: DatosActividad, ahora: number = Date.now()): ResultadoCrear {
@@ -344,6 +381,7 @@ export function responderPostulacion(id: string, personaId: string, decision: 'a
 /** Solo para pruebas y para reiniciar la demo. */
 export function reiniciarActividades(ahora: number = Date.now()) {
   actividades = crearActividadesDemo(ahora);
+  avisos = [];
   contador = 1;
   emitir();
 }

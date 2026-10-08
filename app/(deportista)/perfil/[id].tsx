@@ -6,6 +6,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Avatar from '../../../components/Avatar';
 import MatchModal from '../../../components/MatchModal';
 import RatingModal from '../../../components/RatingModal';
+import ReportarModal from '../../../components/ReportarModal';
 import { Usuario, getSession } from '../../../services/auth';
 import {
   Persona,
@@ -54,6 +55,7 @@ export default function PerfilDeportistaScreen() {
   const [usuario, setUsuario] = useState<Usuario | null>(null);
   const [nuevoMatch, setNuevoMatch] = useState<Persona | null>(null);
   const [calificando, setCalificando] = useState(false);
+  const [reportando, setReportando] = useState(false);
 
   useEffect(() => {
     getSession().then(setUsuario);
@@ -120,6 +122,13 @@ export default function PerfilDeportistaScreen() {
     <View style={[styles.container, { paddingTop: insets.top + 12 }]}>
       <TouchableOpacity onPress={() => router.back()} style={[styles.backButton, { top: insets.top + 12 }]}>
         <Ionicons name="arrow-back" size={18} color={colors.text} />
+      </TouchableOpacity>
+      <TouchableOpacity
+        onPress={() => setReportando(true)}
+        style={[styles.reportButton, { top: insets.top + 12 }]}
+        accessibilityLabel={`Reportar a ${persona.name}`}
+      >
+        <Ionicons name="flag-outline" size={17} color={colors.text} />
       </TouchableOpacity>
 
       <ScrollView contentContainerStyle={styles.content}>
@@ -234,6 +243,15 @@ export default function PerfilDeportistaScreen() {
         onEnviar={handleEnviarCalificacion}
         onCerrar={() => setCalificando(false)}
       />
+
+      {/* Reportar usuario (HU-42) */}
+      <ReportarModal
+        visible={reportando}
+        onClose={() => setReportando(false)}
+        tipo="usuario"
+        objetivoId={persona.id}
+        objetivoNombre={persona.name}
+      />
     </View>
   );
 }
@@ -243,6 +261,12 @@ const makeStyles = (c: Colors) =>
     container: { flex: 1, backgroundColor: c.bg },
     backButton: {
       position: 'absolute', left: 20, zIndex: 2,
+      width: 36, height: 36, borderRadius: 18,
+      backgroundColor: c.card, borderWidth: 1, borderColor: c.border,
+      alignItems: 'center', justifyContent: 'center',
+    },
+    reportButton: {
+      position: 'absolute', right: 20, zIndex: 2,
       width: 36, height: 36, borderRadius: 18,
       backgroundColor: c.card, borderWidth: 1, borderColor: c.border,
       alignItems: 'center', justifyContent: 'center',
