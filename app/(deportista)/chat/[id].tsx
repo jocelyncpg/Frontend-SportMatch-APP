@@ -5,10 +5,15 @@ import { useCallback, useMemo, useRef, useState } from 'react';
 import { AppState, FlatList, KeyboardAvoidingView, Platform, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Avatar from '../../../components/Avatar';
+import ReportarModal from '../../../components/ReportarModal';
 import { ApiError } from '../../../services/api';
 import { enviarMensaje, getChat, getMensajes, MensajeApi } from '../../../services/chat';
 import { Persona } from '../../../services/matchStore';
+import type { TipoReporte } from '../../../services/reportes';
 import { Colors, useAppTheme } from '../../../theme/ThemeContext';
+
+/** Lo que se está reportando desde el chat (HU-42): la persona o un mensaje suyo. */
+type ObjetivoReporte = { tipo: TipoReporte; id: string; nombre: string };
 
 function fusionar(actuales: MensajeApi[], nuevos: MensajeApi[]) {
   return [...new Map([...actuales, ...nuevos].map((m) => [m.id, m])).values()]
@@ -37,6 +42,10 @@ export default function ChatScreen() {
   const envioPendiente = useRef<{ text: string; clientId: string } | null>(null);
   const envioEnCurso = useRef(false);
   const desplazar = useRef(true);
+  const [reporte, setReporte] = useState<ObjetivoReporte | null>(null);
+  // Se recuerda el último objetivo para que el formulario no cambie de texto mientras se cierra.
+  const ultimoReporte = useRef<ObjetivoReporte>({ tipo: 'usuario', id: '', nombre: '' });
+  if (reporte) ultimoReporte.current = reporte;
 
   const mostrarError = useCallback((e: unknown) => {
     setError(e instanceof Error ? e.message : 'No se pudo conectar con el chat.');
@@ -119,7 +128,19 @@ export default function ChatScreen() {
   }
 
   const nombre = persona?.name ?? 'Chat';
-  const sugerencias = ['¡Hola! 👋', '¿Entrenamos juntos?', '¿Qué días te acomodan?'];
+  const primerNombre = nombre.split(' ')[0];
+  const deporte = persona && persona.sport !== 'Sin deporte aún' ? persona.sport : null;
+  const sugerencias = [
+    '¡Hola! 👋',
+    `¿Entrenamos ${deporte ? deporte.toLowerCase() : 'juntos'}?`,
+    '¿Qué días te acomodan?',
+  ];
+
+  function reportarMensaje(m: MensajeApi) {
+    const resumen = m.text.length > 60 ? `${m.text.slice(0, 60)}…` : m.text;
+    setReporte({ tipo: 'mensaje', id: `${id}:${m.id}`, nombre: `Mensaje de ${primerNombre}: "${resumen}"` });
+  }
+
   return (
     <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : 'height'} keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}>
       <View style={[styles.topbar, { paddingTop: insets.top + 12 }]}>
@@ -127,10 +148,20 @@ export default function ChatScreen() {
           <Ionicons name="arrow-back" size={18} color={colors.text} />
         </TouchableOpacity>
         <Avatar name={nombre} colorFrom={persona?.colorFrom ?? '#7C3AED'} uri={persona?.fotoUri} style={styles.avatar} fontSize={13} />
-        <TouchableOpacity disabled={!disponible} accessibilityLabel={`Ver perfil de ${nombre}`}
+        <TouchableOpacity style={styles.topbarTextos} disabled={!disponible} accessibilityLabel={`Ver perfil de ${nombre}`}
           onPress={() => router.push({ pathname: '/(deportista)/athlete/[id]', params: { id } })}>
-          <Text style={styles.name}>{nombre}</Text><Text style={styles.sport}>{persona ? 'Ver perfil' : ''}</Text>
+          <Text style={styles.name}>{nombre}</Text>
+          <Text style={styles.sport}>{persona ? `${deporte ?? 'Deportista'} · Ver perfil` : ''}</Text>
         </TouchableOpacity>
+        {persona ? (
+          <TouchableOpacity
+            onPress={() => setReporte({ tipo: 'usuario', id: persona.id, nombre })}
+            style={styles.reportButton}
+            accessibilityLabel={`Reportar a ${nombre}`}
+          >
+            <Ionicons name="flag-outline" size={16} color={colors.textMuted} />
+          </TouchableOpacity>
+        ) : null}
       </View>
       {error && <TouchableOpacity onPress={() => actualizarRef.current()}><Text style={styles.introTexto}>{error} · Reintentar</Text></TouchableOpacity>}
       <FlatList ref={listaRef} data={mensajes} keyExtractor={(m) => m.id}
@@ -141,18 +172,44 @@ export default function ChatScreen() {
           <View style={styles.intro}>
             {cargando ? <Text style={styles.introTexto}>Cargando conversación...</Text> : disponible ? <>
               <View style={styles.introIcono}><Ionicons name="heart" size={22} color="#fff" /></View>
-              <Text style={styles.introTitulo}>Hiciste match con {nombre.split(' ')[0]}</Text>
+              <Text style={styles.introTitulo}>Hiciste match con {primerNombre}</Text>
               <Text style={styles.introTexto}>Rompe el hielo y coordinen su primer entrenamiento.</Text>
               <View style={styles.sugerencias}>{sugerencias.map((s) => <TouchableOpacity key={s} disabled={enviando} style={styles.sugerencia} onPress={() => enviar(s)}><Text style={styles.sugerenciaTexto}>{s}</Text></TouchableOpacity>)}</View>
             </> : <Text style={styles.introTexto}>El chat estará disponible cuando ambos tengan un match aceptado.</Text>}
           </View>
         }
-        renderItem={({ item }) => <View style={[styles.bubble, item.sender_id === miId ? styles.bubbleOwn : styles.bubbleOther]}><Text style={item.sender_id === miId ? styles.bubbleTextOwn : styles.bubbleTextOther}>{item.text}</Text></View>}
+        renderItem={({ item }) =>
+          item.sender_id === miId ? (
+            <View style={[styles.bubble, styles.bubbleOwn]}>
+              <Text style={styles.bubbleTextOwn}>{item.text}</Text>
+            </View>
+          ) : (
+            // Mantén presionado un mensaje de la otra persona para reportarlo.
+            <TouchableOpacity
+              activeOpacity={0.8}
+              delayLongPress={350}
+              onLongPress={() => reportarMensaje(item)}
+              style={[styles.bubble, styles.bubbleOther]}
+              accessibilityHint="Mantén presionado para reportar este mensaje"
+            >
+              <Text style={styles.bubbleTextOther}>{item.text}</Text>
+            </TouchableOpacity>
+          )
+        }
       />
       <View style={[styles.inputRow, { paddingBottom: insets.bottom + 12 }]}>
         <TextInput placeholder="Escribe un mensaje..." placeholderTextColor={colors.textMuted} style={styles.input} value={texto} onChangeText={setTexto} onSubmitEditing={() => enviar()} returnKeyType="send" editable={disponible && !enviando} maxLength={2000} />
         <TouchableOpacity style={[styles.sendButton, (!disponible || enviando) && { opacity: 0.5 }]} disabled={!disponible || enviando || !texto.trim()} onPress={() => enviar()} accessibilityLabel="Enviar mensaje"><Ionicons name="send" size={16} color="#fff" /></TouchableOpacity>
       </View>
+
+      {/* Reportar persona o mensaje (HU-42) */}
+      <ReportarModal
+        visible={reporte !== null}
+        onClose={() => setReporte(null)}
+        tipo={ultimoReporte.current.tipo}
+        objetivoId={ultimoReporte.current.id}
+        objetivoNombre={ultimoReporte.current.nombre}
+      />
     </KeyboardAvoidingView>
   );
 }
@@ -162,6 +219,8 @@ const makeStyles = (c: Colors) =>
     container: { flex: 1, backgroundColor: c.bg },
     topbar: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 20, paddingBottom: 16, borderBottomWidth: 1, borderColor: c.border },
     backButton: { width: 34, height: 34, borderRadius: 17, backgroundColor: c.card, borderWidth: 1, borderColor: c.border, alignItems: 'center', justifyContent: 'center' },
+    topbarTextos: { flex: 1 },
+    reportButton: { width: 34, height: 34, borderRadius: 17, backgroundColor: c.card, borderWidth: 1, borderColor: c.border, alignItems: 'center', justifyContent: 'center' },
     avatar: { width: 36, height: 36, borderRadius: 18 },
     name: { color: c.text, fontSize: 14, fontWeight: '700' },
     sport: { color: c.textMuted, fontSize: 11 },

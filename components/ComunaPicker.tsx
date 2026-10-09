@@ -53,6 +53,7 @@ export default function ComunaPicker({ visible, seleccionada, onElegir, onCerrar
             keyExtractor={(c) => c}
             style={styles.lista}
             keyboardShouldPersistTaps="handled"
+            ItemSeparatorComponent={() => <View style={styles.separador} />}
             ListEmptyComponent={
               <Text style={styles.vacio}>No encontramos esa comuna en la Región Metropolitana.</Text>
             }
@@ -63,7 +64,10 @@ export default function ComunaPicker({ visible, seleccionada, onElegir, onCerrar
                   style={[styles.fila, activa && styles.filaActiva]}
                   onPress={() => onElegir(item)}
                 >
-                  <Text style={[styles.filaTexto, activa && styles.filaTextoActiva]}>{item}</Text>
+                  {/* flex: 1 le da al nombre todo el ancho de la fila; así no se parte ni se corta. */}
+                  <Text style={[styles.filaTexto, activa && styles.filaTextoActiva]} numberOfLines={2}>
+                    {item}
+                  </Text>
                   {activa ? <Ionicons name="checkmark-circle" size={18} color={colors.accent} /> : null}
                 </TouchableOpacity>
               );
@@ -79,7 +83,7 @@ const makeStyles = (c: Colors) =>
   StyleSheet.create({
     overlay: { flex: 1, backgroundColor: c.overlay, justifyContent: 'center', padding: 24 },
     box: {
-      height: '75%', backgroundColor: c.card, borderRadius: 18, padding: 18,
+      width: '100%', height: '75%', backgroundColor: c.card, borderRadius: 18, padding: 18,
       borderWidth: 1, borderColor: c.border,
     },
     header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
@@ -90,12 +94,13 @@ const makeStyles = (c: Colors) =>
     },
     searchInput: { flex: 1, color: c.text, fontSize: 13, padding: 0 },
     lista: { flex: 1 },
+    separador: { height: StyleSheet.hairlineWidth, backgroundColor: c.border, marginHorizontal: 12 },
     fila: {
-      flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-      paddingVertical: 13, paddingHorizontal: 10, borderRadius: 10,
+      width: '100%', flexDirection: 'row', alignItems: 'center', gap: 10,
+      minHeight: 48, paddingVertical: 12, paddingHorizontal: 12, borderRadius: 10,
     },
     filaActiva: { backgroundColor: c.chip },
-    filaTexto: { color: c.text, fontSize: 13.5 },
+    filaTexto: { flex: 1, flexShrink: 1, color: c.text, fontSize: 14 },
     filaTextoActiva: { color: c.accent, fontWeight: '700' },
     vacio: { color: c.textMuted, fontSize: 12.5, textAlign: 'center', marginTop: 24, paddingHorizontal: 20, lineHeight: 18 },
   });
