@@ -179,10 +179,43 @@ test('si la cuenta cambia durante la carga, se descartan los datos', async () =>
   assert.equal(api.getActividades().length, 0);
 });
 
-test('editar, cancelar y retirarse avisan que aún no existen en el servidor', () => {
-  const { api } = load();
-  for (const r of [api.editarActividad('x', datos()), api.cancelarActividad('x'), api.retirarse('x')]) {
-    assert.equal(r.ok, false);
-    assert.match(r.motivo, /todavía no está disponible/);
-  }
+test('editar envía PATCH y eliminar envía DELETE; la cancelada se conserva en tu historial', async () => {
+  let cancelada = false; let titulo = 'Trote en el parque';
+  const { api, calls } = load(async (ruta, opciones = {}) => {
+    const mia = () => actividad({ title: titulo, organizer: persona('yo-id'), cancelled_at: cancelada ? enDias(0) : null });
+    if (ruta.startsWith('/activities?')) return pagina(...(cancelada ? [] : [mia()]));
+    if (ruta === '/activities/act-1' && opciones.method === 'PATCH') { titulo = opciones.body.title; return mia(); }
+    if (ruta === '/activities/act-1' && opciones.method === 'DELETE') { cancelada = true; return undefined; }
+    if (ruta === '/activities/act-1') return mia();
+    if (ruta === '/activities/act-1/applications') return [];
+    throw Error(ruta);
+  });
+  await api.cargarActividades();
+  assert.deepEqual(plano(await api.editarActividad('act-1', datos({ titulo: 'Trote largo', cupos: 12 }))), { ok: true });
+  const patch = calls.find(([, o]) => o && o.method === 'PATCH')[1].body;
+  assert.equal(patch.title, 'Trote largo');
+  assert.equal(patch.capacity, 12);
+  assert.equal(patch.client_activity_id, undefined);
+  assert.equal(api.getActividades()[0].titulo, 'Trote largo');
+
+  assert.deepEqual(plano(await api.cancelarActividad('act-1')), { ok: true });
+  assert.ok(calls.some(([ruta, o]) => ruta === '/activities/act-1' && o && o.method === 'DELETE'));
+  assert.equal(api.estadoActividad(api.getActividades()[0]), 'cancelada');
+  await api.cargarActividades();
+  assert.equal(api.getActividades().length, 1);
+  assert.equal(api.getActividades()[0].cancelada, true);
+  assert.equal((await api.editarActividad('act-1', datos())).ok, false);
+});
+
+test('solo quien organiza puede editar o eliminar, y retirarse aún no existe', async () => {
+  const { api, calls } = load(async (ruta) => {
+    if (ruta.startsWith('/activities?')) return pagina(actividad());
+    return noEncontrada();
+  });
+  await api.cargarActividades();
+  const antes = calls.length;
+  assert.match((await api.editarActividad('act-1', datos())).motivo, /Solo quien organiza/);
+  assert.match((await api.cancelarActividad('act-1')).motivo, /Solo quien organiza/);
+  assert.equal(calls.length, antes);
+  assert.match(api.retirarse('act-1').motivo, /todavía no está disponible/);
 });
