@@ -66,7 +66,9 @@ export default function NuevaActividadScreen() {
       cupos: Number(cupos), descripcion, requisitos,
     };
     if (editando && existente) {
-      const r = editarActividad(existente.id, datos);
+      setPublicando(true);
+      const r = await editarActividad(existente.id, datos);
+      setPublicando(false);
       if (!r.ok) return Alert.alert('No se pudo guardar', r.motivo);
       router.back();
       return;
@@ -150,7 +152,7 @@ export default function NuevaActividadScreen() {
 
       <View style={[styles.footer, { paddingBottom: insets.bottom + 16 }]}>
         <TouchableOpacity style={[styles.guardar, publicando && styles.guardarOff]} onPress={guardar} disabled={publicando}>
-          <Text style={styles.guardarTexto}>{publicando ? 'Publicando…' : editando ? 'Guardar cambios' : 'Publicar actividad'}</Text>
+          <Text style={styles.guardarTexto}>{publicando ? (editando ? 'Guardando…' : 'Publicando…') : editando ? 'Guardar cambios' : 'Publicar actividad'}</Text>
         </TouchableOpacity>
       </View>
     </KeyboardAvoidingView>

@@ -8,7 +8,7 @@ import { codigoDeporte, nombreDeporte } from './deportes';
 // Actividades de Ms_Activities (vía gateway) con la forma que usan las pantallas del sprint 2.
 // Lo que el backend todavía no guarda como campo propio (comuna, nivel mínimo y requisitos)
 // viaja dentro de `location` y `description` en un formato legible; ver aBackend()/desdeBackend().
-// Editar, cancelar y retirarse aún no tienen endpoint: devuelven un motivo en vez de simularlo.
+// Retirarse aún no tiene endpoint: devuelve un motivo en vez de simularlo.
 
 /** Marca de la sesión actual: las actividades que organizas usan este id como organizadorId. */
 export const YO = 'yo';
@@ -237,6 +237,7 @@ type DeportistaApi = { user_id: string; nombre: string; apellido_inicial: string
 type ActividadApi = {
   id: string; title: string; sport_code: string; description: string; starts_at: string; location: string;
   created_at: string; capacity: number | null; available_spots: number | null; organizer: DeportistaApi;
+  cancelled_at?: string | null;
 };
 type PaginaApi = { items: ActividadApi[]; next_cursor: string | null };
 type EstadoApi = 'pending' | 'accepted' | 'rejected';
@@ -293,7 +294,7 @@ function desdeBackend(a: ActividadApi, miId: string): Actividad {
     requisitos,
     organizadorId: organiza ? YO : a.organizer.user_id,
     organizadorNombre: organiza ? 'Tú' : `${a.organizer.nombre} ${a.organizer.apellido_inicial}`,
-    cancelada: false,
+    cancelada: !!a.cancelled_at,
     postulaciones: {},
     mensajes: mensajesPropios[a.id] ? { [YO]: mensajesPropios[a.id] } : {},
     postulantesRecibidos: [],
@@ -387,7 +388,9 @@ export async function cargarActividades(): Promise<void> {
     const lista = await Promise.all(items.map((a) => conRelacion(desdeBackend(a, session.id), token)));
     if (carga !== cargaActual) return;
     if (!await mismaSesion(session.id, token)) { actividades = []; estadoCarga = { ...estadoCarga, cargando: false }; emitir(); return; }
-    actividades = lista;
+    // El listado ya no trae las canceladas; las que conocías se conservan para tu historial.
+    const canceladas = actividades.filter((a) => a.cancelada && !lista.some((x) => x.id === a.id));
+    actividades = [...lista, ...canceladas];
     estadoCarga = { cargando: false, error: null, sesionExpirada: false };
   } catch (e) {
     if (carga !== cargaActual) return;
@@ -479,14 +482,50 @@ export async function crearActividad(datos: DatosActividad, ahora: number = Date
   }
 }
 
-/** Cambia los datos de una actividad tuya (HU-28). Pendiente de endpoint en Ms_Activities. */
-export function editarActividad(_id: string, _datos: DatosActividad, _ahora: number = Date.now()): Resultado {
-  return { ok: false, motivo: NO_DISPONIBLE };
+/** Revisa en este teléfono que la actividad sea tuya y siga vigente; el servidor vuelve a validarlo. */
+function puedeGestionar(a: Actividad | undefined, accion: string, ahora: number): Resultado {
+  if (!a) return { ok: false, motivo: 'No encontramos esta actividad.' };
+  if (a.organizadorId !== YO) return { ok: false, motivo: `Solo quien organiza puede ${accion}.` };
+  const estado = estadoActividad(a, ahora);
+  if (estado === 'cancelada') return { ok: false, motivo: 'Esta actividad fue cancelada.' };
+  if (estado === 'vencida') return { ok: false, motivo: 'Esta actividad ya finalizó.' };
+  return { ok: true };
 }
 
-/** Cancela una actividad tuya (HU-28). Pendiente de endpoint en Ms_Activities. */
-export function cancelarActividad(_id: string, _ahora: number = Date.now()): Resultado {
-  return { ok: false, motivo: NO_DISPONIBLE };
+/** Cambia los datos de una actividad tuya que sigue vigente (HU-28). */
+export async function editarActividad(id: string, datos: DatosActividad, ahora: number = Date.now()): Promise<Resultado> {
+  const a = actividades.find((x) => x.id === id);
+  const permitido = puedeGestionar(a, 'editarla', ahora);
+  if (!permitido.ok) return permitido;
+  const v = validarActividad(datos, ahora, cuposTomados(a!));
+  if (!v.ok) return v;
+  try {
+    const { session, token } = await credenciales();
+    const editada = await apiRequest<ActividadApi>(`/activities/${encodeURIComponent(id)}`, {
+      method: 'PATCH', token, body: aBackend(limpiar(datos)),
+    });
+    guardar(await conRelacion(desdeBackend(editada, session.id), token));
+    return { ok: true };
+  } catch (e) {
+    void cargarActividad(id);
+    return { ok: false, motivo: mensajeDe(e, 'No se pudieron guardar los cambios.') };
+  }
+}
+
+/** Elimina una actividad tuya que aún no se realiza: queda cancelada para quienes postularon (HU-28). */
+export async function cancelarActividad(id: string, ahora: number = Date.now()): Promise<Resultado> {
+  const a = actividades.find((x) => x.id === id);
+  const permitido = puedeGestionar(a, 'cancelarla', ahora);
+  if (!permitido.ok) return permitido;
+  try {
+    const { token } = await credenciales();
+    await apiRequest<void>(`/activities/${encodeURIComponent(id)}`, { method: 'DELETE', token });
+  } catch (e) {
+    void cargarActividad(id);
+    return { ok: false, motivo: mensajeDe(e, 'No se pudo cancelar la actividad.') };
+  }
+  await cargarActividad(id);
+  return { ok: true };
 }
 
 /** Quita tu postulación o tu cupo (HU-28). Pendiente de endpoint en Ms_Activities. */

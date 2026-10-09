@@ -133,8 +133,10 @@ export default function ActividadDetalleScreen() {
     if (!a) return;
     Alert.alert('Cancelar actividad', 'Las personas postuladas verán que la actividad fue cancelada. ¿Quieres cancelarla?', [
       { text: 'No', style: 'cancel' },
-      { text: 'Sí, cancelar', style: 'destructive', onPress: () => {
-        const r = cancelarActividad(a.id);
+      { text: 'Sí, cancelar', style: 'destructive', onPress: async () => {
+        setEnviando(true);
+        const r = await cancelarActividad(a.id);
+        setEnviando(false);
         if (!r.ok) Alert.alert('No se pudo cancelar', r.motivo);
       } },
     ]);
@@ -164,7 +166,7 @@ export default function ActividadDetalleScreen() {
             <Ionicons name="create-outline" size={16} color={colors.accent} />
             <Text style={styles.pillTexto}>Editar</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.pillCancelar} onPress={confirmarCancelacion}>
+          <TouchableOpacity style={styles.pillCancelar} onPress={confirmarCancelacion} disabled={enviando}>
             <Text style={styles.pillCancelarTexto}>Cancelar actividad</Text>
           </TouchableOpacity>
         </>
