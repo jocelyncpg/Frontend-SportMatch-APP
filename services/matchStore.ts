@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from 'react';
+import { FOTOS } from '../assets/personas';
 import type { CalificacionRecibida } from './reputacion';
 
 export type Persona = {
@@ -37,22 +38,26 @@ type Estado = {
   calificacionesRecibidas: CalificacionRecibida[];
 };
 
+// Le pone a cada persona su foto de assets/personas (si no tiene, se muestran las iniciales).
+const conFoto = (p: Persona): Persona => ({ ...p, fotoUri: FOTOS[p.id] ?? p.fotoUri ?? null });
+
 // Catálogo de prueba completo (sin backend). Se reemplaza por cargarSugerencias()
 // real cuando vuelvas a usar matchStore.backend.ts.
-export const CATALOGO: Persona[] = [
+const CATALOGO_BASE: Persona[] = [
   { id: 'camila', name: 'Camila R.', age: 24, sport: 'Running', level: 'Intermedio', distance: '1.8 km', distanceKm: 1.8, compatibility: 95, colorFrom: '#3648A6', bio: 'Entrenando para una media maratón. Busco compañera para trotes de fondo los fines de semana.' },
   { id: 'diego', name: 'Diego A.', age: 27, sport: 'Fútbol', level: 'Intermedio', distance: '2.3 km', distanceKm: 2.3, compatibility: 89, colorFrom: '#1F2A5C', bio: 'Juego 2 veces por semana, busco gente para armar equipo fijo.' },
-  { id: 'sofia', name: 'Sofía T.', age: 23, sport: 'Yoga', level: 'Intermedio', distance: '2.1 km', distanceKm: 2.1, compatibility: 91, colorFrom: '#DB2777', bio: 'Practico yoga al aire libre y me encantaría sumar gente a las clases de los sábados.', leGustas: true },
-  { id: 'valentina', name: 'Valentina S.', age: 22, sport: 'Ciclismo', level: 'Intermedio', distance: '2.7 km', distanceKm: 2.7, compatibility: 87, colorFrom: '#22C55E', bio: 'Salidas los sábados en la mañana, ritmo tranquilo pero constante.', leGustas: true },
-  { id: 'andres', name: 'Andrés M.', age: 25, sport: 'Running', level: 'Principiante', distance: '3.1 km', distanceKm: 3.1, compatibility: 83, colorFrom: '#7C3AED', bio: 'Recién empezando a correr, busco compañía para agarrar el hábito.' },
-  { id: 'tomas', name: 'Tomás L.', age: 26, sport: 'Natación', level: 'Avanzado', distance: '3.4 km', distanceKm: 3.4, compatibility: 80, colorFrom: '#0EA5E9', bio: 'Nado 3 veces por semana en piscina temperada. Busco alguien para entrenar series.' },
-  { id: 'matias', name: 'Matías P.', age: 29, sport: 'Fútbol', level: 'Avanzado', distance: '3.2 km', distanceKm: 3.2, compatibility: 78, colorFrom: '#1F2A5C', bio: 'Nivel competitivo, juego en liga amateur los domingos.' },
+  { id: 'fernanda', name: 'Fernanda S.', age: 22, sport: 'Trekking', level: 'Intermedio', distance: '2.7 km', distanceKm: 2.7, compatibility: 87, colorFrom: '#22C55E', bio: 'Salidas a cerros los fines de semana, ritmo tranquilo pero constante.', leGustas: true },
+  { id: 'ignacia', name: 'Ignacia V.', age: 25, sport: 'Ciclismo', level: 'Intermedio', distance: '3.1 km', distanceKm: 3.1, compatibility: 83, colorFrom: '#7C3AED', bio: 'Ruta los sábados temprano. Busco compañía para rodar y subir cuestas.', leGustas: true },
+  { id: 'jorge', name: 'Jorge M.', age: 26, sport: 'Trekking', level: 'Avanzado', distance: '3.4 km', distanceKm: 3.4, compatibility: 80, colorFrom: '#0EA5E9', bio: 'Trekking de montaña y fotografía. Busco gente para rutas largas.' },
+  { id: 'matias', name: 'Matías P.', age: 29, sport: 'Ciclismo', level: 'Avanzado', distance: '3.2 km', distanceKm: 3.2, compatibility: 78, colorFrom: '#1F2A5C', bio: 'Ciclismo de ruta, salgo con grupo los domingos. Busco ritmo competitivo.' },
 ];
+export const CATALOGO: Persona[] = CATALOGO_BASE.map(conFoto);
 
-const DEMO_MATCHES: Persona[] = [
-  { id: 'ignacio', name: 'Ignacio R.', age: 28, sport: 'Ciclismo', level: 'Avanzado', distance: '4.0 km', distanceKm: 4.0, compatibility: 85, colorFrom: '#7C3AED', bio: 'Ruta y montaña. Salgo casi todos los domingos temprano.' },
-  { id: 'daniela', name: 'Daniela S.', age: 24, sport: 'Yoga', level: 'Intermedio', distance: '2.9 km', distanceKm: 2.9, compatibility: 90, colorFrom: '#22C55E', bio: 'Yoga y meditación, busco un grupo constante para practicar.' },
+const DEMO_MATCHES_BASE: Persona[] = [
+  { id: 'ignacio', name: 'Ignacio R.', age: 28, sport: 'Natación', level: 'Avanzado', distance: '4.0 km', distanceKm: 4.0, compatibility: 85, colorFrom: '#0EA5E9', bio: 'Nado en piscina temperada varias veces por semana. Busco compañero para series.' },
+  { id: 'catalina', name: 'Catalina T.', age: 23, sport: 'Yoga', level: 'Intermedio', distance: '2.9 km', distanceKm: 2.9, compatibility: 90, colorFrom: '#DB2777', bio: 'Yoga y meditación al aire libre, busco un grupo constante para practicar.' },
 ];
+const DEMO_MATCHES: Persona[] = DEMO_MATCHES_BASE.map(conFoto);
 
 // DATOS DE EJEMPLO: con un solo usuario de prueba no existen calificaciones reales recibidas.
 // Vienen de Camila y Diego, que son los matches confirmados desde el inicio de la demo.

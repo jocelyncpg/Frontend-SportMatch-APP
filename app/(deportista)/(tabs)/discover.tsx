@@ -29,9 +29,14 @@ import {
 } from '../../../services/matchStore';
 import { Colors, useAppTheme } from '../../../theme/ThemeContext';
 
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
+const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const SWIPE_THRESHOLD = 120;
-const CARD_HEIGHT = 420;
+// La foto ocupa toda la tarjeta; se adapta al alto del teléfono.
+const CARD_HEIGHT = Math.min(540, Math.max(430, Math.round(SCREEN_HEIGHT * 0.58)));
+
+// Degradado oscuro bajo el texto, hecho con franjas (no necesita librerías extra).
+const FRANJAS = 14;
+const SOMBRA = Array.from({ length: FRANJAS }, (_, i) => Math.pow((i + 1) / FRANJAS, 1.7) * 0.92);
 
 const RADIOS: { label: string; km: number | null }[] = [
   { label: 'Todas', km: null },
@@ -355,52 +360,45 @@ export default function DiscoverScreen() {
                 </Text>
               </Animated.View>
 
-              <View style={styles.compatBadge}>
-                <Text style={styles.compatText}>
-                  {personaActual.compatibility}%
-                </Text>
+              {/* Degradado para que el texto se lea sobre cualquier foto */}
+              <View style={styles.sombra} pointerEvents="none">
+                {SOMBRA.map((a, i) => (
+                  <View key={i} style={{ flex: 1, backgroundColor: `rgba(8,10,20,${a.toFixed(3)})` }} />
+                ))}
               </View>
 
-              <TouchableOpacity
-                style={styles.infoButton}
-                onPress={() => verPerfil(personaActual)}
-              >
-                <Ionicons name="information-circle-outline" size={20} color="#fff" />
-              </TouchableOpacity>
+              <View style={styles.info} pointerEvents="none">
+                <Text style={styles.name} numberOfLines={1}>
+                  {personaActual.name}
+                  {personaActual.age ? `  ${personaActual.age}` : ''}
+                </Text>
+
+                <Text style={styles.sportLine}>
+                  {personaActual.sport} · {personaActual.level}
+                </Text>
+
+                {personaActual.distance ? (
+                  <View style={styles.distRow}>
+                    <Ionicons name="location-outline" size={13} color="rgba(255,255,255,0.8)" />
+                    <Text style={styles.distance}>{personaActual.distance}</Text>
+                  </View>
+                ) : null}
+
+                {personaActual.bio ? (
+                  <Text style={styles.bio} numberOfLines={2}>
+                    {personaActual.bio}
+                  </Text>
+                ) : null}
+
+                <View style={styles.compatRow}>
+                  <View style={styles.ring}>
+                    <Text style={styles.ringText}>{personaActual.compatibility}%</Text>
+                  </View>
+                  <Text style={styles.compatLabel}>Compatibilidad</Text>
+                </View>
+              </View>
 
             </Avatar>
-
-            <View style={styles.cardBody}>
-
-              <View style={styles.nameRow}>
-                <Text style={styles.name}>
-                  {personaActual.name}
-                  {personaActual.age ? `, ${personaActual.age}` : ''}
-                </Text>
-
-                <Text style={styles.distance}>
-                  {personaActual.distance}
-                </Text>
-              </View>
-
-              <View style={styles.tagsRow}>
-                <Text style={styles.tag}>
-                  {personaActual.sport}
-                </Text>
-
-                <Text style={styles.tag}>
-                  {personaActual.level}
-                </Text>
-              </View>
-
-              <Text
-                style={styles.bio}
-                numberOfLines={2}
-              >
-                {personaActual.bio}
-              </Text>
-
-            </View>
           </Animated.View>
         )}
 
@@ -422,12 +420,20 @@ export default function DiscoverScreen() {
           </TouchableOpacity>
 
           <TouchableOpacity
+            style={styles.perfilButton}
+            onPress={() => verPerfil(personaActual)}
+            accessibilityLabel={`Ver perfil de ${personaActual.name}`}
+          >
+            <Ionicons name="person-outline" size={20} color={colors.text} />
+          </TouchableOpacity>
+
+          <TouchableOpacity
             style={styles.acceptButton}
             onPress={() => forceSwipe('right')}
           >
             <Ionicons
               name="heart"
-              size={24}
+              size={28}
               color="#fff"
             />
           </TouchableOpacity>
@@ -581,9 +587,7 @@ const makeStyles = (c: Colors) =>
       width: SCREEN_WIDTH - 40,
       height: CARD_HEIGHT,
       backgroundColor: c.card,
-      borderRadius: 22,
-      borderWidth: 1,
-      borderColor: c.border,
+      borderRadius: 24,
       overflow: 'hidden',
     },
 
@@ -594,35 +598,85 @@ const makeStyles = (c: Colors) =>
     },
 
     photo: {
+      height: CARD_HEIGHT,
+    },
+
+    sombra: {
+      position: 'absolute',
+      left: 0,
+      right: 0,
+      bottom: 0,
       height: CARD_HEIGHT * 0.62,
     },
 
-    compatBadge: {
+    info: {
       position: 'absolute',
-      top: 14,
-      right: 14,
-      backgroundColor: 'rgba(11,15,25,0.75)',
-      paddingHorizontal: 10,
-      paddingVertical: 5,
-      borderRadius: 20,
+      left: 18,
+      right: 18,
+      bottom: 18,
     },
 
-    compatText: {
-      color: '#4ADE80',
-      fontSize: 12,
+    name: {
+      color: '#fff',
+      fontSize: 26,
+      fontWeight: '800',
+      letterSpacing: -0.3,
+    },
+
+    sportLine: {
+      color: '#fff',
+      fontSize: 14,
+      fontWeight: '600',
+      marginTop: 4,
+    },
+
+    distRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
+      marginTop: 4,
+    },
+
+    distance: {
+      color: 'rgba(255,255,255,0.8)',
+      fontSize: 12.5,
+    },
+
+    bio: {
+      color: 'rgba(255,255,255,0.85)',
+      fontSize: 13,
+      lineHeight: 18,
+      marginTop: 10,
+    },
+
+    compatRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+      marginTop: 14,
+    },
+
+    ring: {
+      width: 46,
+      height: 46,
+      borderRadius: 23,
+      borderWidth: 3,
+      borderColor: '#2DD4BF',
+      backgroundColor: 'rgba(8,10,20,0.45)',
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+
+    ringText: {
+      color: '#fff',
+      fontSize: 11.5,
       fontWeight: '800',
     },
 
-    infoButton: {
-      position: 'absolute',
-      top: 14,
-      left: 14,
-      width: 30,
-      height: 30,
-      borderRadius: 15,
-      backgroundColor: 'rgba(11,15,25,0.55)',
-      alignItems: 'center',
-      justifyContent: 'center',
+    compatLabel: {
+      color: 'rgba(255,255,255,0.9)',
+      fontSize: 13,
+      fontWeight: '600',
     },
 
     stamp: {
@@ -660,56 +714,12 @@ const makeStyles = (c: Colors) =>
       letterSpacing: 1,
     },
 
-    cardBody: {
-      padding: 16,
-    },
-
-    nameRow: {
-      flexDirection: 'row',
-      justifyContent: 'space-between',
-      alignItems: 'baseline',
-      marginBottom: 8,
-    },
-
-    name: {
-      color: c.text,
-      fontSize: 18,
-      fontWeight: '700',
-    },
-
-    distance: {
-      color: c.textMuted,
-      fontSize: 11,
-    },
-
-    tagsRow: {
-      flexDirection: 'row',
-      gap: 6,
-      marginBottom: 10,
-    },
-
-    tag: {
-      color: c.accent,
-      backgroundColor: c.chip,
-      fontSize: 10.5,
-      fontWeight: '700',
-      paddingHorizontal: 9,
-      paddingVertical: 4,
-      borderRadius: 10,
-      overflow: 'hidden',
-    },
-
-    bio: {
-      color: c.textMuted,
-      fontSize: 11.5,
-      lineHeight: 16,
-    },
-
     actions: {
       flexDirection: 'row',
       justifyContent: 'center',
-      gap: 24,
-      paddingVertical: 24,
+      alignItems: 'center',
+      gap: 20,
+      paddingVertical: 22,
     },
 
     rejectButton: {
@@ -723,11 +733,22 @@ const makeStyles = (c: Colors) =>
       justifyContent: 'center',
     },
 
+    perfilButton: {
+      width: 48,
+      height: 48,
+      borderRadius: 24,
+      backgroundColor: c.card,
+      borderWidth: 1,
+      borderColor: c.border,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+
     acceptButton: {
-      width: 58,
-      height: 58,
-      borderRadius: 29,
-      backgroundColor: '#DB2777',
+      width: 66,
+      height: 66,
+      borderRadius: 33,
+      backgroundColor: c.primary,
       alignItems: 'center',
       justifyContent: 'center',
     },
