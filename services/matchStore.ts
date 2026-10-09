@@ -3,6 +3,7 @@ import { useSyncExternalStore } from 'react';
 import { ApiError, apiRequest } from './api';
 import { getSession, getToken } from './auth';
 import { codigoDeporte, nombreDeporte } from './deportes';
+import type { CalificacionRecibida } from './reputacion';
 
 export type FiltrosSugerencias = {
   radioKm: 2 | 5 | 10 | null;
@@ -32,6 +33,8 @@ export type Persona = {
   ultimoMensajeFecha?: string;
 };
 
+export type Calificacion = { estrellas: number; comentario?: string };
+
 type Estado = {
   /** Deportistas reales registrados (GET /users/suggestions), sin incluirte a ti. */
   catalogo: Persona[];
@@ -52,6 +55,13 @@ type Estado = {
   filtros: FiltrosSugerencias | null;
   ubicacionDisponible: boolean;
   misDeportes: string[];
+  /**
+   * Calificaciones que TÚ diste a tus matches, por id de persona. SIMULADO: aún no
+   * existe un servicio de reputación, así que viven en memoria y se pierden al cerrar la app.
+   */
+  calificaciones: Record<string, Calificacion>;
+  /** Calificaciones que TÚ recibiste. Vacío hasta que exista el servicio de reputación. */
+  calificacionesRecibidas: CalificacionRecibida[];
 };
 
 /** Tarjeta pública que devuelve Ms_Users. */
@@ -119,6 +129,8 @@ function estadoInicial(usuarioId: string | null = null): Estado {
     filtros: null,
     ubicacionDisponible: false,
     misDeportes: [],
+    calificaciones: {},
+    calificacionesRecibidas: [],
   };
 }
 
@@ -365,6 +377,23 @@ export async function cancelarSolicitud(id: string): Promise<void> {
 export function descartar(id: string) {
   estado = { ...estado, descartados: [...estado.descartados, id] };
   emitir();
+}
+
+/** Califica (o actualiza la calificación) de un match confirmado. Una sola entrada por persona. */
+export function calificar(personaId: string, estrellas: number, comentario?: string) {
+  estado = {
+    ...estado,
+    calificaciones: {
+      ...estado.calificaciones,
+      [personaId]: { estrellas, comentario: comentario || undefined },
+    },
+  };
+  emitir();
+}
+
+/** Devuelve la calificación que ya diste a esa persona, si existe. */
+export function calificacionDe(e: Estado, personaId: string): Calificacion | undefined {
+  return e.calificaciones[personaId];
 }
 
 /** Vuelve a mostrar descartados; las solicitudes y matches se conservan en el servidor. */
