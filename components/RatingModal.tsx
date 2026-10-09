@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Modal, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { Colors, useAppTheme } from '../theme/ThemeContext';
 
@@ -13,17 +13,18 @@ type RatingModalProps = {
 
 export default function RatingModal({ visible, nombre, calificacionActual, onEnviar, onCerrar }: RatingModalProps) {
   const { colors } = useAppTheme();
-  const styles = makeStyles(colors);
+  const styles = useMemo(() => makeStyles(colors), [colors]);
 
   const [estrellas, setEstrellas] = useState(calificacionActual?.estrellas ?? 0);
   const [comentario, setComentario] = useState(calificacionActual?.comentario ?? '');
 
+  // Cada vez que se abre, parte desde la calificación que ya existía (o en blanco).
   useEffect(() => {
     if (visible) {
       setEstrellas(calificacionActual?.estrellas ?? 0);
       setComentario(calificacionActual?.comentario ?? '');
     }
-  }, [visible, calificacionActual]);
+  }, [visible, calificacionActual?.estrellas, calificacionActual?.comentario]);
 
   function handleEnviar() {
     if (estrellas === 0) return;
@@ -33,7 +34,7 @@ export default function RatingModal({ visible, nombre, calificacionActual, onEnv
   const primerNombre = nombre.split(' ')[0];
 
   return (
-    <Modal visible={visible} transparent animationType="fade">
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onCerrar}>
       <View style={styles.overlay}>
         <View style={styles.box}>
           <Text style={styles.title}>

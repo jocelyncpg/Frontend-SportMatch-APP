@@ -6,7 +6,8 @@ import { codigoDeporte, nombreDeporte } from './deportes';
 const SESSION_KEY = 'sportmatch_session';
 const TOKEN_KEY = 'sportmatch_token';
 // La foto de perfil es un archivo del teléfono (file://...) que otros no pueden
-// abrir, así que por ahora solo vive aquí, guardada por id de usuario.
+// abrir, así que por ahora solo vive aquí, guardada por id de usuario. La
+// disponibilidad en texto libre también: Ms_Users solo acepta franjas con hora.
 const LOCAL_EXTRAS_KEY = 'sportmatch_local_extras';
 // Un deporte nuevo comienza en intermedio; el usuario puede elegir su nivel.
 const NIVEL_POR_DEFECTO = 3;
@@ -27,6 +28,9 @@ export type Usuario = {
   biografia?: string;
   deportes?: DeporteConNivel[];
   nivelesDeportes?: Record<string, number>;
+  /** Texto libre: "Lunes y miércoles en la tarde, sábados en la mañana". */
+  disponibilidad?: string;
+  objetivos?: string[];
 };
 
 type RegisterData = {
@@ -61,10 +65,11 @@ type Zona = { comuna: string; latitud: number | null; longitud: number | null };
 type Preferences = {
   deportes: { deporte_codigo: string; nivel: number }[];
   zona: Zona | null;
+  objetivos?: string[];
   [otros: string]: unknown;
 };
 
-type LocalExtras = Partial<Pick<Usuario, 'fotoPerfil'>>;
+type LocalExtras = Partial<Pick<Usuario, 'fotoPerfil' | 'disponibilidad'>>;
 
 /** El login falló porque la cuenta aún no confirma su correo. */
 export class EmailNotVerifiedError extends Error {
@@ -91,8 +96,9 @@ async function iniciarSesion(tokens: TokenResponse): Promise<Usuario> {
     apiRequest<ProfileResponse>(`/users/${userId}/profile`, { token: tokens.access_token }),
     apiRequest<Preferences>(`/users/${userId}/preferences`, { token: tokens.access_token }),
   ]);
-  // De lo guardado en el teléfono solo se usa la foto; lo demás manda el backend.
-  const fotoLocal = (await getLocalExtras())[userId]?.fotoPerfil;
+  // De lo guardado en el teléfono solo se usan la foto y la disponibilidad; lo demás manda el backend.
+  const local = (await getLocalExtras())[userId];
+  const fotoLocal = local?.fotoPerfil;
   const usuario: Usuario = {
     id: userId,
     rut: perfil.rut ?? '',
@@ -107,6 +113,8 @@ async function iniciarSesion(tokens: TokenResponse): Promise<Usuario> {
     comuna: preferencias.zona?.comuna,
     latitud: preferencias.zona?.latitud ?? undefined,
     longitud: preferencias.zona?.longitud ?? undefined,
+    disponibilidad: local?.disponibilidad,
+    objetivos: preferencias.objetivos ?? [],
   };
   await AsyncStorage.multiSet([
     [TOKEN_KEY, tokens.access_token],
@@ -222,12 +230,30 @@ export async function updateUbicacion(
   await actualizarSesion(userId, { ...datos, latitud: datos.latitud, longitud: datos.longitud });
 }
 
-/** Guarda la biografía en el perfil y los deportes en las preferencias de Ms_Users. */
+/**
+ * Guarda la biografía en el perfil, y los deportes y objetivos en las preferencias de Ms_Users.
+ * La disponibilidad queda en el teléfono (ver LOCAL_EXTRAS_KEY).
+ */
 export async function updatePerfilExtra(
   userId: string,
-  datos: { biografia?: string; deportes?: (string | DeporteConNivel)[]; nivelesDeportes?: Record<string, number> }
+  datos: {
+    biografia?: string;
+    deportes?: (string | DeporteConNivel)[];
+    nivelesDeportes?: Record<string, number>;
+    disponibilidad?: string;
+    objetivos?: string[];
+  }
 ): Promise<void> {
   const token = await tokenActual();
+
+  if (datos.disponibilidad !== undefined) {
+    await saveLocalExtras(userId, { disponibilidad: datos.disponibilidad || undefined });
+  }
+
+  const objetivos = datos.objetivos;
+  if (objetivos !== undefined) {
+    await cambiarPreferencias(userId, token, (actuales) => ({ ...actuales, objetivos }));
+  }
 
   if (datos.biografia !== undefined) {
     // PUT /profile reemplaza el perfil completo: se reenvía lo que ya tiene.
@@ -268,6 +294,8 @@ export async function updatePerfilExtra(
   }
 
   await actualizarSesion(userId, { ...(datos.biografia !== undefined ? { biografia: datos.biografia } : {}),
+    ...(datos.disponibilidad !== undefined ? { disponibilidad: datos.disponibilidad || undefined } : {}),
+    ...(objetivos !== undefined ? { objetivos } : {}),
     ...(deportesGuardados ? { deportes: deportesGuardados, nivelesDeportes: nivelesGuardados } : {}) });
 }
 
@@ -284,6 +312,7 @@ export async function refrescarPreferencias(): Promise<Usuario | null> {
     comuna: preferences.zona?.comuna,
     latitud: preferences.zona?.latitud ?? undefined,
     longitud: preferences.zona?.longitud ?? undefined,
+    objetivos: preferences.objetivos ?? [],
   });
   return getSession();
 }

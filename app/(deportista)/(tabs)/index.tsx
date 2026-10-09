@@ -6,7 +6,6 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
@@ -15,10 +14,19 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AthleteCard from '../../../components/AthleteCard';
 import SuggestionFilters from '../../../components/SuggestionFilters';
 import BrandLogo from '../../../components/BrandLogo';
-import ActivityCard from '../../../components/ActivityCard';
-import { useActivities } from '../../../hooks/useActivities';
+import TrainingRow from '../../../components/TrainingRow';
+import {
+  FILTROS_ACTIVIDADES_VACIOS,
+  cargarActividades,
+  filtrarActividades,
+  formatearCuando,
+  useActividades,
+  useEstadoActividades,
+  visualDeporte,
+} from '../../../services/actividades';
 import { Usuario, getSession } from '../../../services/auth';
 import { cargarSugerencias, sugerencias, useMatches } from '../../../services/matchStore';
+import { useNotificaciones } from '../../../services/notificaciones';
 import { Colors, useAppTheme } from '../../../theme/ThemeContext';
 
 export default function HomeScreen() {
@@ -26,8 +34,11 @@ export default function HomeScreen() {
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const insets = useSafeAreaInsets();
 
-  const activities = useActivities(3);
   const estado = useMatches();
+  const { noLeidas } = useNotificaciones();
+  const actividades = useActividades();
+  const cargaActividades = useEstadoActividades();
+  const proximas = filtrarActividades(actividades, FILTROS_ACTIVIDADES_VACIOS).slice(0, 3);
   const recomendados = useMemo(() => sugerencias(estado).slice(0, 5), [estado]);
 
   const [usuario, setUsuario] = useState<Usuario | null>(null);
@@ -37,6 +48,7 @@ export default function HomeScreen() {
     useCallback(() => {
       getSession().then(setUsuario);
       void cargarSugerencias();
+      void cargarActividades();
     }, [])
   );
 
@@ -53,23 +65,39 @@ export default function HomeScreen() {
       <View style={styles.header}>
         <BrandLogo width={200} />
 
-        <TouchableOpacity
-          onPress={() =>
-            router.push('/(deportista)/(tabs)/profile')
-          }
-          style={styles.miniAvatar}
-        >
-          {usuario?.fotoPerfil ? (
-            <Image
-              source={{ uri: usuario.fotoPerfil }}
-              style={styles.miniAvatarImage}
-            />
-          ) : (
-            <Text style={styles.miniAvatarText}>
-              {iniciales}
-            </Text>
-          )}
-        </TouchableOpacity>
+        <View style={styles.headerAcciones}>
+          {/* Campanita: abre la bandeja y muestra cuántos avisos faltan por leer */}
+          <TouchableOpacity
+            onPress={() => router.push('/(deportista)/notificaciones')}
+            style={styles.bell}
+            accessibilityLabel="Notificaciones"
+          >
+            <Ionicons name="notifications-outline" size={17} color={colors.text} />
+            {noLeidas > 0 ? (
+              <View style={styles.bellBadge}>
+                <Text style={styles.bellBadgeText}>{noLeidas > 9 ? '9+' : noLeidas}</Text>
+              </View>
+            ) : null}
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            onPress={() =>
+              router.push('/(deportista)/(tabs)/profile')
+            }
+            style={styles.miniAvatar}
+          >
+            {usuario?.fotoPerfil ? (
+              <Image
+                source={{ uri: usuario.fotoPerfil }}
+                style={styles.miniAvatarImage}
+              />
+            ) : (
+              <Text style={styles.miniAvatarText}>
+                {iniciales}
+              </Text>
+            )}
+          </TouchableOpacity>
+        </View>
       </View>
 
       <Text style={styles.greeting}>
@@ -80,20 +108,28 @@ export default function HomeScreen() {
         ¿Qué deporte quieres practicar hoy?
       </Text>
 
-      {/* Buscador */}
-      <View style={styles.searchBox}>
+      {/* Buscador: abre la pantalla de búsqueda con filtros */}
+      <TouchableOpacity
+        style={styles.searchBox}
+        onPress={() => router.push('/(deportista)/buscar')}
+        activeOpacity={0.7}
+      >
         <Ionicons
           name="search"
           size={16}
           color={colors.textMuted}
         />
 
-        <TextInput
-          placeholder="Buscar deporte, personas o clubes..."
-          placeholderTextColor={colors.textMuted}
-          style={styles.searchInput}
+        <Text style={styles.searchPlaceholder} numberOfLines={1}>
+          Buscar deportistas por nombre, deporte o nivel...
+        </Text>
+
+        <Ionicons
+          name="options-outline"
+          size={16}
+          color={colors.accent}
         />
-      </View>
+      </TouchableOpacity>
 
       {/* Acceso al directorio de clubes */}
       <TouchableOpacity
@@ -176,15 +212,35 @@ export default function HomeScreen() {
         </TouchableOpacity>
       </View>
 
-      {activities.items.map((activity) => <ActivityCard key={activity.id} activity={activity} />)}
-      {activities.error ? <TouchableOpacity onPress={() => activities.sessionExpired ? router.replace('/(auth)/login') : void activities.refresh()}>
-        <Text style={styles.emptyText}>{activities.error}</Text>
-        <Text style={styles.sectionLink}>{activities.sessionExpired ? 'Iniciar sesión' : 'Reintentar'}</Text>
-      </TouchableOpacity> : activities.loading ? <Text style={styles.emptyText}>Cargando actividades…</Text> : activities.items.length === 0 ?
-        <Text style={styles.emptyText}>Aún no hay actividades próximas.</Text> : null}
-      <TouchableOpacity onPress={() => router.push('/(deportista)/create-activity')} style={{ marginTop: 12 }}>
-        <Text style={styles.sectionLink}>+ Crear actividad</Text>
-      </TouchableOpacity>
+      {proximas.length > 0 ? (
+        proximas.map((a) => {
+          const visual = visualDeporte(a.deporte);
+          return (
+            <TouchableOpacity
+              key={a.id}
+              activeOpacity={0.7}
+              onPress={() => router.push({ pathname: '/(deportista)/activity/[id]', params: { id: a.id } })}
+            >
+              <TrainingRow
+                icon={visual.icon}
+                title={a.titulo}
+                time={formatearCuando(a.fecha)}
+                distance={a.comuna || a.lugar}
+                colorBg={visual.colorBg}
+              />
+            </TouchableOpacity>
+          );
+        })
+      ) : cargaActividades.error ? (
+        <TouchableOpacity onPress={() => cargaActividades.sesionExpirada ? router.replace('/(auth)/login') : void cargarActividades()}>
+          <Text style={styles.emptyText}>{cargaActividades.error}</Text>
+          <Text style={styles.sectionLink}>{cargaActividades.sesionExpirada ? 'Iniciar sesión' : 'Reintentar'}</Text>
+        </TouchableOpacity>
+      ) : (
+        <Text style={styles.emptyText}>
+          {cargaActividades.cargando ? 'Cargando actividades…' : 'No hay actividades abiertas por ahora.'}
+        </Text>
+      )}
     </ScrollView>
   );
 }
@@ -207,6 +263,42 @@ const makeStyles = (c: Colors) =>
       alignItems: 'center',
       justifyContent: 'space-between',
       marginBottom: 20,
+    },
+
+    headerAcciones: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+    },
+
+    bell: {
+      width: 34,
+      height: 34,
+      borderRadius: 17,
+      backgroundColor: c.card,
+      borderWidth: 1,
+      borderColor: c.border,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+
+    bellBadge: {
+      position: 'absolute',
+      top: -4,
+      right: -4,
+      minWidth: 16,
+      height: 16,
+      borderRadius: 8,
+      paddingHorizontal: 4,
+      backgroundColor: '#DB2777',
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+
+    bellBadgeText: {
+      color: '#fff',
+      fontSize: 9,
+      fontWeight: '800',
     },
 
     miniAvatar: {
@@ -258,8 +350,8 @@ const makeStyles = (c: Colors) =>
       marginBottom: 14,
     },
 
-    searchInput: {
-      color: c.text,
+    searchPlaceholder: {
+      color: c.textMuted,
       fontSize: 13,
       flex: 1,
     },
