@@ -43,6 +43,10 @@ function loadStore(request, matchingRequest = async () => ({ incoming: [], outgo
         },
       };
       if (name === './deportes') return { nombreDeporte: (code) => code, codigoDeporte: (name) => name.toLowerCase() };
+      if (name === './reputacion') return {
+        calificarDeportista: async () => {}, cargarCalificacionesDadas: async () => ({}),
+        cargarReputacion: async () => ({ promedio: null, cantidad: 0, recibidas: [] }),
+      };
       throw new Error(`Unexpected import: ${name}`);
     },
   });

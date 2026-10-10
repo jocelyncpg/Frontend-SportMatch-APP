@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
-import { router } from 'expo-router';
-import { useEffect, useMemo, useState } from 'react';
+import { router, useFocusEffect } from 'expo-router';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Alert, Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import Avatar from '../../../components/Avatar';
 import BrandLogo from '../../../components/BrandLogo';
@@ -14,6 +14,7 @@ import {
   calificacionDe,
   calificar,
   cancelarSolicitud,
+  cargarCalificaciones,
   cargarMatching,
   rechazarSolicitud,
   useMatches,
@@ -25,6 +26,8 @@ export default function MatchesScreen() {
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
   useMatchingRefresh();
+  // Las estrellas que ya diste se muestran en cada match confirmado.
+  useFocusEffect(useCallback(() => { cargarCalificaciones().catch(() => {}); }, []));
   const estado = useMatches();
   const { solicitudes, solicitudesEnviadas, confirmados, ocupados, matchingError, sesionExpirada } = estado;
   const [tab, setTab] = useState<'solicitudes' | 'enviadas' | 'confirmados'>('solicitudes');
@@ -79,10 +82,14 @@ export default function MatchesScreen() {
     if (persona) abrirChat(persona);
   }
 
-  function handleEnviarCalificacion(estrellas: number, comentario: string) {
+  async function handleEnviarCalificacion(estrellas: number, comentario: string) {
     if (!calificando) return;
-    calificar(calificando.id, estrellas, comentario);
-    setCalificando(null);
+    try {
+      await calificar(calificando.id, estrellas, comentario);
+      setCalificando(null);
+    } catch (e) {
+      Alert.alert('No se pudo calificar', e instanceof Error ? e.message : 'Inténtalo de nuevo.');
+    }
   }
 
   const lista = tab === 'solicitudes' ? solicitudes : tab === 'enviadas' ? solicitudesEnviadas : confirmados;

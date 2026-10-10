@@ -3,12 +3,15 @@ import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Alert, Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import RatingModal from '../../../components/RatingModal';
 import ReportarModal from '../../../components/ReportarModal';
 import {
   NOMBRES_NIVEL,
+  Participante,
   YO,
   cancelarActividad,
   cargarActividad,
+  cargarParticipantes,
   cuposTomados,
   estadoActividad,
   formatearCuando,
@@ -22,6 +25,7 @@ import {
   visualDeporte,
 } from '../../../services/actividades';
 import { Usuario, getSession } from '../../../services/auth';
+import { calificacionDe, calificar, cargarCalificaciones, useMatches } from '../../../services/matchStore';
 import { Colors, useAppTheme } from '../../../theme/ThemeContext';
 
 export default function ActividadDetalleScreen() {
@@ -40,6 +44,9 @@ export default function ActividadDetalleScreen() {
   const [cargando, setCargando] = useState(true);
   const [errorCarga, setErrorCarga] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
+  const [participantes, setParticipantes] = useState<Participante[]>([]);
+  const [calificando, setCalificando] = useState<Participante | null>(null);
+  const estadoMatches = useMatches();
 
   useEffect(() => {
     getSession().then(setUsuario);
@@ -56,6 +63,26 @@ export default function ActividadDetalleScreen() {
     });
     return () => { activo = false; };
   }, [id]));
+
+  // Una vez realizada, quienes estuvieron (organizador y aceptados) pueden calificarse entre sí.
+  const realizada = !!a && estadoActividad(a) === 'vencida' && ['organizador', 'aprobada'].includes(relacionConActividad(a) ?? '');
+  useEffect(() => {
+    if (!realizada) return;
+    let activo = true;
+    cargarParticipantes(id).then((lista) => { if (activo) setParticipantes(lista); }).catch(() => {});
+    cargarCalificaciones().catch(() => {});
+    return () => { activo = false; };
+  }, [id, realizada]);
+
+  async function enviarCalificacion(estrellas: number, comentario: string) {
+    if (!calificando) return;
+    try {
+      await calificar(calificando.id, estrellas, comentario);
+      setCalificando(null);
+    } catch (e) {
+      Alert.alert('No se pudo calificar', e instanceof Error ? e.message : 'Inténtalo de nuevo.');
+    }
+  }
 
   const atras = (
     <TouchableOpacity onPress={() => router.back()} style={[styles.backButton, { top: insets.top + 12 }]}>
@@ -311,6 +338,29 @@ export default function ActividadDetalleScreen() {
           </>
         ) : null}
 
+        {realizada ? (
+          <>
+            <Text style={styles.seccion}>Participantes</Text>
+            {participantes.length === 0 ? <Text style={styles.texto}>Nadie más participó en esta actividad.</Text> : null}
+            {participantes.map((p) => {
+              const mia = calificacionDe(estadoMatches, p.id);
+              return (
+                <View key={p.id} style={styles.postulante}>
+                  <View style={styles.postulanteInfo}>
+                    <Text style={styles.postulanteNombre}>{p.nombre}</Text>
+                    <Text style={styles.postulanteMensaje}>{p.rol === 'organizador' ? 'Organizó' : 'Participó'}</Text>
+                  </View>
+                  <TouchableOpacity style={styles.btnCalificar} onPress={() => setCalificando(p)}
+                    accessibilityLabel={`Calificar a ${p.nombre}`}>
+                    <Ionicons name={mia ? 'star' : 'star-outline'} size={14} color={mia ? '#FACC15' : colors.accent} />
+                    <Text style={styles.btnCalificarTexto}>{mia ? `${mia.estrellas}` : 'Calificar'}</Text>
+                  </TouchableOpacity>
+                </View>
+              );
+            })}
+          </>
+        ) : null}
+
         {miMensaje ? (
           <>
             <Text style={styles.seccion}>Tu mensaje</Text>
@@ -358,6 +408,14 @@ export default function ActividadDetalleScreen() {
           </View>
         </View>
       </Modal>
+
+      <RatingModal
+        visible={calificando !== null}
+        nombre={calificando?.nombre ?? ''}
+        calificacionActual={calificando ? calificacionDe(estadoMatches, calificando.id) : undefined}
+        onEnviar={enviarCalificacion}
+        onCerrar={() => setCalificando(null)}
+      />
 
       {/* Reportar actividad (HU-42) */}
       <ReportarModal
@@ -448,6 +506,11 @@ const makeStyles = (c: Colors) =>
     btnRechazar: { width: 34, height: 34, borderRadius: 17, borderWidth: 1, borderColor: c.danger, alignItems: 'center', justifyContent: 'center' },
     btnAprobar: { width: 34, height: 34, borderRadius: 17, backgroundColor: c.primary, alignItems: 'center', justifyContent: 'center' },
     estadoPost: { color: c.textMuted, fontSize: 11, fontWeight: '700' },
+    btnCalificar: {
+      flexDirection: 'row', alignItems: 'center', gap: 5, borderWidth: 1, borderColor: c.border,
+      borderRadius: 16, paddingHorizontal: 10, paddingVertical: 7,
+    },
+    btnCalificarTexto: { color: c.accent, fontSize: 11.5, fontWeight: '700' },
 
     modalOverlay: { flex: 1, backgroundColor: c.overlay, justifyContent: 'center', padding: 24 },
     modalBox: { backgroundColor: c.card, borderRadius: 18, padding: 20, borderWidth: 1, borderColor: c.border },

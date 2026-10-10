@@ -17,6 +17,7 @@ import {
   calificacionDe,
   calificar,
   cancelarSolicitud,
+  cargarCalificaciones,
   cargarMatching,
   darLike,
   descartar,
@@ -56,7 +57,7 @@ export default function PerfilDeportistaScreen() {
       try {
         const session = await getSession();
         const athlete = matchId ? (await getChat(matchId)).persona : await getAthleteProfile(id);
-        await cargarMatching();
+        await Promise.all([cargarMatching(), cargarCalificaciones().catch(() => {})]);
         const currentSession = await getSession();
         if (!active) return;
         if (currentSession?.id !== session?.id) throw new ApiError('La sesión cambió.', 401, '');
@@ -172,9 +173,13 @@ export default function PerfilDeportistaScreen() {
     ]);
   }
 
-  function handleEnviarCalificacion(estrellas: number, comentario: string) {
-    calificar(p.id, estrellas, comentario);
-    setCalificando(false);
+  async function handleEnviarCalificacion(estrellas: number, comentario: string) {
+    try {
+      await calificar(p.id, estrellas, comentario);
+      setCalificando(false);
+    } catch (e) {
+      Alert.alert('No se pudo calificar', e instanceof Error ? e.message : 'Inténtalo de nuevo.');
+    }
   }
 
   const miNombre = usuario ? `${usuario.nombre} ${usuario.apellidoPaterno}` : 'Yo';

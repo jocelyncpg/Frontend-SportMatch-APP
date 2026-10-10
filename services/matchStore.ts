@@ -3,7 +3,7 @@ import { useSyncExternalStore } from 'react';
 import { ApiError, apiRequest } from './api';
 import { getSession, getToken } from './auth';
 import { codigoDeporte, nombreDeporte } from './deportes';
-import type { CalificacionRecibida } from './reputacion';
+import { calificarDeportista, cargarCalificacionesDadas, cargarReputacion, type CalificacionRecibida } from './reputacion';
 
 export type FiltrosSugerencias = {
   radioKm: 2 | 5 | 10 | null;
@@ -55,13 +55,12 @@ type Estado = {
   filtros: FiltrosSugerencias | null;
   ubicacionDisponible: boolean;
   misDeportes: string[];
-  /**
-   * Calificaciones que TÚ diste a tus matches, por id de persona. SIMULADO: aún no
-   * existe un servicio de reputación, así que viven en memoria y se pierden al cerrar la app.
-   */
+  /** Calificaciones que TÚ diste, por id de persona (Ms_Activities, GET /ratings/given). */
   calificaciones: Record<string, Calificacion>;
-  /** Calificaciones que TÚ recibiste. Vacío hasta que exista el servicio de reputación. */
+  /** Calificaciones que TÚ recibiste (GET /ratings/me), más recientes primero. */
   calificacionesRecibidas: CalificacionRecibida[];
+  /** Promedio que calcula el servidor; null si aún nadie te califica. */
+  promedioRecibido: number | null;
 };
 
 /** Tarjeta pública que devuelve Ms_Users. */
@@ -131,6 +130,7 @@ function estadoInicial(usuarioId: string | null = null): Estado {
     misDeportes: [],
     calificaciones: {},
     calificacionesRecibidas: [],
+    promedioRecibido: null,
   };
 }
 
@@ -379,13 +379,29 @@ export function descartar(id: string) {
   emitir();
 }
 
-/** Califica (o actualiza la calificación) de un match confirmado. Una sola entrada por persona. */
-export function calificar(personaId: string, estrellas: number, comentario?: string) {
+/** Trae tu reputación y las calificaciones que ya diste. */
+export async function cargarCalificaciones(): Promise<void> {
+  const session = await getSession();
+  if (!session) return;
+  const [reputacion, dadas] = await Promise.all([cargarReputacion(), cargarCalificacionesDadas()]);
+  if ((await getSession())?.id !== session.id) return;
+  if (estado.usuarioId !== session.id) estado = estadoInicial(session.id);
+  estado = { ...estado, calificaciones: dadas, calificacionesRecibidas: reputacion.recibidas,
+    promedioRecibido: reputacion.promedio };
+  emitir();
+}
+
+/**
+ * Califica (o actualiza tu calificación) de un deportista con quien hiciste match o compartiste
+ * una actividad ya realizada. Lanza el error del servidor si no está permitido.
+ */
+export async function calificar(personaId: string, estrellas: number, comentario?: string): Promise<void> {
+  await calificarDeportista(personaId, estrellas, comentario);
   estado = {
     ...estado,
     calificaciones: {
       ...estado.calificaciones,
-      [personaId]: { estrellas, comentario: comentario || undefined },
+      [personaId]: { estrellas, comentario: comentario?.trim() || undefined },
     },
   };
   emitir();

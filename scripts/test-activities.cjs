@@ -219,3 +219,53 @@ test('solo quien organiza puede editar o eliminar, y retirarse aún no existe', 
   assert.equal(calls.length, antes);
   assert.match(api.retirarse('act-1').motivo, /todavía no está disponible/);
 });
+
+// ---------- services/reputacion.ts ----------
+function loadReputacion(responder) {
+  const calls = [];
+  const module = { exports: {} };
+  const code = ts.transpileModule(fs.readFileSync(path.join(__dirname, '../services/reputacion.ts'), 'utf8'), {
+    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 },
+  }).outputText;
+  const auth = { token: 'token-a' };
+  vm.runInNewContext(code, { module, exports: module.exports, Date, Error, Math, Object, JSON, Promise,
+    require(name) {
+      if (name === './auth') return { getToken: async () => auth.token };
+      if (name === './api') return { ApiError, apiRequest: async (...args) => { calls.push(args); return responder(...args); } };
+      throw Error(name);
+    },
+  });
+  return { api: module.exports, calls, auth };
+}
+
+test('calificar envía PUT con puntaje y comentario opcional', async () => {
+  const { api, calls } = loadReputacion(async () => ({}));
+  await api.calificarDeportista('ana-id', 4, '  Muy puntual  ');
+  await api.calificarDeportista('ana-id', 5, '   ');
+  assert.equal(calls[0][0], '/ratings/ana-id');
+  assert.equal(calls[0][1].method, 'PUT');
+  assert.equal(calls[0][1].token, 'token-a');
+  assert.deepEqual(plano(calls[0][1].body), { score: 4, comment: 'Muy puntual' });
+  assert.deepEqual(plano(calls[1][1].body), { score: 5, comment: null });
+});
+
+test('la reputación muestra promedio, quién calificó y cuándo', async () => {
+  const hace = (dias) => new Date(Date.now() - dias * DIA).toISOString();
+  const { api } = loadReputacion(async () => ({ average: 4.5, count: 2, items: [
+    { id: 'r1', score: 4, comment: '', updated_at: hace(0), rater: persona('b', 'Beto') },
+    { id: 'r2', score: 5, comment: 'Excelente', updated_at: hace(10), rater: null },
+  ] }));
+  const r = plano(await api.cargarReputacion());
+  assert.equal(r.promedio, 4.5);
+  assert.equal(r.cantidad, 2);
+  assert.deepEqual(r.recibidas.map((c) => [c.de, c.estrellas, c.comentario ?? null, c.cuando]),
+    [['Beto T.', 4, null, 'Hoy'], ['Deportista', 5, 'Excelente', 'Hace 1 semana']]);
+});
+
+test('las calificaciones dadas quedan por persona y sin sesión no se llama al servidor', async () => {
+  const { api, calls, auth } = loadReputacion(async () => [{ rated_user_id: 'ana-id', score: 3, comment: 'Bien' }]);
+  assert.deepEqual(plano(await api.cargarCalificacionesDadas()), { 'ana-id': { estrellas: 3, comentario: 'Bien' } });
+  auth.token = null;
+  await assert.rejects(api.calificarDeportista('ana-id', 5), (e) => e.status === 401);
+  assert.equal(calls.length, 1);
+});

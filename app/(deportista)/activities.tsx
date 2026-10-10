@@ -8,6 +8,7 @@ import {
   FILTROS_ACTIVIDADES_VACIOS,
   FiltrosActividades,
   cargarActividades,
+  cargarHistorial,
   comunasDisponibles,
   cuposTomados,
   estadoActividad,
@@ -57,7 +58,8 @@ export default function ActivitiesScreen() {
   const carga = useEstadoActividades();
   const ahora = Date.now();
 
-  useFocusEffect(useCallback(() => { void cargarActividades(); }, []));
+  // Próximas desde el listado; las ya realizadas desde el historial del servidor.
+  useFocusEffect(useCallback(() => { void cargarActividades().then(cargarHistorial); }, []));
 
   const [pestana, setPestana] = useState<Pestana>('explorar');
   const [filtros, setFiltros] = useState<FiltrosActividades>(FILTROS_ACTIVIDADES_VACIOS);
@@ -128,7 +130,7 @@ export default function ActivitiesScreen() {
     );
   };
 
-  const recargar = <RefreshControl refreshing={carga.cargando} onRefresh={() => void cargarActividades()} tintColor={colors.accent} />;
+  const recargar = <RefreshControl refreshing={carga.cargando} onRefresh={() => void cargarActividades().then(cargarHistorial)} tintColor={colors.accent} />;
 
   // Error, sesión vencida o primera carga: reemplaza el mensaje de lista vacía.
   const avisoCarga = carga.error ? (

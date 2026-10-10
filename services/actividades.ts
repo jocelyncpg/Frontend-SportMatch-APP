@@ -63,6 +63,9 @@ export type CambioActividad = 'horario' | 'lugar' | 'cancelada';
 /** Aviso para quien participa (o postuló) cuando el organizador cambia o cancela la actividad (HU-37). */
 export type AvisoActividad = { id: string; actividadId: string; cambio: CambioActividad; titulo: string; detalle: string; ts: number };
 export type EstadoCarga = { cargando: boolean; error: string | null; sesionExpirada: boolean };
+/** Alguien que estuvo en una actividad contigo: quien organiza o un postulante aceptado. */
+export type Participante = { id: string; nombre: string; rol: 'organizador' | 'participante' };
+export type Historial = { total: number; ids: string[]; cargando: boolean; error: string | null };
 
 export const NOMBRES_NIVEL: Record<number, string> = { 1: 'Principiante', 2: 'Básico', 3: 'Intermedio', 4: 'Avanzado', 5: 'Experto' };
 
@@ -240,6 +243,8 @@ type ActividadApi = {
   cancelled_at?: string | null;
 };
 type PaginaApi = { items: ActividadApi[]; next_cursor: string | null };
+type HistorialApi = { count: number; items: (ActividadApi & { role: 'organizer' | 'participant' })[] };
+type ParticipanteApi = DeportistaApi & { role: 'organizer' | 'participant' };
 type EstadoApi = 'pending' | 'accepted' | 'rejected';
 type PostulacionApi = { id: string; activity_id: string; status: EstadoApi; created_at: string; decided_at: string | null };
 type PostulacionRecibidaApi = PostulacionApi & { applicant: DeportistaApi };
@@ -352,6 +357,9 @@ const suscribir = (o: () => void) => { oyentes.add(o); return () => { oyentes.de
 /** Lectura directa del estado actual (sin hook), igual que getEstado en matchStore. */
 export const getActividades = () => actividades;
 const getEstadoCarga = () => estadoCarga;
+/** Actividades ya realizadas donde organizaste o fuiste aceptado (las actividades viven en `actividades`). */
+let historial: Historial = { total: 0, ids: [], cargando: false, error: null };
+const getHistorial = () => historial;
 
 function reiniciarSiCambioLaCuenta(id: string) {
   if (usuarioId === id) return;
@@ -360,6 +368,7 @@ function reiniciarSiCambioLaCuenta(id: string) {
   mensajesPropios = {};
   avisos = [];
   ultimoIntento = null;
+  historial = { total: 0, ids: [], cargando: false, error: null };
 }
 
 function guardar(a: Actividad) {
@@ -388,9 +397,9 @@ export async function cargarActividades(): Promise<void> {
     const lista = await Promise.all(items.map((a) => conRelacion(desdeBackend(a, session.id), token)));
     if (carga !== cargaActual) return;
     if (!await mismaSesion(session.id, token)) { actividades = []; estadoCarga = { ...estadoCarga, cargando: false }; emitir(); return; }
-    // El listado ya no trae las canceladas; las que conocías se conservan para tu historial.
-    const canceladas = actividades.filter((a) => a.cancelada && !lista.some((x) => x.id === a.id));
-    actividades = [...lista, ...canceladas];
+    // El listado solo trae próximas: las canceladas que conocías y las ya realizadas se conservan.
+    const conservadas = actividades.filter((a) => (a.cancelada || historial.ids.includes(a.id)) && !lista.some((x) => x.id === a.id));
+    actividades = [...lista, ...conservadas];
     estadoCarga = { cargando: false, error: null, sesionExpirada: false };
   } catch (e) {
     if (carga !== cargaActual) return;
@@ -584,4 +593,42 @@ export function useActividades(): Actividad[] {
 /** Cargando, error y sesión vencida de la última carga de la lista. */
 export function useEstadoActividades(): EstadoCarga {
   return useSyncExternalStore(suscribir, getEstadoCarga, getEstadoCarga);
+}
+
+// ---------- historial y participantes ----------
+/** Trae las actividades ya realizadas donde organizaste o participaste (más recientes primero). */
+export async function cargarHistorial(): Promise<void> {
+  try {
+    const { session, token } = await credenciales();
+    reiniciarSiCambioLaCuenta(session.id);
+    historial = { ...historial, cargando: true, error: null };
+    emitir();
+    const respuesta = await apiRequest<HistorialApi>('/activities/history?limit=100', { token });
+    if (!await mismaSesion(session.id, token)) return;
+    const realizadas = respuesta.items.map((item) => {
+      const a = desdeBackend(item, session.id);
+      // El servidor ya dice tu rol: como participante fuiste aceptado.
+      return item.role === 'participant' ? { ...a, postulaciones: { [YO]: 'aprobada' as const } } : a;
+    });
+    const ids = realizadas.map((a) => a.id);
+    actividades = [...actividades.filter((a) => !ids.includes(a.id)), ...realizadas];
+    historial = { total: respuesta.count, ids, cargando: false, error: null };
+  } catch (e) {
+    historial = { ...historial, cargando: false, error: mensajeDe(e, 'No se pudo cargar tu historial.') };
+  }
+  emitir();
+}
+
+export function useHistorial(): Historial {
+  return useSyncExternalStore(suscribir, getHistorial, getHistorial);
+}
+
+/** Quién más estuvo en la actividad. Solo responde a quien organizó o fue aceptado. */
+export async function cargarParticipantes(id: string): Promise<Participante[]> {
+  const { token } = await credenciales();
+  const lista = await apiRequest<ParticipanteApi[]>(`/activities/${encodeURIComponent(id)}/participants`, { token });
+  return lista.map((p) => ({
+    id: p.user_id, nombre: `${p.nombre} ${p.apellido_inicial}`,
+    rol: p.role === 'organizer' ? 'organizador' : 'participante',
+  }));
 }

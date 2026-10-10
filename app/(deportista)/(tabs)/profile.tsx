@@ -9,8 +9,9 @@ import { DeporteConNivel, Usuario, getSession, logout, refrescarPreferencias, up
 import { codigoDeporte } from '../../../services/deportes';
 import { OBJETIVOS_DISPONIBLES } from '../../../services/disponibilidad';
 import { GEOAPIFY_API_KEY, solicitarUbicacion } from '../../../services/location';
-import { useMatches } from '../../../services/matchStore';
-import { formatearPromedio, promedioEstrellas } from '../../../services/reputacion';
+import { YO, cargarHistorial, formatearCuando, getActividades, useHistorial, visualDeporte } from '../../../services/actividades';
+import { cargarCalificaciones, useMatches } from '../../../services/matchStore';
+import { formatearPromedio } from '../../../services/reputacion';
 import { Colors, Mode, useAppTheme } from '../../../theme/ThemeContext';
 
 const DEPORTES_DISPONIBLES = ['Running', 'Fútbol', 'Ciclismo', 'Yoga', 'Tenis', 'Natación', 'Trekking'];
@@ -57,11 +58,18 @@ export default function ProfileScreen() {
   const [modalObjVisible, setModalObjVisible] = useState(false);
   const [objTemp, setObjTemp] = useState<string[]>([]);
   const [verTodasResenas, setVerTodasResenas] = useState(false);
+  const [verTodoHistorial, setVerTodoHistorial] = useState(false);
 
-  // Reputación: Conexiones = tus matches confirmados; Valoración = promedio de lo que recibes.
-  const { confirmados, calificacionesRecibidas } = useMatches();
+  // Reputación: Entrenamientos = actividades realizadas; Conexiones = matches confirmados;
+  // Valoración = promedio que calcula el servidor con las calificaciones que recibes.
+  const { confirmados, calificacionesRecibidas, promedioRecibido } = useMatches();
+  const historial = useHistorial();
+  const realizadas = historial.ids
+    .map((id) => getActividades().find((a) => a.id === id))
+    .filter((a): a is NonNullable<typeof a> => a !== undefined);
+  const realizadasVisibles = verTodoHistorial ? realizadas : realizadas.slice(0, 3);
   const conexiones = confirmados.length;
-  const promedio = promedioEstrellas(calificacionesRecibidas);
+  const promedio = promedioRecibido;
   const valoracion = formatearPromedio(promedio);
   const hayEjemplos = calificacionesRecibidas.some((c) => c.simulada);
   const resenasVisibles = verTodasResenas ? calificacionesRecibidas : calificacionesRecibidas.slice(0, 1);
@@ -71,6 +79,9 @@ export default function ProfileScreen() {
     let active = true;
     refrescarPreferencias().then((session) => { if (active) setUsuario(session); })
       .catch((e) => { if (active) avisarError('No se pudo actualizar el perfil', e); });
+    // Reputación e historial vienen de Ms_Activities; si fallan, el resto del perfil sigue igual.
+    cargarCalificaciones().catch(() => {});
+    void cargarHistorial();
     return () => { active = false; };
   }, []));
 
@@ -336,7 +347,7 @@ export default function ProfileScreen() {
 
       <View style={styles.statsRow}>
         <View style={styles.statBox}>
-          <Text style={styles.statNumber}>0</Text>
+          <Text style={styles.statNumber}>{historial.total}</Text>
           <Text style={styles.statLabel}>Entrenamientos</Text>
         </View>
         <View style={styles.statBox}>
@@ -417,11 +428,53 @@ export default function ProfileScreen() {
         </View>
       </View>
 
+      {/* Historial: actividades ya realizadas */}
+      <View style={styles.section}>
+        <View style={styles.sectionHeaderRow}>
+          <Text style={styles.sectionTitle}>Actividades realizadas</Text>
+          {realizadas.length > 3 ? (
+            <TouchableOpacity onPress={() => setVerTodoHistorial((v) => !v)}>
+              <Text style={styles.updateLink}>{verTodoHistorial ? 'Ver menos' : `Ver todas (${historial.total})`}</Text>
+            </TouchableOpacity>
+          ) : null}
+        </View>
+        {realizadasVisibles.length > 0 ? (
+          realizadasVisibles.map((a) => {
+            const visual = visualDeporte(a.deporte);
+            return (
+              <TouchableOpacity
+                key={a.id}
+                style={styles.historialFila}
+                activeOpacity={0.7}
+                onPress={() => router.push({ pathname: '/(deportista)/activity/[id]', params: { id: a.id } })}
+              >
+                <View style={[styles.historialIcono, { backgroundColor: visual.colorBg }]}>
+                  <Text>{visual.icon}</Text>
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.resenaNombre} numberOfLines={1}>{a.titulo}</Text>
+                  <Text style={styles.resenaCuando}>
+                    {formatearCuando(a.fecha)} · {a.organizadorId === YO ? 'Organizaste' : 'Participaste'}
+                  </Text>
+                </View>
+                <Ionicons name="chevron-forward" size={14} color={colors.textMuted} />
+              </TouchableOpacity>
+            );
+          })
+        ) : (
+          <Text style={styles.sectionText}>
+            {historial.cargando ? 'Cargando tu historial…' : historial.error ?? 'Aún no has realizado actividades.'}
+          </Text>
+        )}
+      </View>
+
       {/* Calificaciones recibidas */}
       <View style={styles.section}>
         <View style={styles.sectionHeaderRow}>
           <View style={styles.tituloConTag}>
-            <Text style={styles.sectionTitle}>Calificaciones recibidas</Text>
+            <Text style={styles.sectionTitle}>
+              Calificaciones recibidas{calificacionesRecibidas.length > 0 ? ` · ★ ${valoracion}` : ''}
+            </Text>
             {hayEjemplos ? (
               <View style={styles.ejemploTag}>
                 <Text style={styles.ejemploTagText}>Ejemplo</Text>
@@ -737,6 +790,11 @@ const makeStyles = (c: Colors) =>
 
     ejemploTag: { backgroundColor: c.chip, borderRadius: 8, paddingHorizontal: 8, paddingVertical: 2 },
     ejemploTagText: { color: c.textMuted, fontSize: 9.5, fontWeight: '700' },
+    historialFila: {
+      flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: c.card, borderWidth: 1,
+      borderColor: c.border, borderRadius: 12, padding: 10, marginTop: 8,
+    },
+    historialIcono: { width: 34, height: 34, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
     resenaCard: {
       backgroundColor: c.card, borderWidth: 1, borderColor: c.border,
       borderRadius: 12, padding: 12, marginBottom: 8,
