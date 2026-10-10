@@ -8,7 +8,6 @@ import { codigoDeporte, nombreDeporte } from './deportes';
 // Actividades de Ms_Activities (vía gateway) con la forma que usan las pantallas del sprint 2.
 // Lo que el backend todavía no guarda como campo propio (comuna, nivel mínimo y requisitos)
 // viaja dentro de `location` y `description` en un formato legible; ver aBackend()/desdeBackend().
-// Retirarse aún no tiene endpoint: devuelve un motivo en vez de simularlo.
 
 /** Marca de la sesión actual: las actividades que organizas usan este id como organizadorId. */
 export const YO = 'yo';
@@ -69,7 +68,6 @@ export type Historial = { total: number; ids: string[]; cargando: boolean; error
 
 export const NOMBRES_NIVEL: Record<number, string> = { 1: 'Principiante', 2: 'Básico', 3: 'Intermedio', 4: 'Avanzado', 5: 'Experto' };
 
-const NO_DISPONIBLE = 'Esta opción todavía no está disponible en el servidor.';
 
 const DEPORTE_VISUAL: Record<string, { icon: string; colorBg: string }> = {
   Running: { icon: '🏃', colorBg: '#1B3324' },
@@ -537,9 +535,26 @@ export async function cancelarActividad(id: string, ahora: number = Date.now()):
   return { ok: true };
 }
 
-/** Quita tu postulación o tu cupo (HU-28). Pendiente de endpoint en Ms_Activities. */
-export function retirarse(_id: string): Resultado {
-  return { ok: false, motivo: NO_DISPONIBLE };
+/** Cancela tu postulación; si ya estabas aceptado, tu cupo vuelve a quedar libre (HU-28). */
+export async function retirarse(id: string, ahora: number = Date.now()): Promise<Resultado> {
+  const a = actividades.find((x) => x.id === id);
+  if (!a) return { ok: false, motivo: 'No encontramos esta actividad.' };
+  const relacion = relacionConActividad(a);
+  if (relacion !== 'pendiente' && relacion !== 'aprobada') return { ok: false, motivo: 'No tienes una postulación activa en esta actividad.' };
+  const estado = estadoActividad(a, ahora);
+  if (estado === 'cancelada') return { ok: false, motivo: 'Esta actividad fue cancelada.' };
+  if (estado === 'vencida') return { ok: false, motivo: 'Esta actividad ya finalizó.' };
+  try {
+    const { token } = await credenciales();
+    await apiRequest<void>(`/activities/${encodeURIComponent(id)}/applications/me`, { method: 'DELETE', token });
+    const { [id]: _mensaje, ...resto } = mensajesPropios;
+    mensajesPropios = resto;
+  } catch (e) {
+    void cargarActividad(id);
+    return { ok: false, motivo: mensajeDe(e, 'No se pudo cancelar tu postulación.') };
+  }
+  await cargarActividad(id);
+  return { ok: true };
 }
 
 // ---------- avisos (HU-37) ----------

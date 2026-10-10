@@ -140,8 +140,10 @@ export default function ActividadDetalleScreen() {
       aprobada ? 'Tu cupo quedará libre para otras personas. ¿Quieres retirarte?' : '¿Quieres cancelar tu postulación?',
       [
         { text: 'No', style: 'cancel' },
-        { text: aprobada ? 'Sí, retirarme' : 'Sí, cancelar', style: 'destructive', onPress: () => {
-          const r = retirarse(a.id);
+        { text: aprobada ? 'Sí, retirarme' : 'Sí, cancelar', style: 'destructive', onPress: async () => {
+          setEnviando(true);
+          const r = await retirarse(a.id);
+          setEnviando(false);
           if (!r.ok) Alert.alert('No se pudo completar', r.motivo);
         } },
       ]
@@ -208,7 +210,7 @@ export default function ActividadDetalleScreen() {
             <Ionicons name="checkmark-circle" size={16} color={colors.success} />
             <Text style={styles.pillTexto}>Tu postulación fue aprobada</Text>
           </View>
-          <TouchableOpacity style={styles.pillCancelar} onPress={confirmarRetiro}>
+          <TouchableOpacity style={styles.pillCancelar} onPress={confirmarRetiro} disabled={enviando}>
             <Text style={styles.pillCancelarTexto}>Retirarme</Text>
           </TouchableOpacity>
         </>
@@ -223,7 +225,7 @@ export default function ActividadDetalleScreen() {
             <Ionicons name="time-outline" size={16} color={colors.accent} />
             <Text style={styles.pillTexto}>Postulación enviada</Text>
           </View>
-          <TouchableOpacity style={styles.pillCancelar} onPress={confirmarRetiro}>
+          <TouchableOpacity style={styles.pillCancelar} onPress={confirmarRetiro} disabled={enviando}>
             <Text style={styles.pillCancelarTexto}>Cancelar postulación</Text>
           </TouchableOpacity>
         </>

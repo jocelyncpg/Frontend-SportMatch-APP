@@ -207,7 +207,7 @@ test('editar envía PATCH y eliminar envía DELETE; la cancelada se conserva en 
   assert.equal((await api.editarActividad('act-1', datos())).ok, false);
 });
 
-test('solo quien organiza puede editar o eliminar, y retirarse aún no existe', async () => {
+test('solo quien organiza puede editar o eliminar, y solo quien postuló puede retirarse', async () => {
   const { api, calls } = load(async (ruta) => {
     if (ruta.startsWith('/activities?')) return pagina(actividad());
     return noEncontrada();
@@ -217,7 +217,24 @@ test('solo quien organiza puede editar o eliminar, y retirarse aún no existe', 
   assert.match((await api.editarActividad('act-1', datos())).motivo, /Solo quien organiza/);
   assert.match((await api.cancelarActividad('act-1')).motivo, /Solo quien organiza/);
   assert.equal(calls.length, antes);
-  assert.match(api.retirarse('act-1').motivo, /todavía no está disponible/);
+  assert.match((await api.retirarse('act-1')).motivo, /No tienes una postulación activa/);
+  assert.equal(calls.length, antes);
+});
+
+test('cancelar postulación envía DELETE y deja de figurar como postulado', async () => {
+  let postulado = true;
+  const { api, calls } = load(async (ruta, opciones = {}) => {
+    if (ruta.startsWith('/activities?')) return pagina(actividad());
+    if (ruta === '/activities/act-1/applications/me' && opciones.method === 'DELETE') { postulado = false; return undefined; }
+    if (ruta === '/activities/act-1/applications/me') return postulado ? { id: 'p', status: 'accepted' } : noEncontrada();
+    if (ruta === '/activities/act-1') return actividad();
+    throw Error(ruta);
+  });
+  await api.cargarActividades();
+  assert.equal(api.relacionConActividad(api.getActividades()[0]), 'aprobada');
+  assert.deepEqual(plano(await api.retirarse('act-1')), { ok: true });
+  assert.ok(calls.some(([ruta, o]) => ruta === '/activities/act-1/applications/me' && o && o.method === 'DELETE'));
+  assert.equal(api.relacionConActividad(api.getActividades()[0]), null);
 });
 
 // ---------- services/reputacion.ts ----------
