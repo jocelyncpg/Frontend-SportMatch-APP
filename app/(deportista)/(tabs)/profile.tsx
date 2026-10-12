@@ -2,7 +2,8 @@ import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { router, useFocusEffect } from 'expo-router';
 import { Fragment, useCallback, useMemo, useState } from 'react';
-import { Alert, Image, Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Alert, Image, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import MapView, { Marker, UrlTile } from 'react-native-maps';
 import ComunaPicker from '../../../components/ComunaPicker';
 import { ApiError } from '../../../services/api';
 import { DeporteConNivel, Usuario, getSession, logout, refrescarPreferencias, updateFotoPerfil, updatePerfilExtra, updateUbicacion } from '../../../services/auth';
@@ -11,6 +12,7 @@ import { OBJETIVOS_DISPONIBLES } from '../../../services/disponibilidad';
 import { GEOAPIFY_API_KEY, solicitarUbicacion } from '../../../services/location';
 import { YO, cargarHistorial, formatearCuando, getActividades, useHistorial, visualDeporte } from '../../../services/actividades';
 import { cargarCalificaciones, useMatches } from '../../../services/matchStore';
+import { PLAN_ACTUAL_DEMO, nombreDelPlan } from '../../../services/planes';
 import { formatearPromedio } from '../../../services/reputacion';
 import { Colors, Mode, useAppTheme } from '../../../theme/ThemeContext';
 
@@ -44,7 +46,8 @@ export default function ProfileScreen() {
   const [usuario, setUsuario] = useState<Usuario | null>(null);
   const [pickerVisible, setPickerVisible] = useState(false);
   const [pidiendoUbicacion, setPidiendoUbicacion] = useState(false);
-  const [mapaError, setMapaError] = useState(false);
+  // Mientras el dedo mueve el mapa, la pantalla no debe hacer scroll al mismo tiempo.
+  const [scrollActivo, setScrollActivo] = useState(true);
 
   const [modalBioVisible, setModalBioVisible] = useState(false);
   const [bioTemp, setBioTemp] = useState('');
@@ -151,7 +154,6 @@ export default function ProfileScreen() {
   async function handleActivarUbicacion() {
     if (!usuario || pidiendoUbicacion) return;
     setPidiendoUbicacion(true);
-    setMapaError(false);
     try {
       const resultado = await solicitarUbicacion();
       if (resultado.ok && resultado.ubicacion) {
@@ -186,7 +188,6 @@ export default function ProfileScreen() {
       return;
     }
     setUsuario({ ...usuario, comuna, latitud: undefined, longitud: undefined });
-    setMapaError(false);
     setPickerVisible(false);
   }
 
@@ -319,11 +320,10 @@ export default function ProfileScreen() {
     : usuario?.comuna
       ? usuario.latitud && usuario.longitud ? `${usuario.comuna} · GPS` : usuario.comuna
       : '';
-  // Mapa estático: solo si hay GPS guardado (elegir una comuna de la lista descarta las coordenadas).
-  const mapaUri =
-    usuario?.latitud && usuario?.longitud
-      ? `https://maps.geoapify.com/v1/staticmap?style=osm-bright&width=400&height=180&center=lonlat:${usuario.longitud},${usuario.latitud}&zoom=15&marker=lonlat:${usuario.longitud},${usuario.latitud};color:%23ff0000;size:large&apiKey=${GEOAPIFY_API_KEY}`
-      : null;
+  // Mapa interactivo: solo si hay GPS guardado (elegir una comuna de la lista descarta las coordenadas).
+  const tieneMapa = !!(usuario?.latitud && usuario?.longitud);
+  // Teselas de Geoapify (mismo proveedor y misma API key de antes, ahora en un mapa que se mueve y hace zoom).
+  const teselasUrl = `https://maps.geoapify.com/v1/tile/osm-bright/{z}/{x}/{y}.png?apiKey=${GEOAPIFY_API_KEY}`;
   const filasInfo: { key: string; icono: keyof typeof Ionicons.glyphMap; titulo: string; valor: string; onPress: () => void }[] = [
     { key: 'ubicacion', icono: 'location-outline', titulo: 'Ubicación', valor: textoUbicacion, onPress: abrirOpcionesUbicacion },
     { key: 'disponibilidad', icono: 'time-outline', titulo: 'Disponibilidad', valor: dispActual, onPress: abrirEditorDisponibilidad },
@@ -331,7 +331,7 @@ export default function ProfileScreen() {
   ];
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+    <ScrollView style={styles.container} contentContainerStyle={styles.content} scrollEnabled={scrollActivo}>
       <View style={styles.header}>
         <TouchableOpacity onPress={handleChangePhoto} style={styles.avatarWrapper}>
           <View style={styles.avatarInner}>
@@ -421,11 +421,31 @@ export default function ProfileScreen() {
               </TouchableOpacity>
 
               {/* El mapa va pegado a la fila de Ubicación */}
-              {f.key === 'ubicacion' && mapaUri && !mapaError ? (
-                <Image source={{ uri: mapaUri }} style={styles.mapImage} onError={() => setMapaError(true)} />
-              ) : null}
-              {f.key === 'ubicacion' && mapaUri && mapaError ? (
-                <Text style={styles.mapaErrorTexto}>No se pudo cargar el mapa. Revisa tu conexión.</Text>
+              {f.key === 'ubicacion' && tieneMapa && usuario?.latitud && usuario?.longitud ? (
+                <View style={styles.mapWrap}>
+                  <MapView
+                    // Cambia de key al detectar otra ubicación para que el mapa se vuelva a centrar.
+                    key={`${usuario.latitud},${usuario.longitud}`}
+                    style={styles.mapa}
+                    initialRegion={{
+                      latitude: usuario.latitud,
+                      longitude: usuario.longitud,
+                      latitudeDelta: 0.012,
+                      longitudeDelta: 0.012,
+                    }}
+                    // Android: se oculta el mapa base de Google para mostrar solo las teselas de Geoapify.
+                    mapType={Platform.OS === 'android' ? 'none' : 'standard'}
+                    rotateEnabled={false}
+                    pitchEnabled={false}
+                    toolbarEnabled={false}
+                    onPanDrag={() => setScrollActivo(false)}
+                    onRegionChangeComplete={() => setScrollActivo(true)}
+                  >
+                    <UrlTile urlTemplate={teselasUrl} maximumZ={19} shouldReplaceMapContent />
+                    <Marker coordinate={{ latitude: usuario.latitud, longitude: usuario.longitud }} title="Tu ubicación" />
+                  </MapView>
+                  <Text style={styles.mapaCredito}>© Geoapify © OpenStreetMap</Text>
+                </View>
               ) : null}
             </Fragment>
           ))}
@@ -516,6 +536,23 @@ export default function ProfileScreen() {
         ) : (
           <Text style={styles.sectionText}>Todavía no has recibido calificaciones.</Text>
         )}
+      </View>
+
+      {/* Suscripción */}
+      <View style={styles.section}>
+        <Text style={[styles.sectionTitle, { marginBottom: 8 }]}>Suscripción</Text>
+        <View style={styles.infoCard}>
+          <TouchableOpacity style={styles.infoFila} onPress={() => router.push('/(deportista)/planes')}>
+            <View style={styles.infoIcono}>
+              <Ionicons name="pricetags-outline" size={16} color={colors.accent} />
+            </View>
+            <View style={styles.infoTextos}>
+              <Text style={styles.infoTitulo}>Planes y beneficios</Text>
+              <Text numberOfLines={1} style={styles.infoValor}>Tu plan: {nombreDelPlan(PLAN_ACTUAL_DEMO)}</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* Apariencia */}
@@ -784,8 +821,12 @@ const makeStyles = (c: Colors) =>
     infoCard: { backgroundColor: c.card, borderWidth: 1, borderColor: c.border, borderRadius: 14, overflow: 'hidden' },
     infoFila: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12, paddingHorizontal: 14 },
     infoFilaBorde: { borderTopWidth: 1, borderTopColor: c.border },
-    mapImage: { width: '100%', height: 130, backgroundColor: c.inputBg },
-    mapaErrorTexto: { color: c.textMuted, fontSize: 11.5, paddingHorizontal: 14, paddingBottom: 12 },
+    mapWrap: { width: '100%', height: 200, backgroundColor: c.inputBg },
+    mapa: { width: '100%', height: '100%' },
+    mapaCredito: {
+      position: 'absolute', bottom: 4, right: 6, fontSize: 9, color: '#374151',
+      backgroundColor: 'rgba(255,255,255,0.75)', paddingHorizontal: 4, borderRadius: 3,
+    },
     infoIcono: { width: 30, height: 30, borderRadius: 9, backgroundColor: c.chip, alignItems: 'center', justifyContent: 'center' },
     infoTextos: { flex: 1 },
     infoTitulo: { color: c.text, fontSize: 12.5, fontWeight: '700' },
