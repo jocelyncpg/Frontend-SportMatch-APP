@@ -1,4 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -17,6 +18,7 @@ export default function ClubHomeScreen() {
   const { colors } = useAppTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const insets = useSafeAreaInsets();
+  const router = useRouter();
 
   const [tab, setTab] = useState<'postulantes' | 'confirmados'>('postulantes');
   const [postulantes, setPostulantes] = useState(POSTULANTES_INICIALES);
@@ -69,6 +71,22 @@ export default function ClubHomeScreen() {
       </View>
 
       <ScrollView contentContainerStyle={styles.content}>
+        {/* HU-39: acceso al catálogo de planes (versión club) */}
+        <TouchableOpacity
+          style={styles.planesCard}
+          activeOpacity={0.8}
+          onPress={() => router.push('/(club)/planes' as never)}
+        >
+          <View style={styles.planesIcon}>
+            <Ionicons name="ribbon-outline" size={18} color={colors.accent} />
+          </View>
+          <View style={styles.planesInfo}>
+            <Text style={styles.planesTitle}>Planes y beneficios</Text>
+            <Text style={styles.planesSub}>Conoce lo que incluye el plan Club</Text>
+          </View>
+          <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
+        </TouchableOpacity>
+
         <Text style={styles.sectionTitle}>Mi convocatoria</Text>
 
         {convocatoria ? (
@@ -185,6 +203,11 @@ const makeStyles = (c: Colors) =>
     topbar: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, marginBottom: 20 },
     clubBadge: { width: 34, height: 34, borderRadius: 17, backgroundColor: c.primary, alignItems: 'center', justifyContent: 'center' },
     content: { paddingHorizontal: 20, paddingBottom: 30 },
+    planesCard: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: c.card, borderWidth: 1, borderColor: c.border, borderRadius: 14, padding: 12, marginBottom: 22 },
+    planesIcon: { width: 36, height: 36, borderRadius: 10, backgroundColor: c.chip, alignItems: 'center', justifyContent: 'center' },
+    planesInfo: { flex: 1 },
+    planesTitle: { color: c.text, fontSize: 13, fontWeight: '700' },
+    planesSub: { color: c.textMuted, fontSize: 10.5, marginTop: 2 },
     sectionTitle: { color: c.text, fontSize: 14, fontWeight: '700', marginBottom: 10 },
     convocatoriaCard: { backgroundColor: c.card, borderWidth: 1, borderColor: c.border, borderRadius: 16, padding: 16, marginBottom: 24 },
     convocatoriaHeader: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 8 },

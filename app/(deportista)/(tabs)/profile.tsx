@@ -10,6 +10,7 @@ import { DeporteConNivel, Usuario, getSession, logout, updateFotoPerfil, updateP
 import { OBJETIVOS_DISPONIBLES } from '../../../services/disponibilidad';
 import { GEOAPIFY_API_KEY, solicitarUbicacion } from '../../../services/location';
 import { useMatches } from '../../../services/matchStore';
+import { PLAN_ACTUAL_DEMO, nombreDelPlan } from '../../../services/planes';
 import { formatearPromedio, promedioEstrellas } from '../../../services/reputacion';
 import { Colors, Mode, useAppTheme } from '../../../theme/ThemeContext';
 
@@ -464,6 +465,23 @@ export default function ProfileScreen() {
         ) : (
           <Text style={styles.sectionText}>Todavía no has recibido calificaciones.</Text>
         )}
+      </View>
+
+      {/* Suscripción */}
+      <View style={styles.section}>
+        <Text style={[styles.sectionTitle, { marginBottom: 8 }]}>Suscripción</Text>
+        <View style={styles.infoCard}>
+          <TouchableOpacity style={styles.infoFila} onPress={() => router.push('/(deportista)/planes')}>
+            <View style={styles.infoIcono}>
+              <Ionicons name="pricetags-outline" size={16} color={colors.accent} />
+            </View>
+            <View style={styles.infoTextos}>
+              <Text style={styles.infoTitulo}>Planes y beneficios</Text>
+              <Text numberOfLines={1} style={styles.infoValor}>Tu plan: {nombreDelPlan(PLAN_ACTUAL_DEMO)}</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* Apariencia */}
