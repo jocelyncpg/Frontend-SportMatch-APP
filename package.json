@@ -10,7 +10,9 @@
     "web": "expo start --web",
     "lint": "expo lint",
     "test:discovery": "node --test scripts/test-discovery.cjs",
-    "test:activities": "node --test scripts/test-activities.cjs"
+    "test:activities": "node --test scripts/test-activities.cjs",
+    "test:notifications": "node --test scripts/test-notifications.cjs",
+    "test:reports": "node --test scripts/test-reports.cjs"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.3",
@@ -22,6 +24,7 @@
     "expo": "~54.0.36",
     "expo-constants": "~18.0.13",
     "expo-crypto": "~15.0.9",
+    "expo-device": "~8.0.10",
     "expo-font": "~14.0.12",
     "expo-haptics": "~15.0.8",
     "expo-image": "~3.0.11",
@@ -29,6 +32,7 @@
     "expo-linear-gradient": "~15.0.8",
     "expo-linking": "~8.0.12",
     "expo-location": "~19.0.8",
+    "expo-notifications": "^0.32.17",
     "expo-router": "~6.0.24",
     "expo-splash-screen": "~31.0.13",
     "expo-status-bar": "~3.0.9",
@@ -48,9 +52,9 @@
   },
   "devDependencies": {
     "@types/react": "~19.1.0",
-    "typescript": "~5.9.2",
     "eslint": "^9.25.0",
-    "eslint-config-expo": "~10.0.0"
+    "eslint-config-expo": "~10.0.0",
+    "typescript": "~5.9.2"
   },
   "private": true
 }

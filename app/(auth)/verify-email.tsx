@@ -3,7 +3,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 import { KeyboardAvoidingView, Platform, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import BrandLogo from '../../components/BrandLogo';
-import { resendVerificationCode, verifyEmail } from '../../services/auth';
+import { inicioSegunRol, resendVerificationCode, verifyEmail } from '../../services/auth';
 import { Colors, useAppTheme } from '../../theme/ThemeContext';
 
 // El backend no reenvía un código antes de 60 s.
@@ -36,8 +36,8 @@ export default function VerifyEmailScreen() {
     }
     setEnviando(true);
     try {
-      await verifyEmail(email, codigo);
-      router.replace('/(deportista)/(tabs)');
+      const usuario = await verifyEmail(email, codigo);
+      router.replace(inicioSegunRol(usuario));
     } catch (e: any) {
       setError(e.message);
     } finally {

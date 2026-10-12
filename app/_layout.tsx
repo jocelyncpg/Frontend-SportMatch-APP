@@ -2,8 +2,10 @@ import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import 'react-native-reanimated';
 import { AppThemeProvider, useAppTheme } from '../theme/ThemeContext';
+import { useNotifications } from '../hooks/useNotifications';
 
 function RootStack() {
+  useNotifications();
   const { colors, isDark } = useAppTheme();
   return (
     <>

@@ -211,7 +211,7 @@ export function validarActividad(d: DatosActividad, ahora: number = Date.now(), 
   if (!d.deporte) return { ok: false, motivo: 'Elige un deporte.' };
   if (d.lugar.trim().length < 3) return { ok: false, motivo: 'Indica el lugar donde será (al menos 3 letras).' };
   if (!d.comuna.trim()) return { ok: false, motivo: 'Indica la comuna.' };
-  if (!Number.isInteger(d.cupos) || d.cupos < 2 || d.cupos > 50) return { ok: false, motivo: 'Los cupos deben ser un número entre 2 y 50.' };
+  if (!Number.isInteger(d.cupos) || d.cupos < 1 || d.cupos > 50) return { ok: false, motivo: 'Los cupos deben ser un número entre 1 y 50.' };
   if (d.cupos < minCupos) return { ok: false, motivo: `Ya hay ${minCupos} personas aprobadas; no puedes dejar menos cupos.` };
   if (d.nivelMinimo !== null && !NOMBRES_NIVEL[d.nivelMinimo]) return { ok: false, motivo: 'El nivel mínimo no es válido.' };
   if (d.fecha <= ahora) return { ok: false, motivo: 'La fecha y la hora deben ser futuras.' };

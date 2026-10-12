@@ -1,7 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useEffect, useMemo, useState } from 'react';
 import { Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import { MAX_DETALLE, MOTIVOS, TITULO_TIPO, reportar, type TipoReporte } from '../services/reportes';
+import { descartar } from '../services/matchStore';
+import { MAX_DETALLE, MOTIVOS, TITULO_TIPO, bloquear, reportar, useBloqueados, type TipoReporte } from '../services/reportes';
 import { Colors, useAppTheme } from '../theme/ThemeContext';
 
 type Props = {
@@ -21,6 +22,9 @@ export default function ReportarModal({ visible, onClose, tipo, objetivoId, obje
   const [detalle, setDetalle] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [enviado, setEnviado] = useState(false);
+  const [enviando, setEnviando] = useState(false);
+  const bloqueados = useBloqueados();
+  const yaBloqueado = tipo === 'usuario' && bloqueados.includes(objetivoId);
 
   // Cada vez que se abre, el formulario parte limpio.
   useEffect(() => {
@@ -29,21 +33,33 @@ export default function ReportarModal({ visible, onClose, tipo, objetivoId, obje
       setDetalle('');
       setError(null);
       setEnviado(false);
+      setEnviando(false);
     }
   }, [visible]);
 
-  function enviar() {
+  async function enviar() {
     if (!motivo) {
       setError('Elige un motivo para el reporte.');
       return;
     }
-    const r = reportar(tipo, objetivoId, objetivoNombre, motivo, detalle);
+    if (enviando) return;
+    setEnviando(true);
+    const r = await reportar(tipo, objetivoId, objetivoNombre, motivo, detalle);
+    setEnviando(false);
     if (!r.ok) {
       setError(r.motivo);
       return;
     }
     setError(null);
     setEnviado(true);
+  }
+
+  async function bloquearPersona() {
+    setEnviando(true);
+    const r = await bloquear(objetivoId);
+    setEnviando(false);
+    if (r.ok) descartar(objetivoId);
+    else setError(r.motivo);
   }
 
   return (
@@ -57,6 +73,18 @@ export default function ReportarModal({ visible, onClose, tipo, objetivoId, obje
               <Text style={styles.hint}>
                 Recibimos tu reporte sobre {objetivoNombre}. Nuestro equipo lo revisará y tomará las medidas que correspondan.
               </Text>
+              {tipo === 'usuario' ? (
+                yaBloqueado ? (
+                  <Text style={styles.hint}>Bloqueaste a esta persona: ya no se verán en Descubrir.</Text>
+                ) : (
+                  <TouchableOpacity style={styles.btnBloquear} onPress={bloquearPersona} disabled={enviando}
+                    accessibilityLabel={`Bloquear a ${objetivoNombre}`}>
+                    <Ionicons name="ban-outline" size={16} color={colors.danger} />
+                    <Text style={styles.btnBloquearTexto}>Bloquear también</Text>
+                  </TouchableOpacity>
+                )
+              ) : null}
+              {error ? <Text style={styles.error}>{error}</Text> : null}
               <TouchableOpacity style={styles.btnPrimario} onPress={onClose}>
                 <Text style={styles.btnPrimarioTexto}>Cerrar</Text>
               </TouchableOpacity>
@@ -109,8 +137,8 @@ export default function ReportarModal({ visible, onClose, tipo, objetivoId, obje
                 <TouchableOpacity style={styles.btnCancelar} onPress={onClose}>
                   <Text style={styles.btnCancelarTexto}>Cancelar</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={[styles.btnPrimario, styles.btnFlex, !motivo && styles.btnOff]} onPress={enviar}>
-                  <Text style={styles.btnPrimarioTexto}>Enviar reporte</Text>
+                <TouchableOpacity style={[styles.btnPrimario, styles.btnFlex, (!motivo || enviando) && styles.btnOff]} onPress={enviar} disabled={enviando}>
+                  <Text style={styles.btnPrimarioTexto}>{enviando ? 'Enviando…' : 'Enviar reporte'}</Text>
                 </TouchableOpacity>
               </View>
             </>
@@ -149,4 +177,9 @@ const makeStyles = (c: Colors) =>
     btnFlex: { flex: 1 },
     btnOff: { opacity: 0.5 },
     btnPrimarioTexto: { color: '#fff', fontSize: 13, fontWeight: '700' },
+    btnBloquear: {
+      flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 11,
+      borderRadius: 12, borderWidth: 1, borderColor: c.danger, marginBottom: 10,
+    },
+    btnBloquearTexto: { color: c.danger, fontSize: 13, fontWeight: '700' },
   });

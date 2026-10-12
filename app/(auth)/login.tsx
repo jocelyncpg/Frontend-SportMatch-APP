@@ -3,7 +3,7 @@ import { router } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { KeyboardAvoidingView, Platform, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import BrandLogo from '../../components/BrandLogo';
-import { EmailNotVerifiedError, login } from '../../services/auth';
+import { EmailNotVerifiedError, inicioSegunRol, login } from '../../services/auth';
 import { Colors, useAppTheme } from '../../theme/ThemeContext';
 
 export default function LoginScreen() {
@@ -24,8 +24,8 @@ export default function LoginScreen() {
     }
     setEnviando(true);
     try {
-      await login(email.trim(), password);
-      router.replace('/(deportista)/(tabs)');
+      const usuario = await login(email.trim(), password);
+      router.replace(inicioSegunRol(usuario));
     } catch (e: any) {
       if (e instanceof EmailNotVerifiedError) {
         router.push({ pathname: '/(auth)/verify-email', params: { email: e.email } });

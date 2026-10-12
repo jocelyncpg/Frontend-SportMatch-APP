@@ -86,8 +86,12 @@ export default function ProfileScreen() {
   }, []));
 
   async function handleLogout() {
-    await logout();
-    router.replace('/(auth)/login');
+    try {
+      await logout();
+      router.replace('/(auth)/login');
+    } catch {
+      Alert.alert('No se pudo cerrar sesión', 'Necesitamos conexión para desvincular las alertas de este celular. Revisa tu conexión y vuelve a intentarlo.');
+    }
   }
 
   async function elegirDeGaleria() {

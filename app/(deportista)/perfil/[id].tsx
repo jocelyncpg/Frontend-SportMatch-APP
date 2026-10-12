@@ -25,6 +25,7 @@ import {
   rechazarSolicitud,
   useMatches,
 } from '../../../services/matchStore';
+import { bloquear, cargarBloqueados, desbloquear, useBloqueados } from '../../../services/reportes';
 import { Colors, useAppTheme } from '../../../theme/ThemeContext';
 
 export default function PerfilDeportistaScreen() {
@@ -32,6 +33,7 @@ export default function PerfilDeportistaScreen() {
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const insets = useSafeAreaInsets();
   const estado = useMatches();
+  const bloqueados = useBloqueados();
 
   // Solo el id viaja en la ruta; nombre, bio y foto los entrega el servidor (no se confía en la URL).
   const { id, matchId } = useLocalSearchParams<{ id: string; matchId?: string }>();
@@ -57,7 +59,7 @@ export default function PerfilDeportistaScreen() {
       try {
         const session = await getSession();
         const athlete = matchId ? (await getChat(matchId)).persona : await getAthleteProfile(id);
-        await Promise.all([cargarMatching(), cargarCalificaciones().catch(() => {})]);
+        await Promise.all([cargarMatching(), cargarCalificaciones().catch(() => {}), cargarBloqueados().catch(() => {})]);
         const currentSession = await getSession();
         if (!active) return;
         if (currentSession?.id !== session?.id) throw new ApiError('La sesión cambió.', 401, '');
@@ -183,6 +185,29 @@ export default function PerfilDeportistaScreen() {
   }
 
   const miNombre = usuario ? `${usuario.nombre} ${usuario.apellidoPaterno}` : 'Yo';
+  const bloqueado = bloqueados.includes(p.id);
+
+  function confirmarBloqueo() {
+    const nombre = p.name.split(' ')[0];
+    Alert.alert(
+      bloqueado ? `Desbloquear a ${nombre}` : `Bloquear a ${nombre}`,
+      bloqueado
+        ? 'Volverán a aparecer en Descubrir para ambos.'
+        : 'Ninguno de los dos verá al otro en Descubrir. Sus matches, chats y actividades siguen igual.',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: bloqueado ? 'Desbloquear' : 'Bloquear',
+          style: bloqueado ? 'default' : 'destructive',
+          onPress: async () => {
+            const r = bloqueado ? await desbloquear(p.id) : await bloquear(p.id);
+            if (!r.ok) Alert.alert('No se pudo completar', r.motivo);
+            else if (!bloqueado) descartar(p.id);
+          },
+        },
+      ]
+    );
+  }
 
   return (
     <View style={[styles.container, { paddingTop: insets.top + 12 }]}>
@@ -231,6 +256,15 @@ export default function PerfilDeportistaScreen() {
           <Text style={styles.bio}>
             {p.bio || 'Todavía no agregó una biografía.'}
           </Text>
+
+          <TouchableOpacity style={styles.bloquear} onPress={confirmarBloqueo}
+            accessibilityLabel={bloqueado ? `Desbloquear a ${p.name}` : `Bloquear a ${p.name}`}>
+            <Ionicons name={bloqueado ? 'lock-open-outline' : 'ban-outline'} size={15}
+              color={bloqueado ? colors.textMuted : colors.danger} />
+            <Text style={[styles.bloquearTexto, bloqueado && { color: colors.textMuted }]}>
+              {bloqueado ? 'Bloqueado · Desbloquear' : `Bloquear a ${p.name.split(' ')[0]}`}
+            </Text>
+          </TouchableOpacity>
         </View>
       </ScrollView>
 
@@ -353,6 +387,8 @@ const makeStyles = (c: Colors) =>
     tagText: { color: c.accent, fontSize: 12, fontWeight: '700' },
     sectionTitle: { color: c.text, fontSize: 14, fontWeight: '700', marginBottom: 8 },
     bio: { color: c.textMuted, fontSize: 13.5, lineHeight: 20 },
+    bloquear: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 22, alignSelf: 'flex-start', paddingVertical: 6 },
+    bloquearTexto: { color: c.danger, fontSize: 12.5, fontWeight: '700' },
     actions: {
       flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 14,
       paddingTop: 16, paddingHorizontal: 20, borderTopWidth: 1, borderColor: c.border,

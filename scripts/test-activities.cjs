@@ -286,3 +286,11 @@ test('las calificaciones dadas quedan por persona y sin sesión no se llama al s
   await assert.rejects(api.calificarDeportista('ana-id', 5), (e) => e.status === 401);
   assert.equal(calls.length, 1);
 });
+
+test('los cupos van de 1 a 50, sin contar a quien organiza', () => {
+  const { api } = load();
+  assert.equal(api.validarActividad(datos({ cupos: 1 })).ok, true);
+  assert.equal(api.validarActividad(datos({ cupos: 50 })).ok, true);
+  assert.equal(api.validarActividad(datos({ cupos: 0 })).ok, false);
+  assert.equal(api.validarActividad(datos({ cupos: 51 })).ok, false);
+});

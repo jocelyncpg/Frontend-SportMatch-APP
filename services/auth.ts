@@ -31,6 +31,8 @@ export type Usuario = {
   /** Texto libre: "Lunes y miércoles en la tarde, sábados en la mañana". */
   disponibilidad?: string;
   objetivos?: string[];
+  /** Rol de Ms_Users: 'admin' entra al panel de moderación; el resto, a la app del deportista. */
+  rol?: string;
 };
 
 type RegisterData = {
@@ -115,6 +117,7 @@ async function iniciarSesion(tokens: TokenResponse): Promise<Usuario> {
     longitud: preferencias.zona?.longitud ?? undefined,
     disponibilidad: local?.disponibilidad,
     objetivos: preferencias.objetivos ?? [],
+    rol: tokens.user.role,
   };
   await AsyncStorage.multiSet([
     [TOKEN_KEY, tokens.access_token],
@@ -167,8 +170,17 @@ export async function login(email: string, password: string): Promise<Usuario> {
   }
 }
 
+/** Pantalla de inicio según el rol de la cuenta. */
+export function inicioSegunRol(usuario: Usuario): '/(admin)/home' | '/(deportista)/(tabs)' {
+  return usuario.rol === 'admin' ? '/(admin)/home' : '/(deportista)/(tabs)';
+}
+
 export async function logout(): Promise<void> {
+  const { desactivarPush } = await import('./push');
+  await desactivarPush();
   await AsyncStorage.multiRemove([SESSION_KEY, TOKEN_KEY]);
+  const { reiniciarNotificaciones } = await import('./notificaciones');
+  reiniciarNotificaciones();
 }
 
 export async function getSession(): Promise<Usuario | null> {

@@ -4,6 +4,7 @@ type RequestOptions = {
   method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
   body?: unknown;
   token?: string | null;
+  timeoutMs?: number;
 };
 
 /** Error del backend con su código HTTP y el `detail` original, para decidir qué hacer. */
@@ -43,7 +44,9 @@ function leerDetail(data: any): string {
 }
 
 export async function apiRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
-  const { method = 'GET', body, token } = options;
+  const { method = 'GET', body, token, timeoutMs } = options;
+  const controller = timeoutMs ? new AbortController() : undefined;
+  const timeout = timeoutMs ? setTimeout(() => controller?.abort(), timeoutMs) : undefined;
 
   let res: Response;
   try {
@@ -54,6 +57,7 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
       },
       body: body ? JSON.stringify(body) : undefined,
+      ...(controller ? { signal: controller.signal } : {}),
     });
   } catch {
     throw new ApiError(
@@ -61,6 +65,8 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
       0,
       '',
     );
+  } finally {
+    if (timeout) clearTimeout(timeout);
   }
 
   if (!res.ok) {
