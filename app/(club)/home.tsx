@@ -1,13 +1,17 @@
 import { Ionicons } from '@expo/vector-icons';
+import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
 import { useMemo, useState } from 'react';
-import { Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Alert, Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Avatar from '../../components/Avatar';
-import BrandLogo from '../../components/BrandLogo';
+import { logout } from '../../services/auth';
 import { Colors, useAppTheme } from '../../theme/ThemeContext';
 
 type Postulante = { id: string; name: string; sport: string; level: string; colorFrom: string; fotoUri?: string | null };
+
+// DATOS DE EJEMPLO: el nombre y la foto del club vendrán del backend cuando exista el perfil de club.
+const NOMBRE_CLUB_DEMO = 'Club de Atletismo';
 
 const POSTULANTES_INICIALES: Postulante[] = [
   { id: '1', name: 'Matías P.', sport: 'Atletismo', level: 'Avanzado', colorFrom: '#7C3AED' },
@@ -20,6 +24,7 @@ export default function ClubHomeScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
 
+  const [fotoClub, setFotoClub] = useState<string | null>(null);
   const [tab, setTab] = useState<'postulantes' | 'confirmados'>('postulantes');
   const [postulantes, setPostulantes] = useState(POSTULANTES_INICIALES);
   const [confirmados, setConfirmados] = useState<Postulante[]>([]);
@@ -32,6 +37,56 @@ export default function ClubHomeScreen() {
   const [tituloTemp, setTituloTemp] = useState('');
   const [descTemp, setDescTemp] = useState('');
 
+  // ---------- Foto del club ----------
+  async function elegirDeGaleria() {
+    const permiso = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permiso.granted) {
+      Alert.alert('Permiso necesario', 'Necesitamos acceso a tus fotos para elegir la imagen del club.');
+      return;
+    }
+    const resultado = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.6,
+    });
+    if (!resultado.canceled) setFotoClub(resultado.assets[0].uri);
+  }
+
+  async function tomarFoto() {
+    const permiso = await ImagePicker.requestCameraPermissionsAsync();
+    if (!permiso.granted) {
+      Alert.alert('Permiso necesario', 'Necesitamos acceso a tu cámara para tomar la foto.');
+      return;
+    }
+    const resultado = await ImagePicker.launchCameraAsync({ allowsEditing: true, aspect: [1, 1], quality: 0.6 });
+    if (!resultado.canceled) setFotoClub(resultado.assets[0].uri);
+  }
+
+  function cambiarFoto() {
+    Alert.alert('Foto del club', '¿Cómo quieres agregar la imagen?', [
+      { text: 'Tomar foto', onPress: tomarFoto },
+      { text: 'Elegir de galería', onPress: elegirDeGaleria },
+      { text: 'Cancelar', style: 'cancel' },
+    ]);
+  }
+
+  // ---------- Sesión ----------
+  function confirmarCerrarSesion() {
+    Alert.alert('Cerrar sesión', '¿Quieres salir de tu cuenta?', [
+      { text: 'Cancelar', style: 'cancel' },
+      {
+        text: 'Cerrar sesión',
+        style: 'destructive',
+        onPress: async () => {
+          await logout();
+          router.replace('/(auth)/login');
+        },
+      },
+    ]);
+  }
+
+  // ---------- Convocatoria ----------
   function abrirEditor() {
     setTituloTemp(convocatoria?.titulo ?? '');
     setDescTemp(convocatoria?.descripcion ?? '');
@@ -48,6 +103,7 @@ export default function ClubHomeScreen() {
     setConvocatoria(null);
   }
 
+  // ---------- Postulantes ----------
   function confirmar(id: string) {
     const persona = postulantes.find((p) => p.id === id);
     if (!persona) return;
@@ -63,14 +119,41 @@ export default function ClubHomeScreen() {
 
   return (
     <View style={[styles.container, { paddingTop: insets.top + 12 }]}>
-      <View style={styles.topbar}>
-        <BrandLogo width={200} />
-        <View style={styles.clubBadge}>
-          <Ionicons name="shield" size={16} color="#fff" />
+      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+        {/* Encabezado del club */}
+        <View style={styles.header}>
+          <TouchableOpacity onPress={cambiarFoto} activeOpacity={0.85} accessibilityLabel="Cambiar foto del club">
+            <Avatar name={NOMBRE_CLUB_DEMO} colorFrom="#7C3AED" uri={fotoClub} style={styles.clubFoto} fontSize={22} />
+            <View style={styles.camaraBadge}>
+              <Ionicons name="camera" size={11} color="#fff" />
+            </View>
+          </TouchableOpacity>
+          <View style={styles.headerInfo}>
+            <Text style={styles.headerEtiqueta}>Panel del club</Text>
+            <Text style={styles.headerNombre} numberOfLines={1}>{NOMBRE_CLUB_DEMO}</Text>
+          </View>
         </View>
-      </View>
 
-      <ScrollView contentContainerStyle={styles.content}>
+        {/* Resumen */}
+        <View style={styles.resumen}>
+          <View style={styles.resumenItem}>
+            <Text style={styles.resumenValor}>{postulantes.length}</Text>
+            <Text style={styles.resumenEtiqueta}>Postulantes</Text>
+          </View>
+          <View style={styles.resumenDivisor} />
+          <View style={styles.resumenItem}>
+            <Text style={styles.resumenValor}>{confirmados.length}</Text>
+            <Text style={styles.resumenEtiqueta}>Confirmados</Text>
+          </View>
+          <View style={styles.resumenDivisor} />
+          <View style={styles.resumenItem}>
+            <Text style={[styles.resumenValor, { color: convocatoria ? colors.success : colors.textMuted }]}>
+              {convocatoria ? 'Abierta' : 'Cerrada'}
+            </Text>
+            <Text style={styles.resumenEtiqueta}>Convocatoria</Text>
+          </View>
+        </View>
+
         {/* HU-39: acceso al catálogo de planes (versión club) */}
         <TouchableOpacity
           style={styles.planesCard}
@@ -112,6 +195,8 @@ export default function ClubHomeScreen() {
             <Text style={styles.emptyConvocatoriaText}>Crear una convocatoria</Text>
           </TouchableOpacity>
         )}
+
+        <Text style={styles.sectionTitle}>Postulaciones</Text>
 
         <View style={styles.tabs}>
           <TouchableOpacity style={[styles.tab, tab === 'postulantes' && styles.tabActive]} onPress={() => setTab('postulantes')}>
@@ -157,6 +242,11 @@ export default function ClubHomeScreen() {
             {tab === 'postulantes' ? 'No hay postulantes por ahora.' : 'Todavía no hay confirmados.'}
           </Text>
         )}
+
+        <TouchableOpacity style={styles.logoutButton} onPress={confirmarCerrarSesion} activeOpacity={0.8}>
+          <Ionicons name="log-out-outline" size={18} color={colors.danger} />
+          <Text style={styles.logoutText}>Cerrar sesión</Text>
+        </TouchableOpacity>
       </ScrollView>
 
       <Modal visible={modalVisible} transparent animationType="fade">
@@ -200,14 +290,33 @@ export default function ClubHomeScreen() {
 const makeStyles = (c: Colors) =>
   StyleSheet.create({
     container: { flex: 1, backgroundColor: c.bg },
-    topbar: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, marginBottom: 20 },
-    clubBadge: { width: 34, height: 34, borderRadius: 17, backgroundColor: c.primary, alignItems: 'center', justifyContent: 'center' },
-    content: { paddingHorizontal: 20, paddingBottom: 30 },
+    content: { paddingHorizontal: 20, paddingBottom: 40 },
+
+    header: { flexDirection: 'row', alignItems: 'center', gap: 14, marginBottom: 18 },
+    clubFoto: { width: 60, height: 60, borderRadius: 16 },
+    camaraBadge: {
+      position: 'absolute', right: -4, bottom: -4, width: 22, height: 22, borderRadius: 11,
+      backgroundColor: c.primary, borderWidth: 2, borderColor: c.bg, alignItems: 'center', justifyContent: 'center',
+    },
+    headerInfo: { flex: 1 },
+    headerEtiqueta: { color: c.textMuted, fontSize: 11, fontWeight: '600', letterSpacing: 0.4, textTransform: 'uppercase' },
+    headerNombre: { color: c.text, fontSize: 19, fontWeight: '800', marginTop: 2 },
+
+    resumen: {
+      flexDirection: 'row', alignItems: 'center', backgroundColor: c.card, borderWidth: 1, borderColor: c.border,
+      borderRadius: 14, paddingVertical: 14, marginBottom: 14,
+    },
+    resumenItem: { flex: 1, alignItems: 'center' },
+    resumenValor: { color: c.text, fontSize: 17, fontWeight: '800' },
+    resumenEtiqueta: { color: c.textMuted, fontSize: 10.5, marginTop: 3 },
+    resumenDivisor: { width: 1, height: 28, backgroundColor: c.border },
+
     planesCard: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: c.card, borderWidth: 1, borderColor: c.border, borderRadius: 14, padding: 12, marginBottom: 22 },
     planesIcon: { width: 36, height: 36, borderRadius: 10, backgroundColor: c.chip, alignItems: 'center', justifyContent: 'center' },
     planesInfo: { flex: 1 },
     planesTitle: { color: c.text, fontSize: 13, fontWeight: '700' },
     planesSub: { color: c.textMuted, fontSize: 10.5, marginTop: 2 },
+
     sectionTitle: { color: c.text, fontSize: 14, fontWeight: '700', marginBottom: 10 },
     convocatoriaCard: { backgroundColor: c.card, borderWidth: 1, borderColor: c.border, borderRadius: 16, padding: 16, marginBottom: 24 },
     convocatoriaHeader: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 8 },
@@ -221,6 +330,7 @@ const makeStyles = (c: Colors) =>
     closeButtonText: { color: c.danger, fontSize: 12, fontWeight: '700' },
     emptyConvocatoria: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: c.card, borderWidth: 1, borderColor: c.border, borderStyle: 'dashed', borderRadius: 16, padding: 18, marginBottom: 24, justifyContent: 'center' },
     emptyConvocatoriaText: { color: c.accent, fontSize: 13, fontWeight: '700' },
+
     tabs: { flexDirection: 'row', gap: 8, marginBottom: 16 },
     tab: { flex: 1, backgroundColor: c.card, borderWidth: 1, borderColor: c.border, borderRadius: 12, paddingVertical: 10, alignItems: 'center' },
     tabActive: { backgroundColor: c.primary, borderColor: c.primary },
@@ -235,6 +345,13 @@ const makeStyles = (c: Colors) =>
     rejectButton: { width: 34, height: 34, borderRadius: 17, backgroundColor: c.subtle, alignItems: 'center', justifyContent: 'center' },
     acceptButton: { width: 34, height: 34, borderRadius: 17, backgroundColor: '#16A34A', alignItems: 'center', justifyContent: 'center' },
     emptyText: { color: c.textMuted, fontSize: 12, textAlign: 'center', marginTop: 20 },
+
+    logoutButton: {
+      flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+      backgroundColor: c.dangerBg, borderRadius: 13, paddingVertical: 13, marginTop: 28,
+    },
+    logoutText: { color: c.danger, fontSize: 13, fontWeight: '700' },
+
     modalOverlay: { flex: 1, backgroundColor: c.overlay, justifyContent: 'center', padding: 24 },
     modalBox: { backgroundColor: c.card, borderRadius: 18, padding: 20, borderWidth: 1, borderColor: c.border },
     modalTitle: { color: c.text, fontSize: 16, fontWeight: '700', marginBottom: 14 },
