@@ -2,15 +2,23 @@ import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { KeyboardAvoidingView, Platform, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import BrandLogo from '../../components/BrandLogo';
 import { EmailNotVerifiedError, login } from '../../services/auth';
-import { Colors, useAppTheme } from '../../theme/ThemeContext';
+import { Colors, Mode, useAppTheme } from '../../theme/ThemeContext';
 
 type Rol = 'deportista' | 'club';
 
+const OPCIONES_TEMA: { key: Mode; label: string; icon: keyof typeof Ionicons.glyphMap }[] = [
+  { key: 'light', label: 'Claro', icon: 'sunny-outline' },
+  { key: 'dark', label: 'Oscuro', icon: 'moon-outline' },
+  { key: 'system', label: 'Automático', icon: 'phone-portrait-outline' },
+];
+
 export default function LoginScreen() {
-  const { colors } = useAppTheme();
+  const { colors, mode, setMode } = useAppTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
+  const insets = useSafeAreaInsets();
 
   const [rol, setRol] = useState<Rol>('deportista');
   const [email, setEmail] = useState('');
@@ -50,6 +58,25 @@ export default function LoginScreen() {
       style={styles.container}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
+      {/* Apariencia: claro / oscuro / automático */}
+      <View style={[styles.temaBarra, { top: insets.top + 10 }]}>
+        {OPCIONES_TEMA.map((op) => {
+          const activa = mode === op.key;
+          return (
+            <TouchableOpacity
+              key={op.key}
+              style={[styles.temaOpcion, activa && styles.temaOpcionActiva]}
+              onPress={() => setMode(op.key)}
+              accessibilityRole="button"
+              accessibilityLabel={`Tema ${op.label}`}
+              accessibilityState={{ selected: activa }}
+            >
+              <Ionicons name={op.icon} size={16} color={activa ? '#fff' : colors.textMuted} />
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+
       <View style={styles.content}>
         <BrandLogo width={222} style={styles.logo} />
 
@@ -139,6 +166,22 @@ const makeStyles = (c: Colors) =>
     container: { flex: 1, backgroundColor: c.bg },
     content: { flex: 1, justifyContent: 'center', paddingHorizontal: 24 },
     logo: { marginBottom: 36 },
+
+    temaBarra: {
+      position: 'absolute',
+      right: 20,
+      zIndex: 10,
+      flexDirection: 'row',
+      gap: 2,
+      backgroundColor: c.card,
+      borderWidth: 1,
+      borderColor: c.border,
+      borderRadius: 12,
+      padding: 3,
+    },
+    temaOpcion: { width: 32, height: 30, borderRadius: 9, alignItems: 'center', justifyContent: 'center' },
+    temaOpcionActiva: { backgroundColor: c.primary },
+
     title: { color: c.text, fontSize: 22, fontWeight: '700', marginBottom: 6 },
     subtitle: { color: c.textMuted, fontSize: 13, marginBottom: 20 },
     rolSelector: {
