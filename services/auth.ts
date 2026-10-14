@@ -97,6 +97,23 @@ export async function login(email: string, password: string): Promise<Usuario> {
   return usuario;
 }
 
+/**
+ * Entrada con huella: se llama SOLO después de que el sistema verificó la huella
+ * (services/biometria.ts). No recibe contraseña.
+ * Con el backend real, aquí se renovaría la sesión con un refresh token guardado en
+ * expo-secure-store, nunca con la contraseña.
+ */
+export async function loginConHuella(email: string): Promise<Usuario> {
+  const usuarios = await getUsuarios();
+  const u = usuarios[email.toLowerCase()];
+  if (!u || !u.verificado) {
+    throw new Error('No encontramos esa cuenta. Inicia sesión con tu contraseña.');
+  }
+  const { password: _p, verificado: _v, ...usuario } = u;
+  await AsyncStorage.setItem(SESSION_KEY, JSON.stringify(usuario));
+  return usuario;
+}
+
 export async function logout(): Promise<void> {
   await AsyncStorage.removeItem(SESSION_KEY);
 }

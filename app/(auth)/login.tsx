@@ -1,10 +1,19 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import { useMemo, useState } from 'react';
-import { KeyboardAvoidingView, Platform, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { useEffect, useMemo, useState } from 'react';
+import { Alert, KeyboardAvoidingView, Platform, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import BrandLogo from '../../components/BrandLogo';
-import { EmailNotVerifiedError, login } from '../../services/auth';
+import { EmailNotVerifiedError, login, loginConHuella } from '../../services/auth';
+import {
+  activarBiometria,
+  autenticar,
+  biometriaDisponible,
+  emailActivado,
+  marcarRechazo,
+  nombreBiometria,
+  yaRechazo,
+} from '../../services/biometria';
 import { Colors, Mode, useAppTheme } from '../../theme/ThemeContext';
 
 type Rol = 'deportista' | 'club';
@@ -27,6 +36,63 @@ export default function LoginScreen() {
   const [enviando, setEnviando] = useState(false);
   const [mostrarPassword, setMostrarPassword] = useState(false);
 
+  // Huella
+  const [bioDisponible, setBioDisponible] = useState(false);
+  const [bioEmail, setBioEmail] = useState<string | null>(null);
+  const [bioNombre, setBioNombre] = useState('huella');
+
+  useEffect(() => {
+    (async () => {
+      const ok = await biometriaDisponible();
+      setBioDisponible(ok);
+      if (ok) {
+        setBioNombre(await nombreBiometria());
+        setBioEmail(await emailActivado());
+      }
+    })();
+  }, []);
+
+  // El rol se elige en esta pantalla (aún no viene del backend).
+  function entrar() {
+    if (rol === 'club') {
+      router.replace('/(club)/home' as never);
+    } else {
+      router.replace('/(deportista)/(tabs)');
+    }
+  }
+
+  /** Después de un login con contraseña, ofrece activar la huella (una sola vez por cuenta). */
+  function ofrecerActivarHuella(emailLogin: string): Promise<void> {
+    return new Promise((resolve) => {
+      Alert.alert(
+        `¿Entrar con ${bioNombre}?`,
+        `Activa el acceso con ${bioNombre} para entrar más rápido la próxima vez. Tu contraseña no se guarda en el celular.`,
+        [
+          {
+            text: 'Ahora no',
+            style: 'cancel',
+            onPress: async () => {
+              await marcarRechazo(emailLogin);
+              resolve();
+            },
+          },
+          {
+            text: 'Activar',
+            onPress: async () => {
+              const ok = await autenticar(`Confirma tu ${bioNombre} para activarlo`);
+              if (ok) {
+                await activarBiometria(emailLogin);
+                setBioEmail(emailLogin.trim().toLowerCase());
+              }
+              resolve();
+            },
+          },
+        ],
+        { cancelable: false }
+      );
+    });
+  }
+
   async function handleLogin() {
     setError('');
     if (!email.trim() || !password) {
@@ -36,17 +102,33 @@ export default function LoginScreen() {
     setEnviando(true);
     try {
       await login(email.trim(), password);
-      // El rol se elige en esta pantalla (aún no viene del backend).
-      if (rol === 'club') {
-        router.replace('/(club)/home' as never);
-      } else {
-        router.replace('/(deportista)/(tabs)');
+
+      const yaActivado = bioEmail === email.trim().toLowerCase();
+      if (bioDisponible && !yaActivado && !(await yaRechazo(email))) {
+        await ofrecerActivarHuella(email.trim());
       }
+      entrar();
     } catch (e: any) {
       if (e instanceof EmailNotVerifiedError) {
         router.push({ pathname: '/(auth)/verify-email', params: { email: e.email } });
         return;
       }
+      setError(e.message);
+    } finally {
+      setEnviando(false);
+    }
+  }
+
+  async function handleHuella() {
+    if (!bioEmail) return;
+    setError('');
+    const ok = await autenticar(`Entra con tu ${bioNombre}`);
+    if (!ok) return; // canceló o no coincidió: el sistema ya muestra su mensaje
+    setEnviando(true);
+    try {
+      await loginConHuella(bioEmail);
+      entrar();
+    } catch (e: any) {
       setError(e.message);
     } finally {
       setEnviando(false);
@@ -144,12 +226,24 @@ export default function LoginScreen() {
         </TouchableOpacity>
 
         <TouchableOpacity
-          style={[styles.loginButton, enviando && { opacity: 0.6 }]}
+          style={[styles.loginButton, enviando && { opacity: 0.6 }, bioDisponible && bioEmail ? { marginBottom: 12 } : null]}
           onPress={handleLogin}
           disabled={enviando}
         >
           <Text style={styles.loginButtonText}>{enviando ? 'Entrando...' : 'Iniciar sesión'}</Text>
         </TouchableOpacity>
+
+        {bioDisponible && bioEmail ? (
+          <TouchableOpacity
+            style={[styles.huellaButton, enviando && { opacity: 0.6 }]}
+            onPress={handleHuella}
+            disabled={enviando}
+            accessibilityLabel={`Entrar con ${bioNombre}`}
+          >
+            <Ionicons name="finger-print" size={20} color={colors.accent} />
+            <Text style={styles.huellaTexto}>Entrar con {bioNombre}</Text>
+          </TouchableOpacity>
+        ) : null}
 
         <TouchableOpacity onPress={() => router.push('/(auth)/register')}>
           <Text style={styles.registerLink}>
@@ -230,6 +324,19 @@ const makeStyles = (c: Colors) =>
       marginBottom: 20,
     },
     loginButtonText: { color: '#fff', fontSize: 14, fontWeight: '700' },
+    huellaButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 8,
+      borderWidth: 1,
+      borderColor: c.border,
+      backgroundColor: c.card,
+      borderRadius: 13,
+      paddingVertical: 13,
+      marginBottom: 20,
+    },
+    huellaTexto: { color: c.accent, fontSize: 13.5, fontWeight: '700' },
     registerLink: { color: c.textMuted, fontSize: 12.5, textAlign: 'center' },
     registerLinkAccent: { color: c.accent, fontWeight: '700' },
   });

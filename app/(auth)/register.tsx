@@ -6,6 +6,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import BrandLogo from '../../components/BrandLogo';
 import { register } from '../../services/auth';
 import {
+  PASSWORD_MAX,
   formatRut,
   passwordRules,
   validateEmail,
@@ -197,7 +198,7 @@ export default function RegisterScreen() {
             secureTextEntry={!mostrarPassword}
             autoCapitalize="none"
             autoCorrect={false}
-            maxLength={64}
+            maxLength={PASSWORD_MAX}
           />
           <TouchableOpacity onPress={() => setMostrarPassword(!mostrarPassword)}>
             <Ionicons name={mostrarPassword ? 'eye-off-outline' : 'eye-outline'} size={18} color={colors.textMuted} />
@@ -212,6 +213,7 @@ export default function RegisterScreen() {
                   name={r.ok ? 'checkmark-circle' : 'ellipse-outline'}
                   size={14}
                   color={r.ok ? colors.success : colors.textMuted}
+                  style={styles.ruleIcon}
                 />
                 <Text style={[styles.ruleText, r.ok && { color: colors.success }]}>{r.label}</Text>
               </View>
@@ -232,7 +234,7 @@ export default function RegisterScreen() {
             secureTextEntry={!mostrarConfirmar}
             autoCapitalize="none"
             autoCorrect={false}
-            maxLength={64}
+            maxLength={PASSWORD_MAX}
           />
           <TouchableOpacity onPress={() => setMostrarConfirmar(!mostrarConfirmar)}>
             <Ionicons name={mostrarConfirmar ? 'eye-off-outline' : 'eye-outline'} size={18} color={colors.textMuted} />
@@ -280,7 +282,7 @@ const makeStyles = (c: Colors) =>
     },
     inputBoxError: { borderColor: c.danger },
     input: { color: c.text, fontSize: 13, flex: 1 },
-    fieldError: { color: c.danger, fontSize: 11, marginTop: -8, marginBottom: 12, marginLeft: 4 },
+    fieldError: { color: c.danger, fontSize: 11, lineHeight: 15, marginTop: -8, marginBottom: 12, marginLeft: 4 },
     rulesBox: {
       backgroundColor: c.card,
       borderWidth: 1,
@@ -289,10 +291,12 @@ const makeStyles = (c: Colors) =>
       padding: 12,
       marginTop: -4,
       marginBottom: 12,
-      gap: 6,
+      gap: 8,
     },
-    ruleRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-    ruleText: { color: c.textMuted, fontSize: 11.5 },
+    ruleRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 8 },
+    ruleIcon: { marginTop: 1 },
+    // flex: 1 + flexShrink: 1 hace que el texto se ajuste a varias líneas en vez de cortarse.
+    ruleText: { flex: 1, flexShrink: 1, color: c.textMuted, fontSize: 12, lineHeight: 16 },
     loginButton: {
       backgroundColor: c.primary,
       borderRadius: 13,

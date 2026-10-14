@@ -78,7 +78,7 @@ export default function VerifyEmailScreen() {
         <View style={styles.inputBox}>
           <Ionicons name="key-outline" size={16} color={colors.textMuted} />
           <TextInput
-            placeholder="Código de 6 dígitos"
+            placeholder="6 dígitos"
             placeholderTextColor={colors.textMuted}
             style={[styles.input, styles.codeInput]}
             value={codigo}

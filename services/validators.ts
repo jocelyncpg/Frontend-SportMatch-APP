@@ -1,5 +1,13 @@
 export type PasswordRule = { id: string; label: string; ok: boolean };
 
+/**
+ * Largo permitido de la contraseña.
+ * IMPORTANTE: debe coincidir con la validación de Ms_Users (backend); si no, el registro
+ * pasa en la app y falla al enviarse. Cambiar solo aquí.
+ */
+export const PASSWORD_MIN = 8;
+export const PASSWORD_MAX = 16;
+
 const LETRAS = 'A-Za-zÁÉÍÓÚÜÑáéíóúüñ';
 
 /** Deja solo dígitos y K, agrega el guion antes del dígito verificador. Ej: "12.345.678-5" -> "12345678-5" */
@@ -50,12 +58,15 @@ export function validateEmail(email: string): string | null {
 
 export function passwordRules(password: string): PasswordRule[] {
   return [
-    // Mismo mínimo que exige Ms_Users al registrar.
-    { id: 'largo', label: 'Entre 12 y 64 caracteres', ok: password.length >= 12 && password.length <= 64 },
+    {
+      id: 'largo',
+      label: `Entre ${PASSWORD_MIN} y ${PASSWORD_MAX} caracteres`,
+      ok: password.length >= PASSWORD_MIN && password.length <= PASSWORD_MAX,
+    },
     { id: 'mayus', label: 'Una letra mayúscula', ok: /[A-ZÁÉÍÓÚÑ]/.test(password) },
     { id: 'minus', label: 'Una letra minúscula', ok: /[a-záéíóúñ]/.test(password) },
     { id: 'numero', label: 'Un número', ok: /\d/.test(password) },
-    { id: 'especial', label: 'Un carácter especial (! @ # $ % & * ...)', ok: /[^A-Za-z0-9ÁÉÍÓÚÑáéíóúñ\s]/.test(password) },
+    { id: 'especial', label: 'Un carácter especial (! @ # $ % & *)', ok: /[^A-Za-z0-9ÁÉÍÓÚÑáéíóúñ\s]/.test(password) },
     { id: 'espacios', label: 'Sin espacios', ok: password.length > 0 && !/\s/.test(password) },
   ];
 }
