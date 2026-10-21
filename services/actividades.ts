@@ -46,8 +46,13 @@ export type DatosActividad = {
 };
 export type ResultadoCrear = { ok: true; id: string } | { ok: false; motivo: string };
 export type CambioActividad = 'horario' | 'lugar' | 'cancelada';
-/** Aviso para quien participa (o postuló) cuando el organizador cambia o cancela la actividad (HU-37). */
-export type AvisoActividad = { id: string; actividadId: string; cambio: CambioActividad; titulo: string; detalle: string; ts: number };
+/** Respuesta de quien organiza a tu postulación (HU-38). */
+export type DecisionPostulacion = 'aprobada' | 'rechazada';
+/**
+ * Aviso para quien participa (o postuló): el organizador cambia o cancela la actividad (HU-37)
+ * o responde tu postulación (HU-38).
+ */
+export type AvisoActividad = { id: string; actividadId: string; cambio: CambioActividad | DecisionPostulacion; titulo: string; detalle: string; ts: number };
 export type Postulante = { id: string; nombre: string; estado: EstadoPostulacion; mensaje: string };
 
 export const NOMBRES_NIVEL: Record<number, string> = { 1: 'Principiante', 2: 'Básico', 3: 'Intermedio', 4: 'Avanzado', 5: 'Experto' };
@@ -323,6 +328,28 @@ export function simularCambioDelOrganizador(id: string, cambio: CambioActividad,
     actualizar(id, (x) => ({ ...x, cancelada: true }));
     avisos = [...avisos, aviso(`Se canceló "${a.titulo}"`, `${a.organizadorNombre} canceló la actividad.`)];
   }
+  emitir();
+  return { ok: true };
+}
+
+/**
+ * SOLO DEMO: simula que quien organiza una actividad responde tu postulación pendiente, para ver el aviso (HU-38).
+ * Solo funciona mientras tu postulación está pendiente, así que cada decisión genera un único aviso.
+ * En la app real esto lo dispara el backend.
+ */
+export function simularRespuestaDelOrganizador(id: string, decision: DecisionPostulacion, ahora: number = Date.now()): Resultado {
+  const a = actividades.find((x) => x.id === id);
+  if (!a) return { ok: false, motivo: 'No encontramos esta actividad.' };
+  if (a.postulaciones[YO] !== 'pendiente') return { ok: false, motivo: 'No tienes una postulación pendiente en esta actividad.' };
+  const estado = estadoActividad(a, ahora);
+  if (estado === 'cancelada') return { ok: false, motivo: 'Esta actividad fue cancelada.' };
+  if (estado === 'vencida') return { ok: false, motivo: 'Esta actividad ya finalizó.' };
+  if (decision === 'aprobada' && cuposLibres(a) === 0) return { ok: false, motivo: 'No quedan cupos para aprobar más postulaciones.' };
+  actualizar(id, (x) => ({ ...x, postulaciones: { ...x.postulaciones, [YO]: decision } }));
+  const aviso: AvisoActividad = decision === 'aprobada'
+    ? { id: `av-${avisos.length + 1}`, actividadId: id, cambio: decision, titulo: `Te aceptaron en "${a.titulo}"`, detalle: `${a.organizadorNombre} aprobó tu postulación. Tu cupo quedó reservado.`, ts: ahora }
+    : { id: `av-${avisos.length + 1}`, actividadId: id, cambio: decision, titulo: `No te seleccionaron en "${a.titulo}"`, detalle: `${a.organizadorNombre} no aprobó tu postulación esta vez.`, ts: ahora };
+  avisos = [...avisos, aviso];
   emitir();
   return { ok: true };
 }

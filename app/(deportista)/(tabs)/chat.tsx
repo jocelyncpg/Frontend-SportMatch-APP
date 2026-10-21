@@ -4,14 +4,9 @@ import { useMemo } from 'react';
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Avatar from '../../../components/Avatar';
+import { horaCorta, ultimoMensaje, useConversaciones } from '../../../services/chat';
 import { Persona, useMatches } from '../../../services/matchStore';
 import { Colors, useAppTheme } from '../../../theme/ThemeContext';
-
-// Conversaciones de prueba que ya tenían mensajes. Se reemplaza por la API de chat.
-const ULTIMOS_MENSAJES: Record<string, { texto: string; hora: string }> = {
-  camila: { texto: '¡Dale, nos vemos a las 19:30!', hora: '18:42' },
-  diego: { texto: 'Perfecto, cualquier cosa avísame', hora: 'Ayer' },
-};
 
 export default function ChatListScreen() {
   const { colors } = useAppTheme();
@@ -19,13 +14,23 @@ export default function ChatListScreen() {
   const insets = useSafeAreaInsets();
 
   const { confirmados } = useMatches();
+  const conversaciones = useConversaciones();
 
   // Los matches nuevos (sin mensajes todavía) van arriba, el más reciente primero.
+  // Después, las conversaciones, con la de mensaje más reciente primero.
   const chats = useMemo(() => {
-    const conMensajes = confirmados.filter((p) => ULTIMOS_MENSAJES[p.id]);
-    const nuevos = confirmados.filter((p) => !ULTIMOS_MENSAJES[p.id]).reverse();
+    const conMensajes = confirmados
+      .filter((p) => ultimoMensaje(conversaciones[p.id] ?? { personaId: p.id, mensajes: [], noLeidos: 0 }))
+      .sort((a, b) => {
+        const ta = ultimoMensaje(conversaciones[a.id])?.enviadoEn ?? 0;
+        const tb = ultimoMensaje(conversaciones[b.id])?.enviadoEn ?? 0;
+        return tb - ta;
+      });
+    const nuevos = confirmados
+      .filter((p) => !ultimoMensaje(conversaciones[p.id] ?? { personaId: p.id, mensajes: [], noLeidos: 0 }))
+      .reverse();
     return [...nuevos, ...conMensajes];
-  }, [confirmados]);
+  }, [confirmados, conversaciones]);
 
   function abrirChat(persona: Persona) {
     router.push({
@@ -42,7 +47,9 @@ export default function ChatListScreen() {
 
       <ScrollView contentContainerStyle={styles.list}>
         {chats.map((persona) => {
-          const ultimo = ULTIMOS_MENSAJES[persona.id];
+          const conv = conversaciones[persona.id];
+          const ultimo = conv ? ultimoMensaje(conv) : null;
+          const noLeidos = conv?.noLeidos ?? 0;
           return (
             <TouchableOpacity key={persona.id} style={styles.card} onPress={() => abrirChat(persona)}>
               <Avatar
@@ -54,12 +61,24 @@ export default function ChatListScreen() {
               />
               <View style={styles.cardInfo}>
                 <Text style={styles.cardName}>{persona.name}</Text>
-                <Text style={ultimo ? styles.cardMessage : styles.cardMessageNuevo} numberOfLines={1}>
-                  {ultimo ? ultimo.texto : `¡Nuevo match! Saluda a ${persona.name.split(' ')[0]} 👋`}
+                <Text
+                  style={ultimo ? [styles.cardMessage, noLeidos > 0 && styles.cardMessageSinLeer] : styles.cardMessageNuevo}
+                  numberOfLines={1}
+                >
+                  {ultimo
+                    ? `${ultimo.propio ? 'Tú: ' : ''}${ultimo.texto}`
+                    : `¡Nuevo match! Saluda a ${persona.name.split(' ')[0]} 👋`}
                 </Text>
               </View>
               {ultimo ? (
-                <Text style={styles.cardHora}>{ultimo.hora}</Text>
+                <View style={styles.cardDerecha}>
+                  <Text style={[styles.cardHora, noLeidos > 0 && styles.cardHoraSinLeer]}>{horaCorta(ultimo.enviadoEn)}</Text>
+                  {noLeidos > 0 && (
+                    <View style={styles.contador} accessibilityLabel={`${noLeidos} mensajes sin leer`}>
+                      <Text style={styles.contadorTexto}>{noLeidos > 9 ? '9+' : noLeidos}</Text>
+                    </View>
+                  )}
+                </View>
               ) : (
                 <View style={styles.nuevoBadge}>
                   <Text style={styles.nuevoText}>Nuevo</Text>
@@ -96,8 +115,16 @@ const makeStyles = (c: Colors) =>
     cardInfo: { flex: 1 },
     cardName: { color: c.text, fontSize: 13, fontWeight: '700' },
     cardMessage: { color: c.textMuted, fontSize: 11.5, marginTop: 2 },
+    cardMessageSinLeer: { color: c.text, fontWeight: '700' },
     cardMessageNuevo: { color: c.accent, fontSize: 11.5, marginTop: 2, fontWeight: '600' },
+    cardDerecha: { alignItems: 'flex-end', gap: 5 },
     cardHora: { color: c.textMuted, fontSize: 10 },
+    cardHoraSinLeer: { color: c.primary, fontWeight: '700' },
+    contador: {
+      minWidth: 18, height: 18, borderRadius: 9, paddingHorizontal: 5,
+      backgroundColor: c.primary, alignItems: 'center', justifyContent: 'center',
+    },
+    contadorTexto: { color: '#fff', fontSize: 10, fontWeight: '700' },
     nuevoBadge: { backgroundColor: c.primary, borderRadius: 10, paddingHorizontal: 8, paddingVertical: 3 },
     nuevoText: { color: '#fff', fontSize: 9.5, fontWeight: '700' },
     emptyState: { alignItems: 'center', paddingHorizontal: 30, marginTop: 60, gap: 8 },

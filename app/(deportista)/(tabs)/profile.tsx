@@ -10,7 +10,7 @@ import { DeporteConNivel, Usuario, getSession, logout, updateFotoPerfil, updateP
 import { OBJETIVOS_DISPONIBLES } from '../../../services/disponibilidad';
 import { GEOAPIFY_API_KEY, solicitarUbicacion } from '../../../services/location';
 import { useMatches } from '../../../services/matchStore';
-import { PLAN_ACTUAL_DEMO, nombreDelPlan } from '../../../services/planes';
+import { nombreDelPlan, usePlanActual } from '../../../services/planes';
 import { formatearPromedio, promedioEstrellas } from '../../../services/reputacion';
 import { Colors, Mode, useAppTheme } from '../../../theme/ThemeContext';
 
@@ -38,6 +38,7 @@ const OPCIONES_TEMA: { key: Mode; label: string; icon: keyof typeof Ionicons.gly
 export default function ProfileScreen() {
   const { colors, mode, setMode } = useAppTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
+  const planActual = usePlanActual('deportista');
 
   const [usuario, setUsuario] = useState<Usuario | null>(null);
   const [pickerVisible, setPickerVisible] = useState(false);
@@ -477,8 +478,7 @@ export default function ProfileScreen() {
             </View>
             <View style={styles.infoTextos}>
               <Text style={styles.infoTitulo}>Planes y beneficios</Text>
-              <Text numberOfLines={1} style={styles.infoValor}>Tu plan: {nombreDelPlan(PLAN_ACTUAL_DEMO)}</Text>
-            </View>
+              <Text numberOfLines={1} style={styles.infoValor}>Tu plan: {nombreDelPlan(planActual)}</Text>            </View>
             <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
           </TouchableOpacity>
         </View>

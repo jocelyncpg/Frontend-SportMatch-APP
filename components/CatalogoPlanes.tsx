@@ -1,13 +1,13 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useMemo } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import { FILAS_COMPARATIVA, PLANES, PLAN_ACTUAL_DEMO, formatearCLP, type PlanId } from '../services/planes';
+import { FILAS_COMPARATIVA, PLANES, formatearCLP, usePlanActual, type PlanId } from '../services/planes';
 import { Colors, useAppTheme } from '../theme/ThemeContext';
 
 type Props = {
   /** Plan que se resalta. Por defecto, el marcado como `destacado` en PLANES. */
   destacarId?: PlanId;
-  /** Plan actual del usuario. `null` = no mostrar "Tu plan". Por defecto, PLAN_ACTUAL_DEMO. */
+  /** Plan actual. `null` = no mostrar "Tu plan". Si no lo indicas, se usa el plan vigente del deportista. */
   planActual?: PlanId | null;
   /** Texto de la etiqueta del plan destacado. */
   etiquetaDestacado?: string;
@@ -15,10 +15,12 @@ type Props = {
 
 export default function CatalogoPlanes({
   destacarId,
-  planActual = PLAN_ACTUAL_DEMO,
+  planActual: planIndicado,
   etiquetaDestacado = 'Popular',
 }: Props) {
   const { colors } = useAppTheme();
+  const planDelDeportista = usePlanActual('deportista');
+  const planActual = planIndicado === undefined ? planDelDeportista : planIndicado;
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
   const idDestacado: PlanId | undefined = destacarId ?? PLANES.find((p) => p.destacado)?.id;

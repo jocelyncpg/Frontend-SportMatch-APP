@@ -3,7 +3,14 @@ import { router } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { CambioActividad, reiniciarActividades, simularCambioDelOrganizador } from '../../services/actividades';
+import {
+  CambioActividad,
+  DecisionPostulacion,
+  reiniciarActividades,
+  simularCambioDelOrganizador,
+  simularRespuestaDelOrganizador,
+} from '../../services/actividades';
+import { reiniciarChat, simularRespuesta as simularMensajeDeChat } from '../../services/chat';
 import {
   Notificacion,
   TipoNotificacion,
@@ -19,6 +26,7 @@ const ICONO: Record<TipoNotificacion, keyof typeof Ionicons.glyphMap> = {
   match: 'heart',
   calificacion: 'star',
   actividad: 'calendar-outline',
+  mensaje: 'chatbubble-ellipses',
 };
 
 export default function NotificacionesScreen() {
@@ -31,8 +39,13 @@ export default function NotificacionesScreen() {
   const nuevas = lista.filter((n) => !n.leida);
   const anteriores = lista.filter((n) => n.leida);
 
-  const colorDe = (tipo: TipoNotificacion) =>
-    tipo === 'match' ? '#DB2777' : tipo === 'calificacion' ? '#FACC15' : tipo === 'actividad' ? '#38BDF8' : colors.accent;
+  const colorDe = (n: Notificacion) =>
+    n.resultado === 'aprobada' ? colors.success
+      : n.resultado === 'rechazada' ? colors.danger
+      : n.tipo === 'match' ? '#DB2777' : n.tipo === 'calificacion' ? '#FACC15' : n.tipo === 'actividad' ? '#38BDF8' : n.tipo === 'mensaje' ? colors.primary : colors.accent;
+
+  const iconoDe = (n: Notificacion): keyof typeof Ionicons.glyphMap =>
+    n.resultado === 'aprobada' ? 'checkmark-circle' : n.resultado === 'rechazada' ? 'close-circle' : ICONO[n.tipo];
 
   /** SOLO DEMO: simula que quien organiza cambia o cancela una actividad en la que participas. */
   function simular(id: string, cambio: CambioActividad) {
@@ -40,7 +53,14 @@ export default function NotificacionesScreen() {
     if (!r.ok) Alert.alert('No se pudo simular', r.motivo);
   }
 
+  /** SOLO DEMO: simula que quien organiza responde tu postulación pendiente (HU-38). */
+  function simularRespuesta(id: string, decision: DecisionPostulacion) {
+    const r = simularRespuestaDelOrganizador(id, decision);
+    if (!r.ok) Alert.alert('No se pudo simular', r.motivo);
+  }
+
   function restablecer() {
+    reiniciarChat();
     reiniciarActividades();
     reiniciarNotificaciones();
   }
@@ -67,7 +87,7 @@ export default function NotificacionesScreen() {
       });
     } else if (n.tipo === 'actividad' && n.actividadId) {
       router.push({ pathname: '/(deportista)/activity/[id]', params: { id: n.actividadId } });
-    } else if (n.tipo === 'match' && p) {
+    } else if ((n.tipo === 'match' || n.tipo === 'mensaje') && p) {
       router.push({
         pathname: '/(deportista)/chat/[id]',
         params: { id: p.id, name: p.name, sport: p.sport, colorFrom: p.colorFrom },
@@ -85,7 +105,7 @@ export default function NotificacionesScreen() {
       activeOpacity={0.7}
     >
       <View style={[styles.icono, { backgroundColor: colors.chip }]}>
-        <Ionicons name={ICONO[n.tipo]} size={17} color={colorDe(n.tipo)} />
+        <Ionicons name={iconoDe(n)} size={17} color={colorDe(n)} />
       </View>
       <View style={styles.textos}>
         <Text style={[styles.titulo, !n.leida && styles.tituloNuevo]} numberOfLines={2}>{n.titulo}</Text>
@@ -130,14 +150,14 @@ export default function NotificacionesScreen() {
           <View style={styles.vacio}>
             <Ionicons name="notifications-off-outline" size={34} color={colors.textMuted} />
             <Text style={styles.vacioTitulo}>No tienes notificaciones</Text>
-            <Text style={styles.vacioTexto}>Aquí verás solicitudes, matches, calificaciones y cambios en tus actividades.</Text>
+            <Text style={styles.vacioTexto}>Aquí verás solicitudes, matches, mensajes, calificaciones y cambios en tus actividades.</Text>
           </View>
         ) : null}
 
         {/* DEMO: quitar cuando los avisos lleguen desde el backend */}
         <TouchableOpacity style={styles.demoToggle} onPress={() => setVerDemo((v) => !v)}>
           <Ionicons name="flask-outline" size={14} color={colors.textMuted} />
-          <Text style={styles.demoToggleTexto}>Demo: simular cambio del organizador</Text>
+          <Text style={styles.demoToggleTexto}>Demo: simular avisos (mensajes, organizador)</Text>
         </TouchableOpacity>
         {verDemo ? (
           <View style={styles.demoBox}>
@@ -149,6 +169,15 @@ export default function NotificacionesScreen() {
             </TouchableOpacity>
             <TouchableOpacity style={styles.demoBtn} onPress={() => simular('act-yoga', 'cancelada')}>
               <Text style={styles.demoBtnTexto}>Cancelar Yoga al aire libre</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.demoBtn} onPress={() => simularRespuesta('act-natacion', 'aprobada')}>
+              <Text style={styles.demoBtnTexto}>Aceptan mi postulación a Natación</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.demoBtn} onPress={() => simularRespuesta('act-natacion', 'rechazada')}>
+              <Text style={styles.demoBtnTexto}>Rechazan mi postulación a Natación</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.demoBtn} onPress={() => simularMensajeDeChat('camila')}>
+              <Text style={styles.demoBtnTexto}>Camila me escribe por chat</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.demoBtn} onPress={restablecer}>
               <Text style={styles.demoBtnTexto}>Restablecer la demo</Text>

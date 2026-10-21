@@ -1,9 +1,10 @@
 import { useMemo, useSyncExternalStore } from 'react';
 import { getAvisos, useAvisos, type AvisoActividad } from './actividades';
+import { marcarTodasLeidasEnChats, useConversaciones, type Conversacion } from './chat';
 import { useMatches, type Persona } from './matchStore';
 import type { CalificacionRecibida } from './reputacion';
 
-export type TipoNotificacion = 'solicitud' | 'match' | 'calificacion' | 'actividad';
+export type TipoNotificacion = 'solicitud' | 'match' | 'calificacion' | 'actividad' | 'mensaje';
 
 export type Notificacion = {
   id: string;
@@ -18,6 +19,8 @@ export type Notificacion = {
   persona?: Persona;
   /** Actividad involucrada (para abrir su detalle). */
   actividadId?: string;
+  /** Solo en avisos de postulación: cómo respondió quien organiza (HU-38). */
+  resultado?: 'aprobada' | 'rechazada';
 };
 
 type Fuente = {
@@ -26,6 +29,8 @@ type Fuente = {
   calificacionesRecibidas: CalificacionRecibida[];
   /** Cambios o cancelaciones de actividades en las que participas (HU-37). */
   avisos?: AvisoActividad[];
+  /** Conversaciones de chat; las que tienen mensajes sin leer generan un aviso (HU-60). */
+  conversaciones?: Record<string, Conversacion>;
 };
 
 // DATOS DE EJEMPLO: cuándo "ocurrió" cada aviso inicial de la demo. Lo que se crea mientras usas
@@ -70,7 +75,25 @@ export function construirNotificaciones(e: Fuente, sinLeer: ReadonlySet<string>,
     ...e.calificacionesRecibidas.map((c) => crear(`cal-${c.id}`, 'calificacion', `${c.de} te calificó con ${c.estrellas} ${c.estrellas === 1 ? 'estrella' : 'estrellas'}`, c.comentario ?? 'Sin comentario')),
     ...(e.avisos ?? []).map((a): Notificacion => {
       const minutos = Math.max(0, (ahora - a.ts) / 60000);
-      return { id: idAviso(a), tipo: 'actividad', titulo: a.titulo, detalle: a.detalle, cuando: hace(minutos), minutos, leida: !sinLeer.has(idAviso(a)), actividadId: a.actividadId };
+      const resultado = a.cambio === 'aprobada' || a.cambio === 'rechazada' ? a.cambio : undefined;
+      return { id: idAviso(a), tipo: 'actividad', titulo: a.titulo, detalle: a.detalle, cuando: hace(minutos), minutos, leida: !sinLeer.has(idAviso(a)), actividadId: a.actividadId, resultado };
+    }),
+    // Un aviso por chat con mensajes sin leer. Desaparece solo cuando abres ese chat.
+    ...e.confirmados.flatMap((p): Notificacion[] => {
+      const conv = e.conversaciones?.[p.id];
+      const ultimo = conv && conv.mensajes.length > 0 ? conv.mensajes[conv.mensajes.length - 1] : null;
+      if (!conv || conv.noLeidos <= 0 || !ultimo) return [];
+      const minutos = Math.max(0, (ahora - ultimo.enviadoEn) / 60000);
+      return [{
+        id: `msg-${p.id}`,
+        tipo: 'mensaje',
+        titulo: conv.noLeidos === 1 ? `${p.name} te escribió` : `${p.name} te envió ${conv.noLeidos} mensajes`,
+        detalle: ultimo.texto,
+        cuando: hace(minutos),
+        minutos,
+        leida: false,
+        persona: p,
+      }];
     }),
   ];
   // Lo más reciente primero. Si dos ocurrieron "ahora", va antes el que llegó último
@@ -103,6 +126,7 @@ export function marcarLeida(id: string) {
 }
 
 export function marcarTodasLeidas() {
+  marcarTodasLeidasEnChats();
   estado = { sinLeer: new Set(), avisosLeidos: new Set(getAvisos().map(idAviso)) };
   emitir();
 }
@@ -116,13 +140,14 @@ export function reiniciarNotificaciones() {
 export function useNotificaciones() {
   const matches = useMatches();
   const avisos = useAvisos();
+  const conversaciones = useConversaciones();
   const leidos = useSyncExternalStore(suscribir, getEstado, getEstado);
   const lista = useMemo(() => {
     // Los avisos de actividades nacen sin leer: lo pendiente es todo lo que aún no se marcó.
     const pendientes = new Set(leidos.sinLeer);
     avisos.forEach((a) => { if (!leidos.avisosLeidos.has(idAviso(a))) pendientes.add(idAviso(a)); });
-    return construirNotificaciones({ ...matches, avisos }, pendientes);
-  }, [matches, avisos, leidos]);
+    return construirNotificaciones({ ...matches, avisos, conversaciones }, pendientes);
+  }, [matches, avisos, conversaciones, leidos]);
   const noLeidas = lista.filter((n) => !n.leida).length;
   return { lista, noLeidas };
 }

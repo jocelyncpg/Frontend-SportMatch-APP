@@ -1,31 +1,16 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { FlatList, KeyboardAvoidingView, Platform, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Avatar from '../../../components/Avatar';
 import ReportarModal from '../../../components/ReportarModal';
+import { abrirChat, cerrarChat, enviarMensaje, simularRespuesta, useConversacion, type MensajeChat } from '../../../services/chat';
 import type { TipoReporte } from '../../../services/reportes';
 import { Colors, useAppTheme } from '../../../theme/ThemeContext';
 
-type Mensaje = { id: string; texto: string; propio: boolean };
 /** Lo que se está reportando desde el chat (HU-42): la persona o un mensaje suyo. */
 type ObjetivoReporte = { tipo: TipoReporte; id: string; nombre: string };
-
-// Conversaciones de prueba para los matches que ya tenían mensajes.
-// Un match nuevo empieza con el chat vacío. Se reemplaza por la API de chat.
-const CONVERSACIONES_PREVIAS: Record<string, Mensaje[]> = {
-  camila: [
-    { id: 'c1', texto: '¡Hola! Vi que también corres los fines de semana 🏃‍♀️', propio: false },
-    { id: 'c2', texto: '¡Sí! Estoy entrenando para una media maratón. ¿Salimos mañana?', propio: true },
-    { id: 'c3', texto: '¡Dale, nos vemos a las 19:30!', propio: false },
-  ],
-  diego: [
-    { id: 'd1', texto: '¡Buenas! ¿Juegas fútbol los fines de semana?', propio: false },
-    { id: 'd2', texto: 'Sí, los sábados en la mañana. ¿Te sumas?', propio: true },
-    { id: 'd3', texto: 'Perfecto, cualquier cosa avísame', propio: false },
-  ],
-};
 
 export default function ChatScreen() {
   const { colors } = useAppTheme();
@@ -33,16 +18,25 @@ export default function ChatScreen() {
   const insets = useSafeAreaInsets();
 
   const { id, name, sport, colorFrom } = useLocalSearchParams<{ id: string; name: string; sport: string; colorFrom: string }>();
+  const personaId = id ?? '';
   const nombre = name ?? 'Deportista';
   const primerNombre = nombre.split(' ')[0];
 
-  const [mensajes, setMensajes] = useState<Mensaje[]>(CONVERSACIONES_PREVIAS[id ?? ''] ?? []);
+  // Los mensajes viven en services/chat.ts (HU-60), así no se pierden al salir del chat.
+  const { mensajes } = useConversacion(personaId);
   const [texto, setTexto] = useState('');
-  const listaRef = useRef<FlatList<Mensaje>>(null);
+  const listaRef = useRef<FlatList<MensajeChat>>(null);
   const [reporte, setReporte] = useState<ObjetivoReporte | null>(null);
   // Se recuerda el último objetivo para que el formulario no cambie de texto mientras se cierra.
-  const ultimoReporte = useRef<ObjetivoReporte>({ tipo: 'usuario', id: id ?? '', nombre: nombre });
+  const ultimoReporte = useRef<ObjetivoReporte>({ tipo: 'usuario', id: personaId, nombre: nombre });
   if (reporte) ultimoReporte.current = reporte;
+
+  // Mientras este chat está abierto, sus mensajes cuentan como leídos y no llegan avisos de él.
+  useEffect(() => {
+    if (!personaId) return;
+    abrirChat(personaId);
+    return () => cerrarChat(personaId);
+  }, [personaId]);
 
   const sugerencias = [
     '¡Hola! 👋',
@@ -51,15 +45,12 @@ export default function ChatScreen() {
   ];
 
   function enviar(contenido?: string) {
-    const t = (contenido ?? texto).trim();
-    if (!t) return;
-    setMensajes((prev) => [...prev, { id: Date.now().toString(), texto: t, propio: true }]);
-    setTexto('');
+    if (enviarMensaje(personaId, contenido ?? texto)) setTexto('');
   }
 
-  function reportarMensaje(m: Mensaje) {
+  function reportarMensaje(m: MensajeChat) {
     const resumen = m.texto.length > 60 ? `${m.texto.slice(0, 60)}…` : m.texto;
-    setReporte({ tipo: 'mensaje', id: `${id ?? ''}:${m.id}`, nombre: `Mensaje de ${primerNombre}: "${resumen}"` });
+    setReporte({ tipo: 'mensaje', id: `${personaId}:${m.id}`, nombre: `Mensaje de ${primerNombre}: "${resumen}"` });
   }
 
   return (
@@ -78,7 +69,7 @@ export default function ChatScreen() {
           <Text style={styles.sport}>{sport ?? ''}</Text>
         </View>
         <TouchableOpacity
-          onPress={() => setReporte({ tipo: 'usuario', id: id ?? '', nombre })}
+          onPress={() => setReporte({ tipo: 'usuario', id: personaId, nombre })}
           style={styles.reportButton}
           accessibilityLabel={`Reportar a ${nombre}`}
         >
@@ -127,6 +118,13 @@ export default function ChatScreen() {
           )
         }
       />
+
+      {/* DEMO: quitar cuando los mensajes lleguen del backend */}
+      {personaId !== '' && (
+        <TouchableOpacity style={styles.demoLink} onPress={() => simularRespuesta(personaId)}>
+          <Text style={styles.demoLinkTexto}>Demo: simular que {primerNombre} te responde</Text>
+        </TouchableOpacity>
+      )}
 
       <View style={[styles.inputRow, { paddingBottom: insets.bottom + 12 }]}>
         <TextInput
@@ -179,6 +177,8 @@ const makeStyles = (c: Colors) =>
     sugerencias: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 8, marginTop: 18 },
     sugerencia: { backgroundColor: c.chip, borderRadius: 16, paddingHorizontal: 12, paddingVertical: 8 },
     sugerenciaTexto: { color: c.accent, fontSize: 12, fontWeight: '600' },
+    demoLink: { alignItems: 'center', paddingVertical: 6 },
+    demoLinkTexto: { color: c.textMuted, fontSize: 11 },
     inputRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingTop: 12, paddingHorizontal: 16, borderTopWidth: 1, borderColor: c.border },
     input: { flex: 1, backgroundColor: c.inputBg, borderWidth: 1, borderColor: c.border, borderRadius: 20, paddingHorizontal: 16, paddingVertical: 10, color: c.text, fontSize: 13 },
     sendButton: { width: 40, height: 40, borderRadius: 20, backgroundColor: c.primary, alignItems: 'center', justifyContent: 'center' },

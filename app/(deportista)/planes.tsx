@@ -1,14 +1,18 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import CatalogoPlanes from '../../components/CatalogoPlanes';
+import ContratarPlanModal from '../../components/ContratarPlanModal';
+import { nombreDelPlan, planesParaContratar, precioTexto, reiniciarPlanes, usePlanActual, type Plan } from '../../services/planes';
 import { Colors, useAppTheme } from '../../theme/ThemeContext';
 
-/** HU-39: consultar el catálogo de planes y beneficios. */
+/** HU-39: consultar el catálogo de planes y beneficios. HU-42: contratar un plan. */
 export default function PlanesScreen() {
   const { colors } = useAppTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
+  const planActual = usePlanActual('deportista');
+  const [elegido, setElegido] = useState<Plan | null>(null);
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
@@ -24,13 +28,33 @@ export default function PlanesScreen() {
       <View style={styles.aviso}>
         <Ionicons name="information-circle-outline" size={18} color={colors.accent} />
         <Text style={styles.avisoTexto}>
-          Los precios son referenciales y están en pesos chilenos (CLP). Próximamente podrás contratar un plan desde aquí.
+          Los precios son referenciales y están en pesos chilenos (CLP). Por ahora el pago es de demostración: no se realiza ningún cobro.
         </Text>
       </View>
 
-      <TouchableOpacity style={styles.boton} disabled accessibilityState={{ disabled: true }}>
-        <Text style={styles.botonTexto}>Contratar plan · Disponible pronto</Text>
+      {planesParaContratar('deportista').map((p) => {
+        const yaLoTienes = planActual === p.id;
+        return (
+          <TouchableOpacity
+            key={p.id}
+            style={[styles.boton, yaLoTienes && styles.botonInactivo]}
+            disabled={yaLoTienes}
+            accessibilityState={{ disabled: yaLoTienes }}
+            onPress={() => setElegido(p)}
+          >
+            <Text style={styles.botonTexto}>
+              {yaLoTienes ? `Tu plan actual: ${nombreDelPlan(p.id)}` : `Contratar plan ${p.nombre} · ${precioTexto(p)}`}
+            </Text>
+          </TouchableOpacity>
+        );
+      })}
+
+      {/* DEMO: quitar cuando el plan venga del backend */}
+      <TouchableOpacity style={styles.demoLink} onPress={reiniciarPlanes}>
+        <Text style={styles.demoLinkTexto}>Demo: volver al plan Gratuito</Text>
       </TouchableOpacity>
+
+      <ContratarPlanModal visible={elegido !== null} plan={elegido} cuenta="deportista" onClose={() => setElegido(null)} />
     </ScrollView>
   );
 }
@@ -52,7 +76,10 @@ const makeStyles = (c: Colors) =>
     avisoTexto: { flex: 1, color: c.textMuted, fontSize: 11.5, lineHeight: 16 },
     boton: {
       marginTop: 16, backgroundColor: c.primary, borderRadius: 13,
-      paddingVertical: 13, alignItems: 'center', opacity: 0.45,
+      paddingVertical: 13, alignItems: 'center',
     },
+    botonInactivo: { opacity: 0.45 },
     botonTexto: { color: '#fff', fontSize: 13, fontWeight: '700' },
+    demoLink: { alignItems: 'center', marginTop: 18, paddingVertical: 8 },
+    demoLinkTexto: { color: c.textMuted, fontSize: 11 },
   });
