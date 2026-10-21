@@ -4,6 +4,7 @@ import { useCallback, useMemo } from 'react';
 import { ActivityIndicator, Alert, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { NotificationPreferences } from '../../components/NotificationPreferences';
+import { horaCorta, useChats, useSilenciados, type ResumenChat } from '../../services/chat';
 import { abrirDestino } from '../../services/notificationNavigation';
 import { cargarNotificaciones, marcarLeida, marcarTodasLeidas, Notificacion, TipoNotificacion, useNotificaciones } from '../../services/notificaciones';
 import { Colors, useAppTheme } from '../../theme/ThemeContext';
@@ -18,8 +19,40 @@ export default function NotificacionesScreen() {
   const insets = useSafeAreaInsets();
   const { lista, noLeidas, cargando, error, siguiente } = useNotificaciones();
   useFocusEffect(useCallback(() => { void cargarNotificaciones(); }, []));
+  // HU-60: un aviso por chat con mensajes sin leer (salvo silenciados). Desaparece al abrir ese chat.
+  const resumenes = useChats();
+  const silenciados = useSilenciados();
+  const chatsSinLeer = useMemo(() => Object.values(resumenes)
+    .filter((c) => c.noLeidos > 0 && c.ultimo && !silenciados.includes(c.personaId))
+    .sort((a, b) => (b.ultimo?.enviadoEn ?? 0) - (a.ultimo?.enviadoEn ?? 0)), [resumenes, silenciados]);
   const nuevas = lista.filter((n) => !n.leida);
   const anteriores = lista.filter((n) => n.leida);
+
+  const colorDe = (n: Notificacion) =>
+    n.resultado === 'aprobada' ? colors.success
+      : n.resultado === 'rechazada' ? colors.danger
+      : n.tipo === 'match' ? '#DB2777' : n.tipo === 'calificacion' ? '#FACC15' : n.tipo === 'actividad' ? '#38BDF8'
+      : n.tipo === 'mensaje' ? colors.primary : colors.accent;
+
+  const iconoDe = (n: Notificacion): keyof typeof Ionicons.glyphMap =>
+    n.resultado === 'aprobada' ? 'checkmark-circle' : n.resultado === 'rechazada' ? 'close-circle' : ICONO[n.tipo] ?? 'notifications-outline';
+
+  const filaChat = (c: ResumenChat) => (
+    <TouchableOpacity key={`msg-${c.matchId}`} style={[styles.fila, styles.filaNueva]} activeOpacity={0.7}
+      onPress={() => router.push({ pathname: '/(deportista)/chat/[id]', params: { id: c.matchId, personaId: c.personaId } })}>
+      <View style={[styles.icono, { backgroundColor: colors.chip }]}>
+        <Ionicons name="chatbubble-ellipses" size={17} color={colors.primary} />
+      </View>
+      <View style={styles.textos}>
+        <Text style={[styles.titulo, styles.tituloNuevo]} numberOfLines={2}>
+          {c.noLeidos === 1 ? `${c.nombre} te escribió` : `${c.nombre} te envió ${c.noLeidos} mensajes`}
+        </Text>
+        <Text style={styles.detalle} numberOfLines={2}>{c.ultimo?.texto}</Text>
+        <Text style={styles.cuando}>{c.ultimo ? horaCorta(c.ultimo.enviadoEn) : ''}</Text>
+      </View>
+      <View style={styles.punto} />
+    </TouchableOpacity>
+  );
 
   function abrir(n: Notificacion) {
     void marcarLeida(n.id).catch(() => Alert.alert('Aviso sin leer', 'No se pudo guardar la lectura. Puedes volver a intentarlo.'));
@@ -29,7 +62,7 @@ export default function NotificacionesScreen() {
   const fila = (n: Notificacion) => (
     <TouchableOpacity key={n.id} style={[styles.fila, !n.leida && styles.filaNueva]} onPress={() => abrir(n)} activeOpacity={0.7}>
       <View style={[styles.icono, { backgroundColor: colors.chip }]}>
-        <Ionicons name={ICONO[n.tipo] ?? 'notifications-outline'} size={17} color={colors.accent} />
+        <Ionicons name={iconoDe(n)} size={17} color={colorDe(n)} />
       </View>
       <View style={styles.textos}>
         <Text style={[styles.titulo, !n.leida && styles.tituloNuevo]} numberOfLines={2}>{n.titulo}</Text>
@@ -46,7 +79,7 @@ export default function NotificacionesScreen() {
         <Ionicons name="arrow-back" size={18} color={colors.text} />
       </TouchableOpacity>
       <Text style={styles.title}>Notificaciones</Text>
-      {nuevas.length > 0 ? <TouchableOpacity style={styles.marcarTodas} onPress={() => {
+      {nuevas.length > 0 || chatsSinLeer.length > 0 ? <TouchableOpacity style={styles.marcarTodas} onPress={() => {
         void marcarTodasLeidas().catch(() => Alert.alert('No se pudo guardar', 'Revisa tu conexión y vuelve a intentarlo.'));
       }}>
         <Ionicons name="checkmark-done-outline" size={15} color={colors.accent} />
@@ -61,9 +94,12 @@ export default function NotificacionesScreen() {
         <Text accessibilityRole="alert" style={{ color: colors.danger }}>{error}</Text>
         <TouchableOpacity onPress={() => { void cargarNotificaciones(); }}><Text style={{ color: colors.accent }}>Reintentar</Text></TouchableOpacity>
       </View> : null}
-      {nuevas.length > 0 ? <><Text style={styles.seccion}>Sin leer ({noLeidas})</Text>{nuevas.map(fila)}</> : null}
+      {nuevas.length > 0 || chatsSinLeer.length > 0 ? <>
+        <Text style={styles.seccion}>Sin leer ({noLeidas + chatsSinLeer.length})</Text>
+        {chatsSinLeer.map(filaChat)}{nuevas.map(fila)}
+      </> : null}
       {anteriores.length > 0 ? <><Text style={[styles.seccion, { marginTop: 18 }]}>Anteriores</Text>{anteriores.map(fila)}</> : null}
-      {!lista.length && !cargando && !error ? <View style={styles.vacio}>
+      {!lista.length && !chatsSinLeer.length && !cargando && !error ? <View style={styles.vacio}>
         <Ionicons name="notifications-outline" size={34} color={colors.textMuted} />
         <Text style={styles.vacioTitulo}>No tienes notificaciones</Text>
         <Text style={styles.vacioTexto}>Aquí verás tus nuevos avisos de solicitudes, matches, mensajes, calificaciones y actividades.</Text>

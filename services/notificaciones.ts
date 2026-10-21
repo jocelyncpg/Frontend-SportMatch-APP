@@ -7,6 +7,14 @@ export type DestinoNotificacion = { screen?: string; activityId?: string; matchI
 export type Notificacion = {
   id: string; tipo: TipoNotificacion; titulo: string; detalle: string;
   cuando: string; leida: boolean; data: DestinoNotificacion;
+  /** Solo en avisos de postulación: cómo respondió quien organiza (HU-38). */
+  resultado?: 'aprobada' | 'rechazada';
+};
+
+// Ms_Activities titula así la respuesta a una postulación (migración 006_notification_outbox).
+const RESULTADO_POR_TITULO: Record<string, Notificacion['resultado']> = {
+  'Postulación aceptada': 'aprobada',
+  'Postulación rechazada': 'rechazada',
 };
 type ItemApi = {
   id: string; kind: TipoNotificacion; title: string; body: string;
@@ -54,6 +62,7 @@ export async function cargarNotificaciones(mas = false) {
     if (!await vigente()) return;
     const nuevos = pagina.items.map((n): Notificacion => ({ id: n.id, tipo: n.kind, titulo: n.title,
       detalle: n.body, leida: !!n.read_at, data: n.data,
+      resultado: n.kind === 'actividad' ? RESULTADO_POR_TITULO[n.title] : undefined,
       cuando: hace(Math.max(0, (Date.now() - Date.parse(n.created_at)) / 60000)) }));
     const conservarHistorial = !mas && estado.lista.length > 50;
     const lista = mas ? [...estado.lista, ...nuevos.filter((n) => !estado.lista.some((old) => old.id === n.id))]
@@ -83,6 +92,9 @@ async function marcar(ids: string[]) {
 export const marcarLeida = (id: string) => marcar([id]);
 // Only displayed IDs are acknowledged; notifications arriving concurrently remain unread.
 export async function marcarTodasLeidas() {
+  // Los mensajes sin leer de los chats también se muestran aquí (ver notificaciones.tsx).
+  const { marcarTodasLeidasEnChats } = await import('./chat');
+  await marcarTodasLeidasEnChats().catch(() => {});
   const ids = estado.lista.filter((n) => !n.leida).map((n) => n.id);
   const usuarioId = estado.usuarioId;
   for (let i = 0; i < ids.length && estado.usuarioId === usuarioId; i += 100) await marcar(ids.slice(i, i + 100));

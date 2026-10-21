@@ -12,7 +12,7 @@ import { OBJETIVOS_DISPONIBLES } from '../../../services/disponibilidad';
 import { solicitarUbicacion } from '../../../services/location';
 import { YO, cargarHistorial, formatearCuando, getActividades, useHistorial, visualDeporte } from '../../../services/actividades';
 import { cargarCalificaciones, useMatches } from '../../../services/matchStore';
-import { PLAN_ACTUAL_DEMO, nombreDelPlan } from '../../../services/planes';
+import { cargarPlanes, nombreDelPlan, usePlanActual } from '../../../services/planes';
 import { formatearPromedio } from '../../../services/reputacion';
 import { Colors, Mode, useAppTheme } from '../../../theme/ThemeContext';
 
@@ -42,6 +42,7 @@ const OPCIONES_TEMA: { key: Mode; label: string; icon: keyof typeof Ionicons.gly
 export default function ProfileScreen() {
   const { colors, mode, setMode } = useAppTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
+  const planActual = usePlanActual('deportista');
 
   const [usuario, setUsuario] = useState<Usuario | null>(null);
   const [pickerVisible, setPickerVisible] = useState(false);
@@ -85,6 +86,8 @@ export default function ProfileScreen() {
     // Reputación e historial vienen de Ms_Activities; si fallan, el resto del perfil sigue igual.
     cargarCalificaciones().catch(() => {});
     void cargarHistorial();
+    // El plan vigente viene de Ms-club; si no responde, se muestra el último conocido.
+    cargarPlanes('deportista').catch(() => {});
     return () => { active = false; };
   }, []));
 
@@ -527,7 +530,7 @@ export default function ProfileScreen() {
             </View>
             <View style={styles.infoTextos}>
               <Text style={styles.infoTitulo}>Planes y beneficios</Text>
-              <Text numberOfLines={1} style={styles.infoValor}>Tu plan: {nombreDelPlan(PLAN_ACTUAL_DEMO)}</Text>
+              <Text numberOfLines={1} style={styles.infoValor}>Tu plan: {nombreDelPlan(planActual)}</Text>
             </View>
             <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
           </TouchableOpacity>
