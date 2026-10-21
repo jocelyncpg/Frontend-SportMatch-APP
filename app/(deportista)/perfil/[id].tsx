@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useCallback, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, Image, Modal, Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Avatar from '../../../components/Avatar';
 import MatchModal from '../../../components/MatchModal';
@@ -49,6 +49,7 @@ export default function PerfilDeportistaScreen() {
   const reload = useRef<() => void>(() => {});
   const ocupado = useRef(false);
   const version = useRef(0);
+  const [fotoAmpliada, setFotoAmpliada] = useState(false);
 
   useFocusEffect(useCallback(() => {
     let active = true;
@@ -193,7 +194,7 @@ export default function PerfilDeportistaScreen() {
       bloqueado ? `Desbloquear a ${nombre}` : `Bloquear a ${nombre}`,
       bloqueado
         ? 'Volverán a aparecer en Descubrir para ambos.'
-        : 'Ninguno de los dos verá al otro en Descubrir. Sus matches, chats y actividades siguen igual.',
+        : 'Ninguno de los dos verá al otro en Descubrir ni podrá escribirle. Sus matches, mensajes y actividades se conservan y vuelven al desbloquear.',
       [
         { text: 'Cancelar', style: 'cancel' },
         {
@@ -208,6 +209,7 @@ export default function PerfilDeportistaScreen() {
       ]
     );
   }
+  const tieneFoto = !!persona.fotoUri;
 
   return (
     <View style={[styles.container, { paddingTop: insets.top + 12 }]}>
@@ -223,17 +225,29 @@ export default function PerfilDeportistaScreen() {
       </TouchableOpacity>
 
       <ScrollView contentContainerStyle={styles.content}>
-        <Avatar
-          name={p.name}
-          colorFrom={p.colorFrom}
-          uri={p.fotoUri}
-          style={styles.foto}
-          fontSize={56}
+        {/* Tocar la foto la abre completa, sin recortar */}
+        <TouchableOpacity
+          activeOpacity={tieneFoto ? 0.9 : 1}
+          onPress={() => tieneFoto && setFotoAmpliada(true)}
+          accessibilityLabel={tieneFoto ? `Ampliar foto de ${persona.name}` : undefined}
         >
-          <View style={styles.compatBadge}>
-            <Text style={styles.compatText}>{p.compatibility}% compatible</Text>
-          </View>
-        </Avatar>
+          <Avatar
+            name={persona.name}
+            colorFrom={persona.colorFrom}
+            uri={persona.fotoUri}
+            style={styles.foto}
+            fontSize={56}
+          >
+            {tieneFoto ? (
+              <View style={styles.ampliarBadge} pointerEvents="none">
+                <Ionicons name="expand-outline" size={16} color="#fff" />
+              </View>
+            ) : null}
+            <View style={styles.compatBadge}>
+              <Text style={styles.compatText}>{persona.compatibility}% compatible</Text>
+            </View>
+          </Avatar>
+        </TouchableOpacity>
 
         <View style={styles.info}>
           <View style={styles.nameRow}>
@@ -321,6 +335,35 @@ export default function PerfilDeportistaScreen() {
         )}
       </View>
 
+      {/* FOTO AMPLIADA: se ve completa (contain), se cierra tocando en cualquier parte o con la X */}
+      <Modal
+        visible={fotoAmpliada}
+        transparent
+        animationType="fade"
+        statusBarTranslucent
+        onRequestClose={() => setFotoAmpliada(false)}
+      >
+        <Pressable style={styles.visorFondo} onPress={() => setFotoAmpliada(false)}>
+          {persona.fotoUri ? (
+            <Image source={{ uri: persona.fotoUri }} style={styles.visorImagen} resizeMode="contain" />
+          ) : null}
+
+          <TouchableOpacity
+            onPress={() => setFotoAmpliada(false)}
+            style={[styles.visorCerrar, { top: insets.top + 12 }]}
+            accessibilityLabel="Cerrar foto"
+          >
+            <Ionicons name="close" size={22} color="#fff" />
+          </TouchableOpacity>
+
+          <View style={[styles.visorPie, { paddingBottom: insets.bottom + 20 }]} pointerEvents="none">
+            <Text style={styles.visorNombre}>
+              {persona.name}{persona.age ? `, ${persona.age}` : ''}
+            </Text>
+          </View>
+        </Pressable>
+      </Modal>
+
       <MatchModal
         visible={nuevoMatch !== null}
         miNombre={miNombre}
@@ -378,6 +421,11 @@ const makeStyles = (c: Colors) =>
       backgroundColor: 'rgba(11,15,25,0.75)', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20,
     },
     compatText: { color: '#4ADE80', fontSize: 12, fontWeight: '800' },
+    ampliarBadge: {
+      position: 'absolute', bottom: 16, left: 16,
+      width: 32, height: 32, borderRadius: 16,
+      backgroundColor: 'rgba(11,15,25,0.75)', alignItems: 'center', justifyContent: 'center',
+    },
     info: { padding: 20 },
     nameRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 10 },
     name: { color: c.text, fontSize: 22, fontWeight: '700' },
@@ -420,4 +468,15 @@ const makeStyles = (c: Colors) =>
       borderWidth: 1, borderColor: c.danger, borderRadius: 14, paddingVertical: 14,
     },
     pillCancelarTexto: { color: c.danger, fontSize: 13, fontWeight: '700' },
+
+    // Visor de foto (siempre oscuro, como un visor de imágenes)
+    visorFondo: { flex: 1, backgroundColor: 'rgba(0,0,0,0.95)', alignItems: 'center', justifyContent: 'center' },
+    visorImagen: { width: '100%', height: '100%' },
+    visorCerrar: {
+      position: 'absolute', right: 20,
+      width: 38, height: 38, borderRadius: 19,
+      backgroundColor: 'rgba(255,255,255,0.16)', alignItems: 'center', justifyContent: 'center',
+    },
+    visorPie: { position: 'absolute', bottom: 0, left: 0, right: 0, alignItems: 'center', paddingTop: 12 },
+    visorNombre: { color: '#fff', fontSize: 15, fontWeight: '700' },
   });

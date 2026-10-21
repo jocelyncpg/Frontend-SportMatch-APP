@@ -171,8 +171,31 @@ export async function login(email: string, password: string): Promise<Usuario> {
 }
 
 /** Pantalla de inicio según el rol de la cuenta. */
-export function inicioSegunRol(usuario: Usuario): '/(admin)/home' | '/(deportista)/(tabs)' {
-  return usuario.rol === 'admin' ? '/(admin)/home' : '/(deportista)/(tabs)';
+export function inicioSegunRol(usuario: Usuario): '/(admin)/home' | '/(club)/home' | '/(deportista)/(tabs)' {
+  if (usuario.rol === 'admin') return '/(admin)/home';
+  // club_admin: cuentas creadas con /auth/register-club (Ms_Users).
+  if (usuario.rol === 'club_admin') return '/(club)/home';
+  return '/(deportista)/(tabs)';
+}
+
+/**
+ * Entrada con huella: se llama SOLO después de que el sistema verificó la huella
+ * (services/biometria.ts). Hace un login normal con las credenciales del llavero.
+ * Si la contraseña ya no sirve (se cambió), apaga la huella para que se vuelva a activar.
+ */
+export async function loginConHuella(): Promise<Usuario> {
+  const { credencialesGuardadas, desactivarBiometria } = await import('./biometria');
+  const credenciales = await credencialesGuardadas();
+  if (!credenciales) throw new Error('No encontramos tus datos de acceso. Inicia sesión con tu contraseña.');
+  try {
+    return await login(credenciales.email, credenciales.password);
+  } catch (e) {
+    if (e instanceof ApiError && e.status === 401) {
+      await desactivarBiometria();
+      throw new Error('Tu contraseña cambió. Entra con ella para volver a activar la huella.');
+    }
+    throw e;
+  }
 }
 
 export async function logout(): Promise<void> {
@@ -181,6 +204,10 @@ export async function logout(): Promise<void> {
   await AsyncStorage.multiRemove([SESSION_KEY, TOKEN_KEY]);
   const { reiniciarNotificaciones } = await import('./notificaciones');
   reiniciarNotificaciones();
+  const { reiniciarPlanes } = await import('./planes');
+  reiniciarPlanes();
+  const { reiniciarChat } = await import('./chat');
+  reiniciarChat();
 }
 
 export async function getSession(): Promise<Usuario | null> {

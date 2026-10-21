@@ -1,14 +1,24 @@
 import { Ionicons } from '@expo/vector-icons';
-import { router } from 'expo-router';
-import { useMemo } from 'react';
+import { router, useFocusEffect } from 'expo-router';
+import { useCallback, useMemo, useState } from 'react';
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import CatalogoPlanes from '../../components/CatalogoPlanes';
+import ContratarPlanModal from '../../components/ContratarPlanModal';
+import { cargarPlanes, nombreDelPlan, planesParaContratar, precioTexto, usePlanActual, usePlanes, type Plan } from '../../services/planes';
 import { Colors, useAppTheme } from '../../theme/ThemeContext';
 
-/** HU-39 (versión club): consultar el catálogo de planes y beneficios. */
+/** HU-39 (versión club): consultar el catálogo de planes y beneficios. HU-42: contratar el plan Club. */
 export default function PlanesClubScreen() {
   const { colors } = useAppTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
+  const planActual = usePlanActual('club');
+  const planes = usePlanes();
+  const [elegido, setElegido] = useState<Plan | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useFocusEffect(useCallback(() => {
+    cargarPlanes('club').then(() => setError(null)).catch((e) => setError(e instanceof Error ? e.message : 'No pudimos cargar los planes.'));
+  }, []));
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
@@ -21,18 +31,36 @@ export default function PlanesClubScreen() {
         Revisa lo que incluye cada plan. El plan Club suma el panel web, las convocatorias y la gestión de postulantes.
       </Text>
 
-      <CatalogoPlanes destacarId="club" planActual={null} etiquetaDestacado="Para clubes" />
+      <CatalogoPlanes destacarId="club" planActual={planActual} etiquetaDestacado="Para clubes" />
 
       <View style={styles.aviso}>
         <Ionicons name="information-circle-outline" size={18} color={colors.accent} />
         <Text style={styles.avisoTexto}>
-          Los precios son referenciales y están en pesos chilenos (CLP). Próximamente podrás contratar un plan desde aquí.
+          Los precios son referenciales y están en pesos chilenos (CLP). El pago se hace con Webpay Plus.
         </Text>
       </View>
 
-      <TouchableOpacity style={styles.boton} disabled accessibilityState={{ disabled: true }}>
-        <Text style={styles.botonTexto}>Contratar plan Club · Disponible pronto</Text>
-      </TouchableOpacity>
+      {error ? <Text style={styles.error}>{error}</Text> : null}
+
+      {planesParaContratar('club', planes).map((p) => {
+        const yaLoTienes = planActual === p.id;
+        const disponible = p.backendId !== undefined;
+        return (
+          <TouchableOpacity
+            key={p.id}
+            style={[styles.boton, (yaLoTienes || !disponible) && styles.botonInactivo]}
+            disabled={yaLoTienes || !disponible}
+            accessibilityState={{ disabled: yaLoTienes || !disponible }}
+            onPress={() => setElegido(p)}
+          >
+            <Text style={styles.botonTexto}>
+              {yaLoTienes ? `Tu plan actual: ${nombreDelPlan(p.id)}` : disponible ? `Contratar plan ${p.nombre} · ${precioTexto(p)}` : `Plan ${p.nombre} · Disponible pronto`}
+            </Text>
+          </TouchableOpacity>
+        );
+      })}
+
+      <ContratarPlanModal visible={elegido !== null} plan={elegido} cuenta="club" onClose={() => setElegido(null)} />
     </ScrollView>
   );
 }
@@ -54,7 +82,9 @@ const makeStyles = (c: Colors) =>
     avisoTexto: { flex: 1, color: c.textMuted, fontSize: 11.5, lineHeight: 16 },
     boton: {
       marginTop: 16, backgroundColor: c.primary, borderRadius: 13,
-      paddingVertical: 13, alignItems: 'center', opacity: 0.45,
+      paddingVertical: 13, alignItems: 'center',
     },
+    botonInactivo: { opacity: 0.45 },
     botonTexto: { color: '#fff', fontSize: 13, fontWeight: '700' },
+    error: { color: c.danger, fontSize: 12, marginTop: 12, textAlign: 'center' },
   });

@@ -1,11 +1,17 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Tabs } from 'expo-router';
+import AvisoMensaje from '../../../components/AvisoMensaje';
+import { useChatsRefresh } from '../../../hooks/useChatsRefresh';
+import { useNoLeidosTotal } from '../../../services/chat';
 import { useAppTheme } from '../../../theme/ThemeContext';
 
 export default function TabLayout() {
   const { colors } = useAppTheme();
+  useChatsRefresh();
+  const noLeidos = useNoLeidosTotal();
 
   return (
+    <>
     <Tabs
       screenOptions={{
         headerShown: false,
@@ -39,6 +45,7 @@ export default function TabLayout() {
         name="chat"
         options={{
           title: 'Chat',
+          tabBarBadge: noLeidos > 0 ? (noLeidos > 9 ? '9+' : noLeidos) : undefined,
           tabBarIcon: ({ color, size }) => <Ionicons name="chatbubble-ellipses" size={size} color={color} />,
         }}
       />
@@ -50,5 +57,8 @@ export default function TabLayout() {
         }}
       />
     </Tabs>
+    {/* HU-60: aviso de mensaje nuevo sobre cualquier pestaña */}
+    <AvisoMensaje />
+    </>
   );
 }
