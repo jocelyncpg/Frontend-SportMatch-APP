@@ -4,7 +4,7 @@ import { useMemo } from 'react';
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Avatar from '../../../components/Avatar';
-import { horaCorta, ultimoMensaje, useConversaciones } from '../../../services/chat';
+import { getConversacion, horaCorta, ultimoMensaje, useConversaciones } from '../../../services/chat';
 import { Persona, useMatches } from '../../../services/matchStore';
 import { Colors, useAppTheme } from '../../../theme/ThemeContext';
 
@@ -19,16 +19,11 @@ export default function ChatListScreen() {
   // Los matches nuevos (sin mensajes todavía) van arriba, el más reciente primero.
   // Después, las conversaciones, con la de mensaje más reciente primero.
   const chats = useMemo(() => {
+    const de = (p: Persona) => conversaciones[p.id] ?? getConversacion(p.id);
     const conMensajes = confirmados
-      .filter((p) => ultimoMensaje(conversaciones[p.id] ?? { personaId: p.id, mensajes: [], noLeidos: 0 }))
-      .sort((a, b) => {
-        const ta = ultimoMensaje(conversaciones[a.id])?.enviadoEn ?? 0;
-        const tb = ultimoMensaje(conversaciones[b.id])?.enviadoEn ?? 0;
-        return tb - ta;
-      });
-    const nuevos = confirmados
-      .filter((p) => !ultimoMensaje(conversaciones[p.id] ?? { personaId: p.id, mensajes: [], noLeidos: 0 }))
-      .reverse();
+      .filter((p) => ultimoMensaje(de(p)))
+      .sort((a, b) => (ultimoMensaje(de(b))?.enviadoEn ?? 0) - (ultimoMensaje(de(a))?.enviadoEn ?? 0));
+    const nuevos = confirmados.filter((p) => !ultimoMensaje(de(p))).reverse();
     return [...nuevos, ...conMensajes];
   }, [confirmados, conversaciones]);
 
@@ -47,9 +42,10 @@ export default function ChatListScreen() {
 
       <ScrollView contentContainerStyle={styles.list}>
         {chats.map((persona) => {
-          const conv = conversaciones[persona.id];
-          const ultimo = conv ? ultimoMensaje(conv) : null;
-          const noLeidos = conv?.noLeidos ?? 0;
+          const conv = conversaciones[persona.id] ?? getConversacion(persona.id);
+          const ultimo = ultimoMensaje(conv);
+          const noLeidos = conv.noLeidos;
+          const { silenciado, bloqueado } = conv;
           return (
             <TouchableOpacity key={persona.id} style={styles.card} onPress={() => abrirChat(persona)}>
               <Avatar
@@ -61,20 +57,32 @@ export default function ChatListScreen() {
               />
               <View style={styles.cardInfo}>
                 <Text style={styles.cardName}>{persona.name}</Text>
-                <Text
-                  style={ultimo ? [styles.cardMessage, noLeidos > 0 && styles.cardMessageSinLeer] : styles.cardMessageNuevo}
-                  numberOfLines={1}
-                >
-                  {ultimo
-                    ? `${ultimo.propio ? 'Tú: ' : ''}${ultimo.texto}`
-                    : `¡Nuevo match! Saluda a ${persona.name.split(' ')[0]} 👋`}
-                </Text>
+                {bloqueado ? (
+                  <Text style={styles.cardBloqueado} numberOfLines={1}>Bloqueado</Text>
+                ) : (
+                  <Text
+                    style={ultimo ? [styles.cardMessage, noLeidos > 0 && styles.cardMessageSinLeer] : styles.cardMessageNuevo}
+                    numberOfLines={1}
+                  >
+                    {ultimo
+                      ? `${ultimo.propio ? 'Tú: ' : ''}${ultimo.texto}`
+                      : `¡Nuevo match! Saluda a ${persona.name.split(' ')[0]} 👋`}
+                  </Text>
+                )}
               </View>
               {ultimo ? (
                 <View style={styles.cardDerecha}>
-                  <Text style={[styles.cardHora, noLeidos > 0 && styles.cardHoraSinLeer]}>{horaCorta(ultimo.enviadoEn)}</Text>
-                  {noLeidos > 0 && (
-                    <View style={styles.contador} accessibilityLabel={`${noLeidos} mensajes sin leer`}>
+                  <View style={styles.horaFila}>
+                    {silenciado && !bloqueado ? (
+                      <Ionicons name="notifications-off-outline" size={12} color={colors.textMuted} accessibilityLabel="Silenciado" />
+                    ) : null}
+                    {bloqueado ? (
+                      <Ionicons name="ban-outline" size={12} color={colors.danger} accessibilityLabel="Bloqueado" />
+                    ) : null}
+                    <Text style={[styles.cardHora, noLeidos > 0 && !silenciado && styles.cardHoraSinLeer]}>{horaCorta(ultimo.enviadoEn)}</Text>
+                  </View>
+                  {noLeidos > 0 && !bloqueado && (
+                    <View style={[styles.contador, silenciado && styles.contadorSilenciado]} accessibilityLabel={`${noLeidos} mensajes sin leer`}>
                       <Text style={styles.contadorTexto}>{noLeidos > 9 ? '9+' : noLeidos}</Text>
                     </View>
                   )}
@@ -117,13 +125,16 @@ const makeStyles = (c: Colors) =>
     cardMessage: { color: c.textMuted, fontSize: 11.5, marginTop: 2 },
     cardMessageSinLeer: { color: c.text, fontWeight: '700' },
     cardMessageNuevo: { color: c.accent, fontSize: 11.5, marginTop: 2, fontWeight: '600' },
+    cardBloqueado: { color: c.danger, fontSize: 11.5, marginTop: 2, fontWeight: '600' },
     cardDerecha: { alignItems: 'flex-end', gap: 5 },
+    horaFila: { flexDirection: 'row', alignItems: 'center', gap: 4 },
     cardHora: { color: c.textMuted, fontSize: 10 },
     cardHoraSinLeer: { color: c.primary, fontWeight: '700' },
     contador: {
       minWidth: 18, height: 18, borderRadius: 9, paddingHorizontal: 5,
       backgroundColor: c.primary, alignItems: 'center', justifyContent: 'center',
     },
+    contadorSilenciado: { backgroundColor: c.textMuted },
     contadorTexto: { color: '#fff', fontSize: 10, fontWeight: '700' },
     nuevoBadge: { backgroundColor: c.primary, borderRadius: 10, paddingHorizontal: 8, paddingVertical: 3 },
     nuevoText: { color: '#fff', fontSize: 9.5, fontWeight: '700' },
