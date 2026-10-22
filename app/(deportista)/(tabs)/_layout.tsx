@@ -1,9 +1,14 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Tabs } from 'expo-router';
+import { useNoLeidosTotal } from '../../../services/chat';
+import { useNoLeidosGrupales } from '../../../services/chatGrupal';
 import { useAppTheme } from '../../../theme/ThemeContext';
 
 export default function TabLayout() {
   const { colors } = useAppTheme();
+
+  // Globo de la pestaña Chat: mensajes sin leer de chats 1 a 1 y de grupos de actividad.
+  const noLeidos = useNoLeidosTotal() + useNoLeidosGrupales();
 
   return (
     <Tabs
@@ -39,6 +44,8 @@ export default function TabLayout() {
         name="chat"
         options={{
           title: 'Chat',
+          tabBarBadge: noLeidos > 0 ? (noLeidos > 9 ? '9+' : noLeidos) : undefined,
+          tabBarBadgeStyle: { backgroundColor: colors.primary, color: '#fff', fontSize: 10 },
           tabBarIcon: ({ color, size }) => <Ionicons name="chatbubble-ellipses" size={size} color={color} />,
         }}
       />
