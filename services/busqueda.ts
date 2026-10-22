@@ -32,22 +32,13 @@ export const DISTANCIAS_BUSQUEDA: { label: string; km: number | null }[] = [
   { label: '10 km', km: 10 },
 ];
 
-// DATOS DE EJEMPLO: en la versión simulada los deportistas no traen disponibilidad.
-// Cuando el backend la entregue, `disponibilidadDe` pasa a leerla directo de la persona.
-export const DISPONIBILIDAD_DEMO: Record<string, string> = {
-  camila: 'Sábados y domingos en la mañana',
-  diego: 'Martes y jueves en la noche',
-  sofia: 'Sábados en la mañana',
-  valentina: 'Sábados en la mañana, miércoles en la tarde',
-  andres: 'Lunes, miércoles y viernes en la tarde',
-  tomas: 'Todos los días en la mañana',
-  matias: 'Domingos en la tarde',
-  ignacio: 'Domingos temprano en la mañana',
-  daniela: 'Martes y jueves en la noche, sábados en la mañana',
-};
+// PENDIENTE BACKEND: GET /users/suggestions todavía no entrega la disponibilidad de cada
+// deportista. Mientras tanto la búsqueda no ofrece el filtro de horario (ver buscar.tsx);
+// cuando llegue, `disponibilidadDe` pasa a leerla directo de la persona.
+export const HAY_DISPONIBILIDAD = false;
 
-export function disponibilidadDe(p: Persona): string | undefined {
-  return DISPONIBILIDAD_DEMO[p.id];
+export function disponibilidadDe(_p: Persona): string | undefined {
+  return undefined;
 }
 
 /** La disponibilidad es texto libre, así que se busca por palabras ("mañana", "sábados"...), sin tildes. */
