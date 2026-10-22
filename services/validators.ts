@@ -9,6 +9,12 @@ export type PasswordRule = { id: string; label: string; ok: boolean };
 export const PASSWORD_MIN = 12;
 export const PASSWORD_MAX = 64;
 
+/**
+ * Máximo de representantes que puede tener un club (HU-06). La historia pide 3, pero
+ * ms-club liga cada club a una sola cuenta: sube a 3 cuando el backend lo admita.
+ */
+export const MAX_REPRESENTANTES = 1;
+
 const LETRAS = 'A-Za-zÁÉÍÓÚÜÑáéíóúüñ';
 
 /** Deja solo dígitos y K, agrega el guion antes del dígito verificador. Ej: "12.345.678-5" -> "12345678-5" */
@@ -39,6 +45,21 @@ export function validateRut(rut: string): string | null {
   return null;
 }
 
+/**
+ * RUT de una organización (club). Usa el mismo dígito verificador que el de una persona.
+ * Los RUT de personas jurídicas parten desde 50.000.000, así que uno menor es de persona natural.
+ * LÍMITE: acá solo se comprueba que esté bien escrito. Que el club exista y esté vigente
+ * en el SII solo se puede verificar desde el backend (pendiente con el equipo).
+ */
+export function validateRutClub(rut: string): string | null {
+  if (!rut.trim()) return 'Ingresa el RUT del club.';
+  if (!/^\d{7,8}-[\dK]$/.test(rut)) return 'Formato inválido. Usa 76123456-0 (sin puntos y con guion).';
+  const [cuerpo, dv] = rut.split('-');
+  if (calcularDv(cuerpo) !== dv) return 'El RUT no es válido (dígito verificador incorrecto).';
+  if (Number(cuerpo) < 50000000) return 'Ese RUT es de una persona. Ingresa el RUT del club (organización).';
+  return null;
+}
+
 export function validateNombre(valor: string, campo: string, obligatorio = true): string | null {
   const v = valor.trim();
   if (!v) return obligatorio ? `Ingresa tu ${campo.toLowerCase()}.` : null;
@@ -49,12 +70,34 @@ export function validateNombre(valor: string, campo: string, obligatorio = true)
   return null;
 }
 
+/** Nombre del club: permite letras, números y . & ' - (ej: "Club Deportivo 7 Cumbres"). */
+export function validateNombreClub(valor: string): string | null {
+  const v = valor.trim();
+  if (!v) return 'Ingresa el nombre del club.';
+  if (v.length < 3) return 'El nombre del club es demasiado corto.';
+  if (v.length > 60) return 'El nombre del club es demasiado largo (máx. 60 caracteres).';
+  const patron = new RegExp(`^[${LETRAS}0-9]+(?:[ .&'-]+[${LETRAS}0-9]+)*\\.?$`);
+  if (!patron.test(v)) return "El nombre solo puede tener letras, números y . & ' -";
+  return null;
+}
+
 export function validateEmail(email: string): string | null {
   const v = email.trim();
   if (!v) return 'Ingresa tu correo electrónico.';
   if (v.length > 100) return 'El correo es demasiado largo.';
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(v)) return 'Ingresa un correo válido (ej: nombre@correo.com).';
   return null;
+}
+
+/**
+ * Cada representante necesita su propio correo (es su usuario de ingreso).
+ * Devuelve el error si este correo ya está en la lista de arriba (comparación sin mayúsculas).
+ */
+export function validateEmailRepetido(email: string, otros: string[]): string | null {
+  const v = email.trim().toLowerCase();
+  if (!v) return null;
+  const repetido = otros.some((o) => o.trim().toLowerCase() === v);
+  return repetido ? 'Este correo ya está en otro representante.' : null;
 }
 
 export function passwordRules(password: string): PasswordRule[] {

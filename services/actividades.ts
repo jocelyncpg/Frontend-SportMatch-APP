@@ -358,6 +358,18 @@ const getEstadoCarga = () => estadoCarga;
 /** Actividades ya realizadas donde organizaste o fuiste aceptado (las actividades viven en `actividades`). */
 let historial: Historial = { total: 0, ids: [], cargando: false, error: null };
 const getHistorial = () => historial;
+/** Para que otros almacenes (p. ej. el chat grupal) reaccionen a cambios en las actividades. */
+export const suscribirActividades = suscribir;
+
+/** Nombre de un deportista que aparece en alguna actividad cargada (organizador o postulante). */
+export function nombreDePersona(id: string): string {
+  for (const a of actividades) {
+    if (a.organizadorId === id) return a.organizadorNombre;
+    const p = a.postulantesRecibidos.find((x) => x.id === id);
+    if (p) return p.nombre;
+  }
+  return 'Deportista';
+}
 
 function reiniciarSiCambioLaCuenta(id: string) {
   if (usuarioId === id) return;
