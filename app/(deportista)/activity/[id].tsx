@@ -21,6 +21,7 @@ import {
   visualDeporte,
 } from '../../../services/actividades';
 import { Usuario, getSession } from '../../../services/auth';
+import { accesoGrupal, miembrosDe, useSalaGrupal } from '../../../services/chatGrupal';
 import { Colors, useAppTheme } from '../../../theme/ThemeContext';
 
 export default function ActividadDetalleScreen() {
@@ -30,6 +31,7 @@ export default function ActividadDetalleScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const actividades = useActividades();
   const a = actividades.find((x) => x.id === id);
+  const salaGrupal = useSalaGrupal(id ?? '');
 
   const [usuario, setUsuario] = useState<Usuario | null>(null);
   const [modalPostular, setModalPostular] = useState(false);
@@ -67,6 +69,9 @@ export default function ActividadDetalleScreen() {
   const activa = estado === 'abierta' || estado === 'llena';
   const miMensaje = a.mensajes[YO];
   const lista = postulantes(a);
+  // Chat grupal (HU-50): lo ven quien organiza y las personas aprobadas, mientras la actividad no se cancele.
+  const accesoChat = accesoGrupal(a, ahora);
+  const noLeidosChat = salaGrupal?.noLeidos ?? 0;
 
   function abrirPostular() {
     setMensaje('');
@@ -236,6 +241,32 @@ export default function ActividadDetalleScreen() {
           </View>
         </View>
 
+        {accesoChat !== 'ninguno' ? (
+          <TouchableOpacity
+            style={styles.chatGrupo}
+            onPress={() => router.push({ pathname: '/(deportista)/chat-grupo/[id]', params: { id: a.id } })}
+            activeOpacity={0.7}
+            accessibilityLabel="Abrir el chat del grupo"
+          >
+            <View style={styles.chatGrupoIcono}>
+              <Ionicons name="chatbubbles" size={18} color={colors.accent} />
+            </View>
+            <View style={styles.chatGrupoTextos}>
+              <Text style={styles.chatGrupoTitulo}>Chat del grupo</Text>
+              <Text style={styles.chatGrupoSub}>
+                {miembrosDe(a).length} {miembrosDe(a).length === 1 ? 'participante' : 'participantes'}
+                {accesoChat === 'leer' ? ' · solo lectura' : ''}
+              </Text>
+            </View>
+            {noLeidosChat > 0 ? (
+              <View style={styles.chatGrupoContador}>
+                <Text style={styles.chatGrupoContadorTexto}>{noLeidosChat > 9 ? '9+' : noLeidosChat}</Text>
+              </View>
+            ) : null}
+            <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
+          </TouchableOpacity>
+        ) : null}
+
         {a.descripcion ? (
           <>
             <Text style={styles.seccion}>Descripción</Text>
@@ -375,6 +406,17 @@ const makeStyles = (c: Colors) =>
     separador: { height: 1, backgroundColor: c.border, marginVertical: 2 },
     barra: { height: 6, borderRadius: 3, backgroundColor: c.chip, marginTop: 6, overflow: 'hidden' },
     barraRelleno: { height: 6, borderRadius: 3, backgroundColor: c.accent },
+
+    chatGrupo: {
+      flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: c.card,
+      borderWidth: 1, borderColor: c.border, borderRadius: 14, padding: 12, marginBottom: 18,
+    },
+    chatGrupoIcono: { width: 36, height: 36, borderRadius: 11, backgroundColor: c.chip, alignItems: 'center', justifyContent: 'center' },
+    chatGrupoTextos: { flex: 1 },
+    chatGrupoTitulo: { color: c.text, fontSize: 13, fontWeight: '700' },
+    chatGrupoSub: { color: c.textMuted, fontSize: 11, marginTop: 2 },
+    chatGrupoContador: { minWidth: 18, height: 18, borderRadius: 9, paddingHorizontal: 5, backgroundColor: c.primary, alignItems: 'center', justifyContent: 'center' },
+    chatGrupoContadorTexto: { color: '#fff', fontSize: 10, fontWeight: '700' },
 
     seccion: { color: c.text, fontSize: 13, fontWeight: '700', marginBottom: 6 },
     texto: { color: c.textMuted, fontSize: 12.5, lineHeight: 18, marginBottom: 16 },

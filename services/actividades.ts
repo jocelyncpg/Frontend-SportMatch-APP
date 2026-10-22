@@ -262,6 +262,8 @@ const emitir = () => oyentes.forEach((o) => o());
 const suscribir = (o: () => void) => { oyentes.add(o); return () => { oyentes.delete(o); }; };
 /** Lectura directa del estado actual (sin hook), igual que getEstado en matchStore. */
 export const getActividades = () => actividades;
+/** Para que otros almacenes (p. ej. el chat grupal) reaccionen a cambios en las actividades. */
+export const suscribirActividades = suscribir;
 
 function actualizar(id: string, cambio: (a: Actividad) => Actividad) {
   actividades = actividades.map((a) => (a.id === id ? cambio(a) : a));

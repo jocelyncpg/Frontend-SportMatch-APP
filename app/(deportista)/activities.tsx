@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { ReactNode, useEffect, useMemo, useState } from 'react';
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -54,7 +54,9 @@ export default function ActivitiesScreen() {
   const actividades = useActividades();
   const ahora = Date.now();
 
-  const [pestana, setPestana] = useState<Pestana>('explorar');
+  // Inicio abre esta pantalla con tab=mias para ir directo a "Mis actividades".
+  const { tab } = useLocalSearchParams<{ tab?: string }>();
+  const [pestana, setPestana] = useState<Pestana>(tab === 'mias' ? 'mias' : 'explorar');
   const [filtros, setFiltros] = useState<FiltrosActividades>(FILTROS_ACTIVIDADES_VACIOS);
   const [mostrarFiltros, setMostrarFiltros] = useState(false);
   const [usuario, setUsuario] = useState<Usuario | null>(null);

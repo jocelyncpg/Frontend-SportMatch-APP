@@ -26,6 +26,9 @@ import { cargarSugerencias, sugerencias, useMatches } from '../../../services/ma
 import { useNotificaciones } from '../../../services/notificaciones';
 import { Colors, useAppTheme } from '../../../theme/ThemeContext';
 
+// Cuántas actividades se ven en Inicio antes de tocar "Ver más".
+const ACTIVIDADES_VISIBLES = 4;
+
 export default function HomeScreen() {
   const { colors } = useAppTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
@@ -34,10 +37,13 @@ export default function HomeScreen() {
   const estado = useMatches();
   const { noLeidas } = useNotificaciones();
   const actividades = useActividades();
-  const proximas = filtrarActividades(actividades, FILTROS_ACTIVIDADES_VACIOS).slice(0, 3);
+  // Todas las actividades abiertas, para verlas directo en Inicio.
+  const abiertas = filtrarActividades(actividades, FILTROS_ACTIVIDADES_VACIOS);
   const recomendados = useMemo(() => sugerencias(estado).slice(0, 5), [estado]);
 
   const [usuario, setUsuario] = useState<Usuario | null>(null);
+  const [verTodas, setVerTodas] = useState(false);
+  const visibles = verTodas ? abiertas : abiertas.slice(0, ACTIVIDADES_VISIBLES);
 
   // Cada vez que se vuelve a esta pestaña se traen los deportistas actualizados.
   useFocusEffect(
@@ -189,21 +195,41 @@ export default function HomeScreen() {
         </Text>
       )}
 
-      {/* Sección: Entrenamientos cerca de ti */}
+      {/* Sección: Entrenamientos cerca de ti (todas las actividades abiertas, aquí mismo) */}
       <View style={[styles.sectionRow, { marginTop: 24 }]}>
         <Text style={styles.sectionTitle}>
           Entrenamientos cerca de ti
         </Text>
 
-        <TouchableOpacity onPress={() => router.push('/(deportista)/activities')}>
-          <Text style={styles.sectionLink}>
-            Ver todos
+        {abiertas.length > 0 ? (
+          <Text style={styles.sectionCount}>
+            {abiertas.length} {abiertas.length === 1 ? 'abierta' : 'abiertas'}
           </Text>
+        ) : null}
+      </View>
+
+      <View style={styles.actividadesAcciones}>
+        <TouchableOpacity
+          style={styles.accionSecundaria}
+          onPress={() => router.push({ pathname: '/(deportista)/activities', params: { tab: 'mias' } })}
+          accessibilityLabel="Mis actividades"
+        >
+          <Ionicons name="calendar-outline" size={15} color={colors.accent} />
+          <Text style={styles.accionSecundariaTexto}>Mis actividades</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.accionPrimaria}
+          onPress={() => router.push('/(deportista)/activity/nueva')}
+          accessibilityLabel="Crear actividad"
+        >
+          <Ionicons name="add" size={16} color="#fff" />
+          <Text style={styles.accionPrimariaTexto}>Crear actividad</Text>
         </TouchableOpacity>
       </View>
 
-      {proximas.length > 0 ? (
-        proximas.map((a) => {
+      {abiertas.length > 0 ? (
+        visibles.map((a) => {
           const visual = visualDeporte(a.deporte);
           return (
             <TouchableOpacity
@@ -224,6 +250,20 @@ export default function HomeScreen() {
       ) : (
         <Text style={styles.emptyText}>No hay actividades abiertas por ahora.</Text>
       )}
+
+      {abiertas.length > ACTIVIDADES_VISIBLES ? (
+        <TouchableOpacity
+          style={styles.verMasBtn}
+          onPress={() => setVerTodas((v) => !v)}
+          activeOpacity={0.7}
+          accessibilityLabel={verTodas ? 'Ver menos actividades' : 'Ver más actividades'}
+        >
+          <Text style={styles.verMasTexto}>
+            {verTodas ? 'Ver menos' : `Ver más (${abiertas.length - ACTIVIDADES_VISIBLES})`}
+          </Text>
+          <Ionicons name={verTodas ? 'chevron-up' : 'chevron-down'} size={14} color={colors.accent} />
+        </TouchableOpacity>
+      ) : null}
     </ScrollView>
   );
 }
@@ -376,6 +416,72 @@ const makeStyles = (c: Colors) =>
       color: c.accent,
       fontSize: 11,
       fontWeight: '600',
+    },
+
+    sectionCount: {
+      color: c.textMuted,
+      fontSize: 11,
+      fontWeight: '600',
+    },
+
+    actividadesAcciones: {
+      flexDirection: 'row',
+      gap: 10,
+      marginBottom: 14,
+    },
+
+    accionSecundaria: {
+      flex: 1,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 6,
+      backgroundColor: c.card,
+      borderWidth: 1,
+      borderColor: c.border,
+      borderRadius: 12,
+      paddingVertical: 10,
+    },
+
+    accionSecundariaTexto: {
+      color: c.accent,
+      fontSize: 12,
+      fontWeight: '700',
+    },
+
+    accionPrimaria: {
+      flex: 1,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 4,
+      backgroundColor: c.primary,
+      borderRadius: 12,
+      paddingVertical: 10,
+    },
+
+    accionPrimariaTexto: {
+      color: '#fff',
+      fontSize: 12,
+      fontWeight: '700',
+    },
+
+    verMasBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 6,
+      borderWidth: 1,
+      borderColor: c.border,
+      borderRadius: 12,
+      paddingVertical: 10,
+      marginTop: 2,
+    },
+
+    verMasTexto: {
+      color: c.accent,
+      fontSize: 12,
+      fontWeight: '700',
     },
 
     emptyText: {
