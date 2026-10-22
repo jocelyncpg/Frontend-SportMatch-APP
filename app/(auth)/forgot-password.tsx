@@ -145,12 +145,6 @@ export default function ForgotPasswordScreen() {
               está registrado, te enviamos un código de 6 dígitos. Ingrésalo y elige tu nueva contraseña.
             </Text>
 
-            {/* DEMO: quitar cuando el código llegue al correo desde el backend */}
-            <View style={styles.demoBox}>
-              <Ionicons name="flask-outline" size={14} color={colors.textMuted} />
-              <Text style={styles.demoTexto}>Modo simulado: sirve cualquier código de 6 dígitos.</Text>
-            </View>
-
             <View style={[styles.inputBox, intento && errorCodigo ? styles.inputBoxError : null]}>
               <Ionicons name="keypad-outline" size={16} color={colors.textMuted} />
               <TextInput
@@ -289,8 +283,6 @@ const makeStyles = (c: Colors) =>
     ruleRow: { flexDirection: 'row', alignItems: 'center', gap: 7 },
     ruleText: { color: c.textMuted, fontSize: 11.5 },
 
-    demoBox: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 16 },
-    demoTexto: { color: c.textMuted, fontSize: 11 },
 
     sendButton: { backgroundColor: c.primary, borderRadius: 13, paddingVertical: 14, alignItems: 'center', marginTop: 6 },
     sendButtonOff: { opacity: 0.6 },

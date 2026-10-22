@@ -11,6 +11,7 @@ import {
     DISTANCIAS_BUSQUEDA,
     FILTROS_VACIOS,
     FRANJAS_BUSQUEDA,
+    HAY_DISPONIBILIDAD,
     FiltrosBusqueda,
     NIVELES_BUSQUEDA,
     contarFiltros,
@@ -165,12 +166,14 @@ export default function BuscarScreen() {
             'Nivel',
             NIVELES_BUSQUEDA.map((n) => chip(`niv-${n}`, n, filtros.niveles.includes(n), () => alternarNivel(n)))
           )}
-          {grupo(
-            'Horario',
-            FRANJAS_BUSQUEDA.map((f) =>
-              chip(`fra-${f.key}`, f.label, filtros.franja === f.key, () => cambiar({ franja: filtros.franja === f.key ? null : f.key }))
-            )
-          )}
+          {HAY_DISPONIBILIDAD
+            ? grupo(
+                'Horario',
+                FRANJAS_BUSQUEDA.map((f) =>
+                  chip(`fra-${f.key}`, f.label, filtros.franja === f.key, () => cambiar({ franja: filtros.franja === f.key ? null : f.key }))
+                )
+              )
+            : null}
           {grupo(
             'Distancia',
             DISTANCIAS_BUSQUEDA.map((d) =>
