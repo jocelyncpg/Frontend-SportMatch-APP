@@ -6,6 +6,13 @@ import { Alert, Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Avatar from '../../components/Avatar';
 import { Usuario, cambiarPassword, getSession, logout } from '../../services/auth';
+import {
+  cerrarConvocatoria as cerrarConvocatoriaEnAlmacen,
+  publicarConvocatoria,
+  sembrarDemoClub,
+  useConsultasPendientes,
+  useConvocatoria,
+} from '../../services/consultas';
 import { PASSWORD_MAX, passwordRules, validatePassword, validatePasswordMatch } from '../../services/validators';
 import { Colors, useAppTheme } from '../../theme/ThemeContext';
 
@@ -14,6 +21,7 @@ type Postulante = { id: string; name: string; sport: string; level: string; colo
 // DATOS DE EJEMPLO: el nombre del club sale de la cuenta con la que se inició sesión; este texto solo se usa
 // si no hay sesión. La foto del club y el resto del perfil vendrán del backend (HU-30).
 const NOMBRE_CLUB_DEMO = 'Club de Atletismo';
+const CLUB_ID_DEMO = 'club-demo';
 
 const POSTULANTES_INICIALES: Postulante[] = [
   { id: '1', name: 'Matías P.', sport: 'Atletismo', level: 'Avanzado', colorFrom: '#7C3AED' },
@@ -34,9 +42,19 @@ export default function ClubHomeScreen() {
   // Cuenta con la que se inició sesión (representante del club).
   const [sesion, setSesion] = useState<Usuario | null>(null);
   useEffect(() => {
-    getSession().then(setSesion);
+    getSession().then((s) => {
+      setSesion(s);
+      // DEMO: deja dos consultas de ejemplo en la bandeja de este club (HU-51).
+      sembrarDemoClub(s?.clubId ?? CLUB_ID_DEMO, s?.clubNombre ?? NOMBRE_CLUB_DEMO);
+    });
   }, []);
   const nombreClub = sesion?.clubNombre ?? NOMBRE_CLUB_DEMO;
+  const clubId = sesion?.clubId ?? CLUB_ID_DEMO;
+
+  // La convocatoria vive en services/consultas.ts: así la ven los deportistas y pueden hacerle consultas (HU-51).
+  const convocatoriaGuardada = useConvocatoria(clubId);
+  const convocatoria = convocatoriaGuardada?.abierta ? convocatoriaGuardada : null;
+  const consultasPendientes = useConsultasPendientes(clubId);
 
   // Cambio de contraseña
   const [passModal, setPassModal] = useState(false);
@@ -47,10 +65,6 @@ export default function ClubHomeScreen() {
   const [passError, setPassError] = useState('');
   const [passEnviando, setPassEnviando] = useState(false);
 
-  const [convocatoria, setConvocatoria] = useState<{ titulo: string; descripcion: string } | null>({
-    titulo: 'Buscamos velocistas nivel intermedio-avanzado',
-    descripcion: 'Completar el equipo de pista para la temporada 2026.',
-  });
   const [modalVisible, setModalVisible] = useState(false);
   const [tituloTemp, setTituloTemp] = useState('');
   const [descTemp, setDescTemp] = useState('');
@@ -140,19 +154,23 @@ export default function ClubHomeScreen() {
 
   // ---------- Convocatoria ----------
   function abrirEditor() {
-    setTituloTemp(convocatoria?.titulo ?? '');
-    setDescTemp(convocatoria?.descripcion ?? '');
+    setTituloTemp(convocatoriaGuardada?.titulo ?? '');
+    setDescTemp(convocatoriaGuardada?.descripcion ?? '');
     setModalVisible(true);
   }
 
   function guardarConvocatoria() {
     if (!tituloTemp.trim()) return;
-    setConvocatoria({ titulo: tituloTemp.trim(), descripcion: descTemp.trim() });
+    const r = publicarConvocatoria(clubId, nombreClub, { titulo: tituloTemp, descripcion: descTemp });
+    if (!r.ok) {
+      Alert.alert('No se pudo publicar', r.motivo);
+      return;
+    }
     setModalVisible(false);
   }
 
   function cerrarConvocatoria() {
-    setConvocatoria(null);
+    cerrarConvocatoriaEnAlmacen(clubId);
   }
 
   // ---------- Postulantes ----------
@@ -210,6 +228,32 @@ export default function ClubHomeScreen() {
             <Text style={styles.resumenEtiqueta}>Convocatoria</Text>
           </View>
         </View>
+
+        {/* HU-51: bandeja de consultas de los postulantes, compartida por los representantes del club */}
+        <TouchableOpacity
+          style={styles.consultasCard}
+          activeOpacity={0.8}
+          onPress={() => router.push('/(club)/consultas' as never)}
+          accessibilityLabel="Abrir consultas de postulantes"
+        >
+          <View style={styles.planesIcon}>
+            <Ionicons name="chatbubbles-outline" size={18} color={colors.accent} />
+          </View>
+          <View style={styles.planesInfo}>
+            <Text style={styles.planesTitle}>Consultas de postulantes</Text>
+            <Text style={styles.planesSub}>
+              {consultasPendientes > 0
+                ? `${consultasPendientes} ${consultasPendientes === 1 ? 'consulta sin responder' : 'consultas sin responder'}`
+                : 'Todo al día'}
+            </Text>
+          </View>
+          {consultasPendientes > 0 ? (
+            <View style={styles.consultasBadge}>
+              <Text style={styles.consultasBadgeTexto}>{consultasPendientes > 9 ? '9+' : consultasPendientes}</Text>
+            </View>
+          ) : null}
+          <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
+        </TouchableOpacity>
 
         {/* HU-39: acceso al catálogo de planes (versión club) */}
         <TouchableOpacity
@@ -455,6 +499,9 @@ const makeStyles = (c: Colors) =>
     resumenEtiqueta: { color: c.textMuted, fontSize: 10.5, marginTop: 3 },
     resumenDivisor: { width: 1, height: 28, backgroundColor: c.border },
 
+    consultasCard: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: c.card, borderWidth: 1, borderColor: c.border, borderRadius: 14, padding: 12, marginBottom: 10 },
+    consultasBadge: { minWidth: 20, height: 20, borderRadius: 10, paddingHorizontal: 6, backgroundColor: c.primary, alignItems: 'center', justifyContent: 'center' },
+    consultasBadgeTexto: { color: '#fff', fontSize: 10.5, fontWeight: '700' },
     planesCard: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: c.card, borderWidth: 1, borderColor: c.border, borderRadius: 14, padding: 12, marginBottom: 22 },
     planesIcon: { width: 36, height: 36, borderRadius: 10, backgroundColor: c.chip, alignItems: 'center', justifyContent: 'center' },
     planesInfo: { flex: 1 },

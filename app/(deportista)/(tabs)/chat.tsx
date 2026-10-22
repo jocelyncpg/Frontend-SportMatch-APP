@@ -4,15 +4,17 @@ import { useMemo } from 'react';
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Avatar from '../../../components/Avatar';
-import { visualDeporte } from '../../../services/actividades';
+import { YO, visualDeporte } from '../../../services/actividades';
 import { getConversacion, horaCorta, ultimoMensaje, useConversaciones } from '../../../services/chat';
 import { ChatGrupal, ultimoMensajeGrupal, useChatsGrupales } from '../../../services/chatGrupal';
+import { Hilo, getConvocatoria, useHilosDePostulante } from '../../../services/consultas';
 import { Persona, useMatches } from '../../../services/matchStore';
 import { Colors, useAppTheme } from '../../../theme/ThemeContext';
 
 type Item =
   | { tipo: 'persona'; persona: Persona; orden: number; nuevo: boolean }
-  | { tipo: 'grupo'; grupo: ChatGrupal; orden: number; nuevo: false };
+  | { tipo: 'grupo'; grupo: ChatGrupal; orden: number; nuevo: false }
+  | { tipo: 'club'; hilo: Hilo; orden: number; nuevo: false };
 
 export default function ChatListScreen() {
   const { colors } = useAppTheme();
@@ -22,9 +24,10 @@ export default function ChatListScreen() {
   const { confirmados } = useMatches();
   const conversaciones = useConversaciones();
   const grupos = useChatsGrupales();
+  const consultas = useHilosDePostulante(YO);
 
   // Los matches nuevos (sin mensajes todavía) van arriba, el más reciente primero.
-  // Después, chats 1 a 1 y grupos de actividad juntos, con el mensaje más reciente primero.
+  // Después, chats 1 a 1, grupos de actividad y consultas a clubes juntos, con el mensaje más reciente primero.
   const items = useMemo<Item[]>(() => {
     const de = (p: Persona) => conversaciones[p.id] ?? getConversacion(p.id);
     const nuevos: Item[] = confirmados
@@ -40,8 +43,14 @@ export default function ChatListScreen() {
       orden: grupo.sala.mensajes[grupo.sala.mensajes.length - 1]?.enviadoEn ?? 0,
       nuevo: false,
     }));
-    return [...nuevos, ...[...conMensajes, ...deGrupos].sort((a, b) => b.orden - a.orden)];
-  }, [confirmados, conversaciones, grupos]);
+    const deClubes: Item[] = consultas.map((hilo) => ({
+      tipo: 'club',
+      hilo,
+      orden: hilo.mensajes[hilo.mensajes.length - 1]?.enviadoEn ?? 0,
+      nuevo: false,
+    }));
+    return [...nuevos, ...[...conMensajes, ...deGrupos, ...deClubes].sort((a, b) => b.orden - a.orden)];
+  }, [confirmados, conversaciones, grupos, consultas]);
 
   function abrirChat(persona: Persona) {
     router.push({
@@ -52,6 +61,10 @@ export default function ChatListScreen() {
 
   function abrirGrupo(g: ChatGrupal) {
     router.push({ pathname: '/(deportista)/chat-grupo/[id]', params: { id: g.actividad.id } });
+  }
+
+  function abrirClub(h: Hilo) {
+    router.push({ pathname: '/(deportista)/chat-club/[id]', params: { id: h.clubId } } as never);
   }
 
   function tarjetaPersona(persona: Persona) {
@@ -154,6 +167,39 @@ export default function ChatListScreen() {
     );
   }
 
+  // Consulta a un club por su convocatoria (HU-51).
+  function tarjetaClub(h: Hilo) {
+    const ultimo = h.mensajes[h.mensajes.length - 1];
+    const noLeidos = h.noLeidosPostulante;
+    const color = getConvocatoria(h.clubId)?.colorFrom ?? '#7C3AED';
+    return (
+      <TouchableOpacity key={`c-${h.id}`} style={styles.card} onPress={() => abrirClub(h)}>
+        <View style={[styles.grupoIcono, { backgroundColor: color }]}>
+          <Ionicons name="shield" size={21} color="#fff" />
+        </View>
+        <View style={styles.cardInfo}>
+          <View style={styles.nombreFila}>
+            <Text style={[styles.cardName, styles.cardNameGrupo]} numberOfLines={1}>{h.clubNombre}</Text>
+            <View style={styles.grupoTag}>
+              <Text style={styles.grupoTagTexto}>Club</Text>
+            </View>
+          </View>
+          <Text style={[styles.cardMessage, noLeidos > 0 && styles.cardMessageSinLeer]} numberOfLines={1}>
+            {ultimo ? `${ultimo.de === 'postulante' ? 'Tú: ' : ''}${ultimo.texto}` : ''}
+          </Text>
+        </View>
+        <View style={styles.cardDerecha}>
+          {ultimo ? <Text style={[styles.cardHora, noLeidos > 0 && styles.cardHoraSinLeer]}>{horaCorta(ultimo.enviadoEn)}</Text> : null}
+          {noLeidos > 0 && (
+            <View style={styles.contador} accessibilityLabel={`${noLeidos} respuestas sin leer`}>
+              <Text style={styles.contadorTexto}>{noLeidos > 9 ? '9+' : noLeidos}</Text>
+            </View>
+          )}
+        </View>
+      </TouchableOpacity>
+    );
+  }
+
   return (
     <View style={[styles.container, { paddingTop: insets.top + 12 }]}>
       <View style={styles.topbar}>
@@ -161,14 +207,14 @@ export default function ChatListScreen() {
       </View>
 
       <ScrollView contentContainerStyle={styles.list}>
-        {items.map((it) => (it.tipo === 'grupo' ? tarjetaGrupo(it.grupo) : tarjetaPersona(it.persona)))}
+        {items.map((it) => (it.tipo === 'grupo' ? tarjetaGrupo(it.grupo) : it.tipo === 'club' ? tarjetaClub(it.hilo) : tarjetaPersona(it.persona)))}
 
         {items.length === 0 && (
           <View style={styles.emptyState}>
             <Ionicons name="chatbubbles-outline" size={44} color={colors.textMuted} />
             <Text style={styles.emptyTitle}>Aún no tienes conversaciones</Text>
             <Text style={styles.emptyText}>
-              Cuando hagas match con alguien o te aprueben en una actividad, podrás escribir desde aquí.
+              Cuando hagas match con alguien, te aprueben en una actividad o le escribas a un club, podrás seguir la conversación desde aquí.
             </Text>
           </View>
         )}

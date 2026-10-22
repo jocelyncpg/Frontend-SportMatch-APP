@@ -1,14 +1,16 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Tabs } from 'expo-router';
+import { YO } from '../../../services/actividades';
 import { useNoLeidosTotal } from '../../../services/chat';
 import { useNoLeidosGrupales } from '../../../services/chatGrupal';
+import { useNoLeidosConsultas } from '../../../services/consultas';
 import { useAppTheme } from '../../../theme/ThemeContext';
 
 export default function TabLayout() {
   const { colors } = useAppTheme();
 
-  // Globo de la pestaña Chat: mensajes sin leer de chats 1 a 1 y de grupos de actividad.
-  const noLeidos = useNoLeidosTotal() + useNoLeidosGrupales();
+  // Globo de la pestaña Chat: sin leer en chats 1 a 1, grupos de actividad y respuestas de clubes.
+  const noLeidos = useNoLeidosTotal() + useNoLeidosGrupales() + useNoLeidosConsultas(YO);
 
   return (
     <Tabs
