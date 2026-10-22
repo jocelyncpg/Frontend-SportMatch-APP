@@ -2,9 +2,12 @@ import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useMemo } from 'react';
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useConvocatoriasAbiertas } from '../../services/consultas';
 import { Colors, useAppTheme } from '../../theme/ThemeContext';
 
-const CLUBES = [
+type ClubItem = { id: string; name: string; sport: string; comuna: string; miembros?: number; colorFrom: string };
+
+const CLUBES: ClubItem[] = [
   { id: '1', name: 'Club Atlético Ñuñoa', sport: 'Atletismo', comuna: 'Ñuñoa', miembros: 84, colorFrom: '#7C3AED' },
   { id: '2', name: 'Fútbol Amateur Maipú', sport: 'Fútbol', comuna: 'Maipú', miembros: 132, colorFrom: '#1F2A5C' },
   { id: '3', name: 'Ciclistas La Florida', sport: 'Ciclismo', comuna: 'La Florida', miembros: 56, colorFrom: '#22C55E' },
@@ -13,6 +16,15 @@ const CLUBES = [
 export default function ClubsScreen() {
   const { colors } = useAppTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
+
+  // Clubes que publicaron su convocatoria desde su panel (HU-51): se suman a los de ejemplo.
+  const abiertas = useConvocatoriasAbiertas();
+  const clubes = useMemo<ClubItem[]>(() => {
+    const extra = abiertas
+      .filter((c) => !CLUBES.some((x) => x.id === c.clubId))
+      .map((c) => ({ id: c.clubId, name: c.clubNombre, sport: c.deporte ?? 'Club deportivo', comuna: c.comuna ?? '', colorFrom: c.colorFrom }));
+    return [...CLUBES, ...extra];
+  }, [abiertas]);
 
   return (
     <View style={styles.container}>
@@ -24,7 +36,7 @@ export default function ClubsScreen() {
       </View>
 
       <ScrollView contentContainerStyle={styles.list}>
-        {CLUBES.map((club) => (
+        {clubes.map((club) => (
           <TouchableOpacity
             key={club.id}
             style={styles.card}
@@ -35,8 +47,8 @@ export default function ClubsScreen() {
             </View>
             <View style={styles.cardInfo}>
               <Text style={styles.cardName}>{club.name}</Text>
-              <Text style={styles.cardMeta}>{club.sport} · {club.comuna}</Text>
-              <Text style={styles.cardMembers}>{club.miembros} miembros</Text>
+              <Text style={styles.cardMeta}>{[club.sport, club.comuna].filter(Boolean).join(' · ')}</Text>
+              {club.miembros !== undefined ? <Text style={styles.cardMembers}>{club.miembros} miembros</Text> : null}
             </View>
             <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
           </TouchableOpacity>

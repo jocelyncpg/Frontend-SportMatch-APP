@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { MAX_REPRESENTANTES } from './validators';
 
 import { ApiError, apiRequest } from './api';
 import { codigoDeporte, nombreDeporte } from './deportes';
@@ -9,6 +10,9 @@ const TOKEN_KEY = 'sportmatch_token';
 // abrir, así que por ahora solo vive aquí, guardada por id de usuario. La
 // disponibilidad en texto libre también: Ms_Users solo acepta franjas con hora.
 const LOCAL_EXTRAS_KEY = 'sportmatch_local_extras';
+// Club que un representante registró pero que aún no existe en ms-club: se crea
+// con POST /clubs en su primer inicio de sesión (el registro no entrega token).
+const CLUB_PENDIENTE_KEY = 'sportmatch_club_pendiente';
 // Un deporte nuevo comienza en intermedio; el usuario puede elegir su nivel.
 const NIVEL_POR_DEFECTO = 3;
 
@@ -21,6 +25,9 @@ export type Usuario = {
   apellidoPaterno: string;
   apellidoMaterno?: string;
   email: string;
+  /** Solo representantes de club (rol club_admin): su club en ms-club, si ya existe. */
+  clubId?: string;
+  clubNombre?: string;
   fotoPerfil?: string;
   comuna?: string;
   latitud?: number;
@@ -48,6 +55,23 @@ type TokenResponse = {
   access_token: string;
   user: { user_id: string; email: string; nombre: string; apellido_paterno: string; role: string };
 };
+
+export type RepresentanteData = {
+  nombre: string;
+  apellidoPaterno: string;
+  email: string;
+  password: string;
+};
+
+export type RegisterClubData = {
+  clubNombre: string;
+  clubRut: string;
+  /** Entre 1 y MAX_REPRESENTANTES. El primero es el representante principal. */
+  representantes: RepresentanteData[];
+};
+
+type ClubPendiente = { email: string; nombre: string };
+type MiClubResponse = { id: string; nombre: string };
 
 type ProfileResponse = {
   user_id: string;
@@ -91,6 +115,29 @@ async function saveLocalExtras(userId: string, datos: LocalExtras): Promise<void
   await AsyncStorage.setItem(LOCAL_EXTRAS_KEY, JSON.stringify(extras));
 }
 
+/**
+ * Club del representante (rol club_admin). Si registró uno que aún no existe en ms-club,
+ * lo crea ahora que hay token. Si ms-club no responde, la sesión sigue sin club y se
+ * reintenta en el próximo inicio de sesión.
+ */
+async function miClub(token: string, email: string): Promise<MiClubResponse | null> {
+  try {
+    return await apiRequest<MiClubResponse>('/clubs/me', { token });
+  } catch (e) {
+    if (!(e instanceof ApiError) || e.status !== 404) return null;
+  }
+  const raw = await AsyncStorage.getItem(CLUB_PENDIENTE_KEY);
+  const pendiente: ClubPendiente | null = raw ? JSON.parse(raw) : null;
+  if (!pendiente || pendiente.email !== email.toLowerCase()) return null;
+  try {
+    const club = await apiRequest<MiClubResponse>('/clubs', { method: 'POST', token, body: { nombre: pendiente.nombre } });
+    await AsyncStorage.removeItem(CLUB_PENDIENTE_KEY);
+    return club;
+  } catch {
+    return null;
+  }
+}
+
 /** Guarda el token y arma la sesión con el perfil y las preferencias del backend. */
 async function iniciarSesion(tokens: TokenResponse): Promise<Usuario> {
   const userId = tokens.user.user_id;
@@ -98,6 +145,7 @@ async function iniciarSesion(tokens: TokenResponse): Promise<Usuario> {
     apiRequest<ProfileResponse>(`/users/${userId}/profile`, { token: tokens.access_token }),
     apiRequest<Preferences>(`/users/${userId}/preferences`, { token: tokens.access_token }),
   ]);
+  const club = tokens.user.role === 'club_admin' ? await miClub(tokens.access_token, tokens.user.email) : null;
   // De lo guardado en el teléfono solo se usan la foto y la disponibilidad; lo demás manda el backend.
   const local = (await getLocalExtras())[userId];
   const fotoLocal = local?.fotoPerfil;
@@ -118,6 +166,8 @@ async function iniciarSesion(tokens: TokenResponse): Promise<Usuario> {
     disponibilidad: local?.disponibilidad,
     objetivos: preferencias.objetivos ?? [],
     rol: tokens.user.role,
+    clubId: club?.id,
+    clubNombre: club?.nombre,
   };
   await AsyncStorage.multiSet([
     [TOKEN_KEY, tokens.access_token],
@@ -141,6 +191,32 @@ export async function register(data: RegisterData): Promise<void> {
   });
 }
 
+/**
+ * Registra un club (HU-06): Ms_Users crea la cuenta del representante con el rol club_admin
+ * (queda inactiva hasta confirmar el correo) y el club se crea en ms-club con POST /clubs
+ * apenas hay sesión (ver miClub).
+ * PENDIENTE BACKEND: Ms_Users / ms-club admiten un solo representante por club y el club no
+ * guarda RUT, así que MAX_REPRESENTANTES es 1 y el RUT del club solo se valida en el formulario.
+ */
+export async function registerClub(data: RegisterClubData): Promise<void> {
+  const reps = data.representantes;
+  if (reps.length < 1 || reps.length > MAX_REPRESENTANTES) {
+    throw new Error(`Un club puede tener entre 1 y ${MAX_REPRESENTANTES} representantes.`);
+  }
+  const principal = reps[0];
+  await apiRequest('/users/auth/register-club', {
+    method: 'POST',
+    body: {
+      email: principal.email.trim(),
+      password: principal.password,
+      nombre: principal.nombre.trim(),
+      apellido_paterno: principal.apellidoPaterno.trim(),
+    },
+  });
+  const pendiente: ClubPendiente = { email: principal.email.trim().toLowerCase(), nombre: data.clubNombre.trim() };
+  await AsyncStorage.setItem(CLUB_PENDIENTE_KEY, JSON.stringify(pendiente));
+}
+
 /** Confirma el código del correo; si es correcto, la cuenta queda activa y con sesión iniciada. */
 export async function verifyEmail(email: string, code: string): Promise<Usuario> {
   const tokens = await apiRequest<TokenResponse>('/users/auth/email-verification/confirm', {
@@ -149,7 +225,6 @@ export async function verifyEmail(email: string, code: string): Promise<Usuario>
   });
   return iniciarSesion(tokens);
 }
-
 /** Pide un código nuevo (el backend no reenvía si pasaron menos de 60 s). */
 export async function resendVerificationCode(email: string): Promise<void> {
   await apiRequest('/users/auth/email-verification/request', { method: 'POST', body: { email } });
@@ -354,4 +429,13 @@ export async function refrescarPreferencias(): Promise<Usuario | null> {
     objetivos: preferences.objetivos ?? [],
   });
   return getSession();
+}
+
+/**
+ * Cambio de contraseña con la sesión iniciada (pantalla del club).
+ * PENDIENTE BACKEND: Ms_Users no tiene un endpoint para cambiarla con la contraseña actual;
+ * por ahora solo existe la recuperación por correo (services/recuperacion.ts).
+ */
+export async function cambiarPassword(_email: string, _actual: string, _nueva: string): Promise<void> {
+  throw new Error('Por ahora cambia tu contraseña con «¿Olvidaste tu contraseña?» en la pantalla de ingreso.');
 }

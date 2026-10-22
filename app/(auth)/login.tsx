@@ -16,8 +16,6 @@ import {
 } from '../../services/biometria';
 import { Colors, Mode, useAppTheme } from '../../theme/ThemeContext';
 
-type Rol = 'deportista' | 'club';
-
 const OPCIONES_TEMA: { key: Mode; label: string; icon: keyof typeof Ionicons.glyphMap }[] = [
   { key: 'light', label: 'Claro', icon: 'sunny-outline' },
   { key: 'dark', label: 'Oscuro', icon: 'moon-outline' },
@@ -29,7 +27,6 @@ export default function LoginScreen() {
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const insets = useSafeAreaInsets();
 
-  const [rol, setRol] = useState<Rol>('deportista');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -52,15 +49,9 @@ export default function LoginScreen() {
     })();
   }, []);
 
-  // admin y club_admin vienen del backend. Las cuentas de club anteriores a /auth/register-club
-  // quedaron como player, así que para ellas todavía vale el selector de esta pantalla.
+  // Ingreso único: el rol de la cuenta (admin, club_admin o deportista) decide a qué vista se va.
   function entrar(usuario: Usuario) {
-    const destino = inicioSegunRol(usuario);
-    if (destino === '/(deportista)/(tabs)' && rol === 'club') {
-      router.replace('/(club)/home' as never);
-    } else {
-      router.replace(destino as never);
-    }
+    router.replace(inicioSegunRol(usuario) as never);
   }
 
   /** Después de un login con contraseña, ofrece activar la huella (una sola vez por cuenta). */
@@ -166,30 +157,7 @@ export default function LoginScreen() {
         <BrandLogo width={222} style={styles.logo} />
 
         <Text style={styles.title}>Bienvenido</Text>
-        <Text style={styles.subtitle}>
-          {rol === 'club' ? 'Inicia sesión para gestionar tu club' : 'Inicia sesión para seguir entrenando'}
-        </Text>
-
-        <View style={styles.rolSelector}>
-          <TouchableOpacity
-            style={[styles.rolOpcion, rol === 'deportista' && styles.rolOpcionActiva]}
-            onPress={() => setRol('deportista')}
-            accessibilityRole="button"
-            accessibilityState={{ selected: rol === 'deportista' }}
-          >
-            <Ionicons name="person-outline" size={15} color={rol === 'deportista' ? '#fff' : colors.textMuted} />
-            <Text style={[styles.rolTexto, rol === 'deportista' && styles.rolTextoActivo]}>Deportista</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.rolOpcion, rol === 'club' && styles.rolOpcionActiva]}
-            onPress={() => setRol('club')}
-            accessibilityRole="button"
-            accessibilityState={{ selected: rol === 'club' }}
-          >
-            <Ionicons name="shield-outline" size={15} color={rol === 'club' ? '#fff' : colors.textMuted} />
-            <Text style={[styles.rolTexto, rol === 'club' && styles.rolTextoActivo]}>Club</Text>
-          </TouchableOpacity>
-        </View>
+        <Text style={styles.subtitle}>Inicia sesión con tu correo para continuar</Text>
 
         {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
@@ -281,28 +249,6 @@ const makeStyles = (c: Colors) =>
 
     title: { color: c.text, fontSize: 22, fontWeight: '700', marginBottom: 6 },
     subtitle: { color: c.textMuted, fontSize: 13, marginBottom: 20 },
-    rolSelector: {
-      flexDirection: 'row',
-      gap: 8,
-      backgroundColor: c.card,
-      borderWidth: 1,
-      borderColor: c.border,
-      borderRadius: 13,
-      padding: 4,
-      marginBottom: 18,
-    },
-    rolOpcion: {
-      flex: 1,
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'center',
-      gap: 6,
-      paddingVertical: 10,
-      borderRadius: 10,
-    },
-    rolOpcionActiva: { backgroundColor: c.primary },
-    rolTexto: { color: c.textMuted, fontSize: 12.5, fontWeight: '600' },
-    rolTextoActivo: { color: '#fff' },
     errorText: { color: c.danger, fontSize: 12, marginBottom: 12 },
     inputBox: {
       flexDirection: 'row',

@@ -330,6 +330,7 @@ function loadAuth(preferences, initialSession = {}) {
         return preferences;
       } };
       if (name === './deportes') return { codigoDeporte: (value) => value.toLowerCase(), nombreDeporte: (value) => value };
+      if (name === './validators') return { MAX_REPRESENTANTES: 1 };
       throw new Error(`Unexpected auth import: ${name}`);
     },
   });
