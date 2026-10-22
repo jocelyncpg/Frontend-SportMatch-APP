@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react';
 import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import BrandLogo from '../../components/BrandLogo';
+import SelectorTipoCuenta from '../../components/SelectorTipoCuenta';
 import { register } from '../../services/auth';
 import {
   PASSWORD_MAX,
@@ -99,6 +100,13 @@ export default function RegisterScreen() {
 
         <Text style={styles.title}>Crea tu cuenta</Text>
         <Text style={styles.subtitle}>Únete y encuentra tu compañero ideal</Text>
+
+        <SelectorTipoCuenta
+          activo="deportista"
+          onElegir={(tipo) => {
+            if (tipo === 'club') router.replace('/(auth)/register-club' as never);
+          }}
+        />
 
         {error ? <Text style={styles.errorText}>{error}</Text> : null}
 

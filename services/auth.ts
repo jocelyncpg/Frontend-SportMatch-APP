@@ -1,17 +1,28 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { MAX_REPRESENTANTES, validatePassword } from './validators';
 
 const SESSION_KEY = 'sportmatch_session';
 const USERS_KEY = 'sportmatch_mock_users';
+const CLUBS_KEY = 'sportmatch_mock_clubs';
 
 export type DeporteConNivel = { nombre: string; nivel: number };
 
+/** Tipo de cuenta. Una misma pantalla de ingreso sirve para los dos; el rol decide la vista. */
+export type Rol = 'deportista' | 'club';
+
 export type Usuario = {
   id: string;
+  /** Deportista: su RUT. Representante de club: el RUT del club. */
   rut: string;
   nombre: string;
   apellidoPaterno: string;
   apellidoMaterno?: string;
   email: string;
+  /** Si falta (cuentas creadas antes de existir el rol), se trata como deportista. Usa rolDe(). */
+  rol?: Rol;
+  /** Solo representantes de club. */
+  clubId?: string;
+  clubNombre?: string;
   fotoPerfil?: string;
   comuna?: string;
   latitud?: number;
@@ -23,6 +34,15 @@ export type Usuario = {
   objetivos?: string[];
 };
 
+/** Club registrado (simulado). Con el backend viene de Ms_Users / perfil de club (HU-30). */
+export type Club = {
+  id: string;
+  nombre: string;
+  rut: string;
+  /** Correos de los representantes que administran el club (HU-06). */
+  representantes: string[];
+};
+
 type RegisterData = {
   rut: string;
   nombre: string;
@@ -30,6 +50,20 @@ type RegisterData = {
   apellidoMaterno?: string;
   email: string;
   password: string;
+};
+
+export type RepresentanteData = {
+  nombre: string;
+  apellidoPaterno: string;
+  email: string;
+  password: string;
+};
+
+export type RegisterClubData = {
+  clubNombre: string;
+  clubRut: string;
+  /** Entre 1 y MAX_REPRESENTANTES. El primero es el representante principal. */
+  representantes: RepresentanteData[];
 };
 
 type UsuarioGuardado = Usuario & { password: string; verificado: boolean };
@@ -40,12 +74,30 @@ export class EmailNotVerifiedError extends Error {
   }
 }
 
+/** Rol de una cuenta; las anteriores al rol cuentan como deportista. */
+export function rolDe(usuario: Pick<Usuario, 'rol'>): Rol {
+  return usuario.rol === 'club' ? 'club' : 'deportista';
+}
+
+/** Pantalla de inicio según el rol. Login, huella, verificación de correo e index usan esto. */
+export function rutaInicial(usuario: Pick<Usuario, 'rol'>): string {
+  return rolDe(usuario) === 'club' ? '/(club)/home' : '/(deportista)/(tabs)';
+}
+
 async function getUsuarios(): Promise<Record<string, UsuarioGuardado>> {
   const raw = await AsyncStorage.getItem(USERS_KEY);
   return raw ? JSON.parse(raw) : {};
 }
 async function saveUsuarios(usuarios: Record<string, UsuarioGuardado>): Promise<void> {
   await AsyncStorage.setItem(USERS_KEY, JSON.stringify(usuarios));
+}
+
+async function getClubes(): Promise<Record<string, Club>> {
+  const raw = await AsyncStorage.getItem(CLUBS_KEY);
+  return raw ? JSON.parse(raw) : {};
+}
+async function saveClubes(clubes: Record<string, Club>): Promise<void> {
+  await AsyncStorage.setItem(CLUBS_KEY, JSON.stringify(clubes));
 }
 
 export async function register(data: RegisterData): Promise<void> {
@@ -55,6 +107,7 @@ export async function register(data: RegisterData): Promise<void> {
   }
   usuarios[data.email.toLowerCase()] = {
     id: 'mock-' + Date.now(),
+    rol: 'deportista',
     rut: data.rut,
     nombre: data.nombre,
     apellidoPaterno: data.apellidoPaterno,
@@ -64,6 +117,65 @@ export async function register(data: RegisterData): Promise<void> {
     verificado: false,
   };
   await saveUsuarios(usuarios);
+}
+
+/**
+ * Registra un club con sus representantes (HU-06). Cada representante tiene su propia cuenta
+ * (correo y contraseña) con rol "club", ligada al mismo club. Todas quedan sin verificar:
+ * cada uno confirma su correo con su código, el principal justo después de registrarse y los
+ * demás la primera vez que inician sesión.
+ * Con el backend, el RUT del club además se revisa contra el SII y el club queda pendiente de
+ * aprobación del administrador (HU-45); acá solo se evita repetir RUT y correos.
+ */
+export async function registerClub(data: RegisterClubData): Promise<void> {
+  const reps = data.representantes;
+  if (reps.length < 1 || reps.length > MAX_REPRESENTANTES) {
+    throw new Error(`Un club puede tener entre 1 y ${MAX_REPRESENTANTES} representantes.`);
+  }
+
+  const correos = reps.map((r) => r.email.trim().toLowerCase());
+  if (new Set(correos).size !== correos.length) {
+    throw new Error('Cada representante debe tener un correo distinto.');
+  }
+
+  const clubes = await getClubes();
+  if (Object.values(clubes).some((c) => c.rut === data.clubRut)) {
+    throw new Error('Ese RUT de club ya está registrado.');
+  }
+
+  const usuarios = await getUsuarios();
+  for (const correo of correos) {
+    if (usuarios[correo]) throw new Error(`El correo ${correo} ya está registrado.`);
+  }
+
+  const ahora = Date.now();
+  const clubId = `club-${ahora}`;
+  const clubNombre = data.clubNombre.trim();
+
+  reps.forEach((r, i) => {
+    usuarios[correos[i]] = {
+      id: `mock-${ahora}-${i}`,
+      rol: 'club',
+      clubId,
+      clubNombre,
+      rut: data.clubRut,
+      nombre: r.nombre.trim(),
+      apellidoPaterno: r.apellidoPaterno.trim(),
+      email: r.email.trim(),
+      password: r.password,
+      verificado: false,
+    };
+  });
+  clubes[clubId] = { id: clubId, nombre: clubNombre, rut: data.clubRut, representantes: correos };
+
+  await saveUsuarios(usuarios);
+  await saveClubes(clubes);
+}
+
+/** Datos del club al que pertenece un representante (null si la cuenta no es de club). */
+export async function getClub(clubId: string): Promise<Club | null> {
+  const clubes = await getClubes();
+  return clubes[clubId] ?? null;
 }
 
 // En modo simulado, cualquier código de 6 dígitos verifica la cuenta.
@@ -161,6 +273,28 @@ export async function updatePerfilExtra(
   }
 ): Promise<void> {
   await actualizarSesionYUsuario(userId, datos);
+}
+
+// ---------- Contraseña ----------
+
+/**
+ * Cambio de contraseña con la sesión iniciada: pide la actual y la nueva.
+ * Cada representante cambia solo la suya (cada uno tiene su propia cuenta).
+ */
+export async function cambiarPassword(
+  email: string,
+  actual: string,
+  nueva: string
+): Promise<void> {
+  const usuarios = await getUsuarios();
+  const u = usuarios[email.toLowerCase()];
+  if (!u) throw new Error('No encontramos esa cuenta.');
+  if (u.password !== actual) throw new Error('La contraseña actual no es correcta.');
+  const problema = validatePassword(nueva);
+  if (problema) throw new Error(problema);
+  if (nueva === actual) throw new Error('La nueva contraseña debe ser distinta a la actual.');
+  u.password = nueva;
+  await saveUsuarios(usuarios);
 }
 
 // ---------- Recuperar contraseña (simulado) ----------

@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Alert, KeyboardAvoidingView, Platform, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import BrandLogo from '../../components/BrandLogo';
-import { EmailNotVerifiedError, login, loginConHuella } from '../../services/auth';
+import { EmailNotVerifiedError, Usuario, login, loginConHuella, rutaInicial } from '../../services/auth';
 import {
   activarBiometria,
   autenticar,
@@ -15,8 +15,6 @@ import {
   yaRechazo,
 } from '../../services/biometria';
 import { Colors, Mode, useAppTheme } from '../../theme/ThemeContext';
-
-type Rol = 'deportista' | 'club';
 
 const OPCIONES_TEMA: { key: Mode; label: string; icon: keyof typeof Ionicons.glyphMap }[] = [
   { key: 'light', label: 'Claro', icon: 'sunny-outline' },
@@ -29,7 +27,6 @@ export default function LoginScreen() {
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const insets = useSafeAreaInsets();
 
-  const [rol, setRol] = useState<Rol>('deportista');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -52,13 +49,9 @@ export default function LoginScreen() {
     })();
   }, []);
 
-  // El rol se elige en esta pantalla (aún no viene del backend).
-  function entrar() {
-    if (rol === 'club') {
-      router.replace('/(club)/home' as never);
-    } else {
-      router.replace('/(deportista)/(tabs)');
-    }
+  // Ingreso único: el rol de la cuenta (deportista o club) decide a qué vista se va.
+  function entrar(usuario: Usuario) {
+    router.replace(rutaInicial(usuario) as never);
   }
 
   /** Después de un login con contraseña, ofrece activar la huella (una sola vez por cuenta). */
@@ -101,13 +94,13 @@ export default function LoginScreen() {
     }
     setEnviando(true);
     try {
-      await login(email.trim(), password);
+      const usuario = await login(email.trim(), password);
 
       const yaActivado = bioEmail === email.trim().toLowerCase();
       if (bioDisponible && !yaActivado && !(await yaRechazo(email))) {
         await ofrecerActivarHuella(email.trim());
       }
-      entrar();
+      entrar(usuario);
     } catch (e: any) {
       if (e instanceof EmailNotVerifiedError) {
         router.push({ pathname: '/(auth)/verify-email', params: { email: e.email } });
@@ -126,8 +119,8 @@ export default function LoginScreen() {
     if (!ok) return; // canceló o no coincidió: el sistema ya muestra su mensaje
     setEnviando(true);
     try {
-      await loginConHuella(bioEmail);
-      entrar();
+      const usuario = await loginConHuella(bioEmail);
+      entrar(usuario);
     } catch (e: any) {
       setError(e.message);
     } finally {
@@ -163,30 +156,7 @@ export default function LoginScreen() {
         <BrandLogo width={222} style={styles.logo} />
 
         <Text style={styles.title}>Bienvenido</Text>
-        <Text style={styles.subtitle}>
-          {rol === 'club' ? 'Inicia sesión para gestionar tu club' : 'Inicia sesión para seguir entrenando'}
-        </Text>
-
-        <View style={styles.rolSelector}>
-          <TouchableOpacity
-            style={[styles.rolOpcion, rol === 'deportista' && styles.rolOpcionActiva]}
-            onPress={() => setRol('deportista')}
-            accessibilityRole="button"
-            accessibilityState={{ selected: rol === 'deportista' }}
-          >
-            <Ionicons name="person-outline" size={15} color={rol === 'deportista' ? '#fff' : colors.textMuted} />
-            <Text style={[styles.rolTexto, rol === 'deportista' && styles.rolTextoActivo]}>Deportista</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.rolOpcion, rol === 'club' && styles.rolOpcionActiva]}
-            onPress={() => setRol('club')}
-            accessibilityRole="button"
-            accessibilityState={{ selected: rol === 'club' }}
-          >
-            <Ionicons name="shield-outline" size={15} color={rol === 'club' ? '#fff' : colors.textMuted} />
-            <Text style={[styles.rolTexto, rol === 'club' && styles.rolTextoActivo]}>Club</Text>
-          </TouchableOpacity>
-        </View>
+        <Text style={styles.subtitle}>Inicia sesión con tu correo para continuar</Text>
 
         {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
@@ -278,28 +248,6 @@ const makeStyles = (c: Colors) =>
 
     title: { color: c.text, fontSize: 22, fontWeight: '700', marginBottom: 6 },
     subtitle: { color: c.textMuted, fontSize: 13, marginBottom: 20 },
-    rolSelector: {
-      flexDirection: 'row',
-      gap: 8,
-      backgroundColor: c.card,
-      borderWidth: 1,
-      borderColor: c.border,
-      borderRadius: 13,
-      padding: 4,
-      marginBottom: 18,
-    },
-    rolOpcion: {
-      flex: 1,
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'center',
-      gap: 6,
-      paddingVertical: 10,
-      borderRadius: 10,
-    },
-    rolOpcionActiva: { backgroundColor: c.primary },
-    rolTexto: { color: c.textMuted, fontSize: 12.5, fontWeight: '600' },
-    rolTextoActivo: { color: '#fff' },
     errorText: { color: c.danger, fontSize: 12, marginBottom: 12 },
     inputBox: {
       flexDirection: 'row',
