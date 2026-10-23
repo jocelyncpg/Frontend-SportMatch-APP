@@ -4,14 +4,14 @@ import { AppState } from 'react-native';
 import { getSession } from '../services/auth';
 import { cargarMatching } from '../services/matchStore';
 import { abrirDestino } from '../services/notificationNavigation';
-import { cargarNotificaciones, marcarLeida } from '../services/notificaciones';
+import { avisarDestino, cargarNotificaciones, marcarLeida } from '../services/notificaciones';
 import { moduloNotificaciones, puedeMostrarPush, sincronizarPush } from '../services/push';
 
 export function useNotifications() {
   const segments = useSegments();
   const area = segments[0];
   useEffect(() => {
-    if (area !== '(deportista)') return;
+    if (area !== '(deportista)' && area !== '(club)') return;
     const refresh = () => { if (AppState.currentState === 'active') void cargarNotificaciones(); };
     refresh();
     void sincronizarPush();
@@ -27,8 +27,10 @@ export function useNotifications() {
         const show = await puedeMostrarPush(notification.request.content.data.userId);
         return { shouldPlaySound: show, shouldSetBadge: false, shouldShowBanner: show, shouldShowList: show };
       } });
-      subscriptions.push(notifications.addNotificationReceivedListener(() => {
-        refresh(); void cargarMatching();
+      subscriptions.push(notifications.addNotificationReceivedListener((notification) => {
+        avisarDestino(notification.request.content.data);
+        refresh();
+        if (area === '(deportista)') void cargarMatching();
       }));
       subscriptions.push(notifications.addPushTokenListener(() => { void sincronizarPush(); }));
       let lastId: string | null = null;

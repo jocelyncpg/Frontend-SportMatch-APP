@@ -8,6 +8,7 @@ const ts = require('typescript');
 class ApiError extends Error { constructor(message, status) { super(message); this.status = status; } }
 function cargar(archivo, responder) {
   const llamadas = [];
+  const sondeos = [];
   let uuid = 0;
   const modulo = { exports: {} };
   const codigo = ts.transpileModule(fs.readFileSync(path.join(__dirname, '../services', archivo), 'utf8'), {
@@ -20,12 +21,20 @@ function cargar(archivo, responder) {
       if (nombre === 'react') return { useSyncExternalStore: (_, leer) => leer(), useMemo: (fn) => fn() };
       if (nombre === 'react-native') return { AppState: { currentState: 'active' } };
       if (nombre === 'expo-crypto') return { randomUUID: () => 'uuid-' + ++uuid };
+      if (nombre === './sondeo') return {
+        crearSondeo: (_, tarea) => {
+          const sondeo = { iniciar: () => { void tarea(); }, detener: () => {}, ahora: () => { void tarea(); } };
+          sondeos.push(sondeo);
+          return sondeo;
+        },
+        alCambiar: () => () => {},
+      };
       if (nombre === './auth') return { getSession: async () => ({ id: 'yo' }), getToken: async () => 'token', guardarClubEnSesion: async () => {} };
       if (nombre === './api') return { ApiError, apiRequest: async (...args) => { llamadas.push(args); return responder(...args); } };
       throw Error(nombre);
     },
   });
-  return { api: modulo.exports, llamadas };
+  return { api: modulo.exports, llamadas, sondeos };
 }
 const fecha = '2026-10-22T12:00:00Z';
 const mensajeGrupo = { id: 7, author_id: 'otra', author_name: 'Ana P.', text: 'Hola', created_at: fecha, own: false };
@@ -67,6 +76,24 @@ test('chat grupal reutiliza UUID al reintentar y valida 1000 caracteres', async 
   assert.equal(envios[0][1].body.text, 'Hola');
 });
 
+test('chat grupal no repite la lectura sin mensajes nuevos', async () => {
+  const { api, llamadas } = cargar('chatGrupal.ts', async (ruta) => {
+    if (ruta === '/activities/a1/chat/messages?limit=50') {
+      return { acceso: 'escribir', participantes: 2, silenciado: false, mensajes: [mensajeGrupo] };
+    }
+    if (ruta === '/activities/a1/chat/messages?after_id=7&limit=50') {
+      return { acceso: 'escribir', participantes: 2, silenciado: false, mensajes: [] };
+    }
+    if (ruta === '/activities/a1/chat/read') return undefined;
+    throw Error(ruta);
+  });
+  api.abrirSala('a1');
+  await new Promise(setImmediate);
+  await api.cargarSala('a1');
+  assert.equal(llamadas.filter(([ruta]) => ruta === '/activities/a1/chat/read').length, 1);
+  api.cerrarSala('a1');
+});
+
 test('consultas mapea hilos y envía texto con UUID por la ruta del deportista', async () => {
   const { api, llamadas } = cargar('consultas.ts', async (ruta) => {
     if (ruta === '/clubs/consultas/me') return [{ hilo_id: '10000000-0000-4000-8000-000000000004', club_id: 'c1', club_nombre: 'Club Uno', club_logo: null, ultimo: mensajeConsulta, no_leidos: 3 }];
@@ -103,19 +130,73 @@ test('la bandeja del club conserva el UUID del hilo para responder', async () =>
   assert.equal(llamadas[1][0], `/clubs/c1/consultas/${hiloId}/messages`);
 });
 
-test('administración crea el club con RUT y gestiona invitaciones sin guardar códigos', async () => {
+test('consulta no repite la lectura sin mensajes nuevos', async () => {
+  const { api, llamadas, sondeos } = cargar('consultas.ts', async (ruta) => {
+    if (ruta === '/clubs/c1/consultas/me/messages?limit=50') {
+      return { hilo_id: 'h1', mensajes: [mensajeConsulta] };
+    }
+    if (ruta === '/clubs/c1/consultas/me/messages?after_id=9&limit=50') {
+      return { hilo_id: 'h1', mensajes: [] };
+    }
+    if (ruta === '/clubs/c1/consultas/me/read') return undefined;
+    throw Error(ruta);
+  });
+  api.abrirConsultaDeportista('c1');
+  await new Promise(setImmediate);
+  sondeos[0].ahora();
+  await new Promise(setImmediate);
+  assert.equal(llamadas.filter(([ruta]) => ruta === '/clubs/c1/consultas/me/read').length, 1);
+  api.cerrarConsulta('c1__me');
+});
+
+test('administración asigna correos normalizados y revoca pendientes', async () => {
   const { api, llamadas } = cargar('clubes.ts', async (ruta, opciones) => {
-    if (ruta === '/clubs' && opciones.method === 'POST') return { id: 'c1', nombre: 'Club Uno', rut: '76123456-0', mi_rol: 'PRINCIPAL' };
-    if (ruta === '/clubs/c1/admins/invitations' && opciones.method === 'POST') return { id: 'i1', codigo: 'SECRETO', expira_en: fecha };
-    if (ruta === '/clubs/c1/admins/invitations/i1' && opciones.method === 'DELETE') return undefined;
+    if (ruta === '/clubs' && opciones.method === 'POST') {
+      return { id: 'c1', nombre: 'Club Uno', rut: '76123456-0', mi_rol: 'PRINCIPAL' };
+    }
+    if (ruta === '/clubs/c1/admins/assignments' && opciones.method === 'POST') {
+      return { id: 'a1', email: opciones.body.email, asignada_por: 'yo', fecha_creacion: fecha };
+    }
+    if (ruta === '/clubs/c1/admins/assignments' && !opciones.method) return [];
+    if (ruta === '/clubs/c1/admins/assignments/a1' && opciones.method === 'DELETE') return undefined;
     throw Error(ruta);
   });
   await api.crearClub('Club Uno', '76123456-0');
-  const invitacion = await api.generarInvitacion('c1');
-  await api.revocarInvitacion('c1', invitacion.id);
+  await assert.rejects(api.asignarCorreo('c1', 'mal-correo'));
+  const asignacion = await api.asignarCorreo('c1', ' ADMIN@EJEMPLO.CL ');
+  await api.listarAsignaciones('c1');
+  await api.revocarAsignacion('c1', asignacion.id);
   assert.deepEqual(JSON.parse(JSON.stringify(llamadas[0][1].body)), { nombre: 'Club Uno', rut: '76123456-0' });
-  assert.equal(llamadas[1][0], '/clubs/c1/admins/invitations');
-  assert.equal(llamadas[2][0], '/clubs/c1/admins/invitations/i1');
+  assert.equal(llamadas[1][1].body.email, 'admin@ejemplo.cl');
+  assert.equal(llamadas[2][0], '/clubs/c1/admins/assignments');
+  assert.equal(llamadas[3][0], '/clubs/c1/admins/assignments/a1');
+});
+
+test('registro para club existente no guarda datos de un club pendiente', async () => {
+  const guardado = new Map([['sportmatch_club_pendiente', 'anterior']]);
+  const llamadas = [];
+  const modulo = { exports: {} };
+  const codigo = ts.transpileModule(fs.readFileSync(path.join(__dirname, '../services/auth.ts'), 'utf8'), {
+    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+  }).outputText;
+  vm.runInNewContext(codigo, {
+    module: modulo, exports: modulo.exports, Promise, Error, JSON,
+    require(nombre) {
+      if (nombre === '@react-native-async-storage/async-storage') return { default: {
+        setItem: async (key, value) => { guardado.set(key, value); },
+        removeItem: async (key) => { guardado.delete(key); },
+      } };
+      if (nombre === './api') return { ApiError, apiRequest: async (...args) => { llamadas.push(args); } };
+      if (nombre === './validators') return { MAX_REPRESENTANTES: 3 };
+      if (nombre === './deportes') return {};
+      throw Error(nombre);
+    },
+  });
+  await modulo.exports.registerClub({ existente: true, representantes: [{
+    nombre: 'Ana', apellidoPaterno: 'Pérez', email: 'ANA@CLUB.CL', password: 'secreto',
+  }] });
+  assert.equal(llamadas[0][0], '/users/auth/register-club');
+  assert.equal(guardado.has('sportmatch_club_pendiente'), false);
 });
 
 test('directorio toma la página pública del backend y carga el detalle', async () => {

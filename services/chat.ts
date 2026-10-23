@@ -133,14 +133,14 @@ export function totalNoLeidos(e: Pick<Estado, 'chats' | 'silenciados'> = estado)
 export const useNoLeidosTotal = () => useSyncExternalStore(suscribir, () => totalNoLeidos(), () => totalNoLeidos());
 
 /** Lee la lista de chats y deja un aviso si llegó algo nuevo a un chat cerrado y no silenciado. */
-export async function cargarChats(): Promise<void> {
+export async function cargarChats(): Promise<boolean> {
   const actual = version;
   const [{ data: lista, userId }, preferencias] = await Promise.all([
     chatRequest<ChatSummaryApi[]>('/chats?limit=100'),
     // Si Ms_Users no responde, se conserva la última lista de silenciados.
     chatRequest<ChatPreferencesApi>('/users/chat-preferences').then((r) => r.data).catch(() => null),
   ]);
-  if (actual !== version) return;
+  if (actual !== version) return false;
   const mismoUsuario = estado.usuarioId === userId;
   const previos = mismoUsuario ? estado.chats : {};
   const silenciados = preferencias ? preferencias.muted_users.map((u) => u.user_id) : mismoUsuario ? estado.silenciados : [];
@@ -166,8 +166,14 @@ export async function cargarChats(): Promise<void> {
       aviso = { id: `${r.matchId}:${r.ultimo.enviadoEn}`, matchId: r.matchId, personaId: r.personaId, nombre: r.nombre, texto: r.ultimo.texto };
     }
   }
+  const cambios = Object.keys(chats).length !== Object.keys(previos).length
+    || Object.values(chats).some((chat) => chat.noLeidos !== previos[chat.matchId]?.noLeidos
+      || chat.ultimo?.enviadoEn !== previos[chat.matchId]?.ultimo?.enviadoEn
+      || chat.ultimo?.texto !== previos[chat.matchId]?.ultimo?.texto
+      || chat.ultimo?.tipo !== previos[chat.matchId]?.ultimo?.tipo);
   estado = { ...estado, usuarioId: userId, chats, silenciados, aviso, cargado: true };
   emitir();
+  return cambios;
 }
 
 /** Entras a un chat: queda abierto, leído y sin aviso pendiente. */

@@ -1,6 +1,7 @@
 import { useSyncExternalStore } from 'react';
 import { apiRequest } from './api';
 import { getSession, getToken } from './auth';
+import { avisarCambio } from './sondeo';
 
 export type TipoNotificacion = 'solicitud' | 'match' | 'mensaje' | 'calificacion' | 'actividad';
 export type DestinoNotificacion = {
@@ -10,6 +11,12 @@ export type DestinoNotificacion = {
   clubId?: string;
   hiloId?: string;
 };
+export function avisarDestino(data: DestinoNotificacion) {
+  if (data.screen === 'activity_chat') avisarCambio('activity_chat', data.activityId);
+  if (data.screen === 'consulta') avisarCambio('consulta', data.clubId);
+  if (data.screen === 'consulta_club') avisarCambio('consulta_club', data.hiloId);
+  if (data.screen === 'chat') avisarCambio('chat', data.matchId);
+}
 export type Notificacion = {
   id: string; tipo: TipoNotificacion; titulo: string; detalle: string;
   cuando: string; leida: boolean; data: DestinoNotificacion;
@@ -32,6 +39,7 @@ type Estado = { usuarioId: string | null; lista: Notificacion[]; noLeidas: numbe
 const inicial: Estado = { usuarioId: null, lista: [], noLeidas: 0, siguiente: null, cargando: false, error: null };
 let estado: Estado = inicial;
 let version = 0;
+let paginaInicialCargada = false;
 const oyentes = new Set<() => void>();
 const emitir = () => oyentes.forEach((o) => o());
 const suscribir = (o: () => void) => { oyentes.add(o); return () => { oyentes.delete(o); }; };
@@ -47,6 +55,7 @@ export function hace(minutos: number): string {
 
 export function reiniciarNotificaciones() {
   version++;
+  paginaInicialCargada = false;
   estado = inicial;
   emitir();
 }
@@ -56,28 +65,50 @@ export async function cargarNotificaciones(mas = false) {
   if (!session || !token) { reiniciarNotificaciones(); return; }
   if (estado.usuarioId !== session.id) {
     version++;
+    paginaInicialCargada = false;
     estado = { ...inicial, usuarioId: session.id };
   }
   if (estado.cargando || (mas && !estado.siguiente)) return;
   const actual = version;
-  const vigente = async () => actual === version && (await getSession())?.id === session.id && await getToken() === token;
+  const vigente = async () => actual === version
+    && (await getSession())?.id === session.id
+    && await getToken() === token;
   estado = { ...estado, cargando: true, error: null };
   emitir();
   try {
-    const pagina = await apiRequest<Pagina>(`/notifications?limit=50${mas ? `&before=${estado.siguiente}` : ''}`, { token, timeoutMs: 15000 });
+    const ruta = `/notifications?limit=50${mas ? `&before=${estado.siguiente}` : ''}`;
+    const pagina = await apiRequest<Pagina>(ruta, { token, timeoutMs: 15000 });
     if (!await vigente()) return;
     const nuevos = pagina.items.map((n): Notificacion => ({ id: n.id, tipo: n.kind, titulo: n.title,
       detalle: n.body, leida: !!n.read_at, data: n.data,
       resultado: n.kind === 'actividad' ? RESULTADO_POR_TITULO[n.title] : undefined,
       cuando: hace(Math.max(0, (Date.now() - Date.parse(n.created_at)) / 60000)) }));
+    if (!mas && paginaInicialCargada) {
+      nuevos.filter((n) => !n.leida && !estado.lista.some((vieja) => vieja.id === n.id))
+        .forEach((n) => avisarDestino(n.data));
+    }
+    if (!mas) paginaInicialCargada = true;
     const conservarHistorial = !mas && estado.lista.length > 50;
-    const lista = mas ? [...estado.lista, ...nuevos.filter((n) => !estado.lista.some((old) => old.id === n.id))]
-      : conservarHistorial ? [...nuevos, ...estado.lista.filter((n) => !nuevos.some((item) => item.id === n.id))] : nuevos;
-    estado = { ...estado, lista, noLeidas: pagina.unread, siguiente: conservarHistorial ? estado.siguiente : pagina.next_cursor };
+    const lista = mas
+      ? [...estado.lista, ...nuevos.filter((n) => !estado.lista.some((old) => old.id === n.id))]
+      : conservarHistorial
+        ? [...nuevos, ...estado.lista.filter((n) => !nuevos.some((item) => item.id === n.id))]
+        : nuevos;
+    estado = {
+      ...estado,
+      lista,
+      noLeidas: pagina.unread,
+      siguiente: conservarHistorial ? estado.siguiente : pagina.next_cursor,
+    };
   } catch (error) {
-    if (await vigente()) estado = { ...estado, error: error instanceof Error ? error.message : 'No se pudieron cargar los avisos.' };
+    if (await vigente()) {
+      estado = { ...estado, error: error instanceof Error ? error.message : 'No se pudieron cargar los avisos.' };
+    }
   } finally {
-    if (actual === version) { estado = { ...estado, cargando: false }; emitir(); }
+    if (actual === version) {
+      estado = { ...estado, cargando: false };
+      emitir();
+    }
   }
 }
 

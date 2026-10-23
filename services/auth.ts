@@ -64,8 +64,9 @@ export type RepresentanteData = {
 };
 
 export type RegisterClubData = {
-  clubNombre: string;
-  clubRut: string;
+  clubNombre?: string;
+  clubRut?: string;
+  existente?: boolean;
   /** Entre 1 y MAX_REPRESENTANTES. El primero es el representante principal. */
   representantes: RepresentanteData[];
 };
@@ -200,7 +201,7 @@ export async function register(data: RegisterData): Promise<void> {
  * Registra un club (HU-06): Ms_Users crea la cuenta del representante con el rol club_admin
  * (queda inactiva hasta confirmar el correo) y el club se crea en ms-club con POST /clubs
  * apenas hay sesión (ver miClub).
- * Los demás administradores entran mediante invitación.
+ * Los demás administradores se activan al entrar con un correo asignado.
  */
 export async function registerClub(data: RegisterClubData): Promise<void> {
   const reps = data.representantes;
@@ -217,10 +218,14 @@ export async function registerClub(data: RegisterClubData): Promise<void> {
       apellido_paterno: principal.apellidoPaterno.trim(),
     },
   });
+  if (data.existente) {
+    await AsyncStorage.removeItem(CLUB_PENDIENTE_KEY);
+    return;
+  }
   const pendiente: ClubPendiente = {
     email: principal.email.trim().toLowerCase(),
-    nombre: data.clubNombre.trim(),
-    rut: data.clubRut.trim().toUpperCase(),
+    nombre: data.clubNombre?.trim() ?? '',
+    rut: data.clubRut?.trim().toUpperCase() ?? '',
   };
   await AsyncStorage.setItem(CLUB_PENDIENTE_KEY, JSON.stringify(pendiente));
 }

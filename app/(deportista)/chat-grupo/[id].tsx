@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
-import { router, useLocalSearchParams } from 'expo-router';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   FlatList,
@@ -57,11 +57,11 @@ export default function ChatGrupoScreen() {
   const acceso = sala?.acceso ?? chat?.acceso ?? 'ninguno';
   const hayAcceso = acceso !== 'ninguno';
   // Mientras el chat está abierto, sus mensajes cuentan como leídos.
-  useEffect(() => {
+  useFocusEffect(useCallback(() => {
     if (!actividadId) return;
     abrirSala(actividadId);
     return () => cerrarSala(actividadId);
-  }, [actividadId]);
+  }, [actividadId]));
   // ---------- sin acceso (HU-50: se actualiza si te retiras o se cancela) ----------
   if (!sala || !hayAcceso) {
     const cancelada = actividad?.cancelada === true;

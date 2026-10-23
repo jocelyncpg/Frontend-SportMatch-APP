@@ -1,8 +1,8 @@
 import * as Crypto from 'expo-crypto';
 import { useSyncExternalStore } from 'react';
-import { AppState } from 'react-native';
 import { ApiError, apiRequest } from './api';
 import { getSession, getToken } from './auth';
+import { alCambiar, crearSondeo } from './sondeo';
 
 export const MAX_MENSAJE_GRUPAL = 1000;
 export type AccesoGrupal = 'escribir' | 'leer' | 'ninguno';
@@ -72,7 +72,8 @@ type Estado = {
 let estado: Estado = { usuarioId: null, chats: [], salas: {}, cargando: false, error: null };
 const oyentes = new Set<() => void>();
 const intentos = new Map<string, string>();
-const intervalos = new Map<string, ReturnType<typeof setInterval>>();
+const intervalos = new Map<string, { detener(): void; ahora(): void; aviso(): void }>();
+const leidos = new Map<string, number>();
 const cargadas = new Set<string>();
 const emitir = () => oyentes.forEach((o) => o());
 const suscribir = (o: () => void) => {
@@ -97,18 +98,24 @@ async function credenciales() {
   if (!sesion || !token) throw new ApiError('Tu sesión expiró. Vuelve a iniciar sesión.', 401, '');
   if (estado.usuarioId && estado.usuarioId !== sesion.id) {
     cargadas.clear();
+    leidos.clear();
     estado = { usuarioId: sesion.id, chats: [], salas: {}, cargando: false, error: null };
   }
   return { usuarioId: sesion.id, token };
 }
 
-export async function cargarChatsGrupales(): Promise<void> {
+export async function cargarChatsGrupales(): Promise<boolean> {
   estado = { ...estado, cargando: true, error: null };
   emitir();
   try {
     const { usuarioId, token } = await credenciales();
     const lista = await apiRequest<ChatApi[]>('/activities/chats', { token });
-    if ((await getSession())?.id !== usuarioId) return;
+    if ((await getSession())?.id !== usuarioId) return false;
+    const cambios = lista.some((c) => {
+      const previo = estado.chats.find((chat) => chat.actividadId === c.activity_id);
+      return previo?.sala.mensajes.at(-1)?.id !== (c.ultimo ? String(c.ultimo.id) : undefined)
+        || previo?.sala.noLeidos !== c.unread;
+    }) || lista.length !== estado.chats.length;
     const chats = lista.map((c): ChatGrupal => {
       const anterior = estado.salas[c.activity_id];
       const nuevoUltimo = c.ultimo ? mensaje(c.ultimo) : undefined;
@@ -143,6 +150,7 @@ export async function cargarChatsGrupales(): Promise<void> {
       error: null
     };
     emitir();
+    return cambios;
   } catch (e) {
     estado = { ...estado, cargando: false, error: motivo(e) };
     emitir();
@@ -150,14 +158,14 @@ export async function cargarChatsGrupales(): Promise<void> {
   }
 }
 
-export async function cargarSala(actividadId: string): Promise<void> {
+export async function cargarSala(actividadId: string): Promise<boolean> {
   const { usuarioId, token } = await credenciales();
   const ruta = '/activities/' + encodeURIComponent(actividadId) + '/chat';
   const anterior = estado.salas[actividadId];
   const ultimo = cargadas.has(actividadId) ? anterior?.mensajes.at(-1) : undefined;
   const query = ultimo ? '?after_id=' + encodeURIComponent(ultimo.id) + '&limit=50' : '?limit=50';
   const data = await apiRequest<SalaApi>(ruta + '/messages' + query, { token });
-  if ((await getSession())?.id !== usuarioId) return;
+  if ((await getSession())?.id !== usuarioId) return false;
   const mensajes = [
     ...(cargadas.has(actividadId) ? anterior?.mensajes ?? [] : []),
     ...data.mensajes.map(mensaje),
@@ -174,11 +182,13 @@ export async function cargarSala(actividadId: string): Promise<void> {
   estado = { ...estado, salas: { ...estado.salas, [actividadId]: sala }, error: null };
   emitir();
   const ultimoId = mensajes.at(-1)?.id;
-  if (intervalos.has(actividadId) && ultimoId) {
+  if (intervalos.has(actividadId) && ultimoId && Number(ultimoId) > (leidos.get(actividadId) ?? 0)) {
     await apiRequest<void>(ruta + '/read', { method: 'POST', token, body: { last_read_id: Number(ultimoId) } });
+    leidos.set(actividadId, Number(ultimoId));
     estado = { ...estado, salas: { ...estado.salas, [actividadId]: { ...estado.salas[actividadId], noLeidos: 0 } } };
     emitir();
   }
+  return data.mensajes.some((m) => !anterior?.mensajes.some((viejo) => viejo.id === String(m.id)));
 }
 
 export async function enviarMensajeGrupal(actividadId: string, texto: string): Promise<ResultadoGrupal> {
@@ -196,7 +206,8 @@ export async function enviarMensajeGrupal(actividadId: string, texto: string): P
       body: { text: limpio, client_message_id: intentos.get(clave) },
     });
     intentos.delete(clave);
-    await cargarSala(actividadId).catch(() => { });
+    intervalos.get(actividadId)?.ahora();
+    if (!intervalos.has(actividadId)) await cargarSala(actividadId).catch(() => { });
     return { ok: true };
   } catch (e) {
     return { ok: false, motivo: motivo(e) };
@@ -220,19 +231,22 @@ export async function silenciarSala(actividadId: string, silenciado: boolean): P
 
 export function abrirSala(actividadId: string) {
   if (intervalos.has(actividadId)) return;
-  const actualizar = () => {
-    if (AppState.currentState === 'active') cargarSala(actividadId).catch((e) => {
-      estado = { ...estado, error: motivo(e) };
-      emitir();
-    });
-  };
-  intervalos.set(actividadId, setInterval(actualizar, 6000));
-  actualizar();
+  const sondeo = crearSondeo('grupo:' + actividadId, () => cargarSala(actividadId).catch((e) => {
+    estado = { ...estado, error: motivo(e) };
+    emitir();
+    return false;
+  }), { minMs: 3000, maxMs: 15000, factor: 1.5 });
+  const quitarAviso = alCambiar(({ tipo, id }) => {
+    if (tipo === 'activity_chat' && id === actividadId) sondeo.ahora();
+  });
+  intervalos.set(actividadId, { ...sondeo, aviso: quitarAviso });
+  sondeo.iniciar();
 }
 
 export function cerrarSala(actividadId: string) {
   const timer = intervalos.get(actividadId);
-  if (timer) clearInterval(timer);
+  timer?.detener();
+  timer?.aviso();
   intervalos.delete(actividadId);
 }
 
@@ -241,8 +255,12 @@ export function ultimoMensajeGrupal(s: SalaGrupal) {
 }
 
 export function reiniciarChatGrupal() {
-  intervalos.forEach(clearInterval);
+  intervalos.forEach((timer) => {
+    timer.detener();
+    timer.aviso();
+  });
   intervalos.clear();
+  leidos.clear();
   intentos.clear();
   cargadas.clear();
   estado = { usuarioId: null, chats: [], salas: {}, cargando: false, error: null };

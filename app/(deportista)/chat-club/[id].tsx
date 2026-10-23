@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
-import { router, useLocalSearchParams } from 'expo-router';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   KeyboardAvoidingView,
@@ -44,7 +44,7 @@ export default function ChatClubScreen() {
   const scroll = useRef<ScrollView>(null);
   // Nombre con el que el club verá esta consulta: el de la cuenta con la que se inició sesión.
   const [miNombre, setMiNombre] = useState('');
-  useEffect(() => {
+  useFocusEffect(useCallback(() => {
     if (!clubId) return;
     cargarClub(clubId).catch(() => { });
     abrirConsultaDeportista(clubId);
@@ -52,7 +52,7 @@ export default function ChatClubScreen() {
       if (s?.nombre) setMiNombre(s.nombre);
     });
     return () => cerrarConsulta(hiloId);
-  }, [clubId, hiloId]);
+  }, [clubId, hiloId]));
   // Al abrir (o si llega una respuesta mientras está abierto), ya la vio.
   const total = hilo?.mensajes.length ?? 0;
   useEffect(() => {

@@ -58,6 +58,7 @@ export default function RegisterClubScreen() {
 
   const [clubNombre, setClubNombre] = useState('');
   const [clubRut, setClubRut] = useState('');
+  const [existente, setExistente] = useState(false);
   const [cantidad, setCantidad] = useState(1);
   // Siempre hay MAX_REPRESENTANTES bloques guardados; solo se muestran y validan los primeros `cantidad`.
   const [reps, setReps] = useState<Representante[]>(() => OPCIONES_CANTIDAD.map(repVacio));
@@ -66,12 +67,12 @@ export default function RegisterClubScreen() {
   const [touched, setTouched] = useState<Record<string, boolean>>({});
   const [submitted, setSubmitted] = useState(false);
 
-  const activos = reps.slice(0, cantidad);
+  const activos = reps.slice(0, existente ? 1 : cantidad);
 
   // Errores por campo. Claves: "clubNombre", "clubRut" y "r<n>_<campo>" por representante.
   const errors: Record<string, string | null> = {
-    clubNombre: validateNombreClub(clubNombre),
-    clubRut: validateRutClub(clubRut),
+    clubNombre: existente ? null : validateNombreClub(clubNombre),
+    clubRut: existente ? null : validateRutClub(clubRut),
   };
   activos.forEach((r, i) => {
     const otrosCorreos = activos.filter((_, j) => j !== i).map((o) => o.email);
@@ -99,8 +100,9 @@ export default function RegisterClubScreen() {
     setEnviando(true);
     try {
       await registerClub({
-        clubNombre: clubNombre.trim(),
-        clubRut,
+        clubNombre: existente ? undefined : clubNombre.trim(),
+        clubRut: existente ? undefined : clubRut,
+        existente,
         representantes: activos.map((r) => ({
           nombre: r.nombre.trim(),
           apellidoPaterno: r.apellidoPaterno.trim(),
@@ -181,40 +183,53 @@ export default function RegisterClubScreen() {
 
         {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
-        {/* Datos del club */}
-        <Text style={styles.seccion}>Datos del club</Text>
-        {campo('clubNombre', 'shield-outline', 'Nombre del club *', clubNombre, setClubNombre, {
-          maxLength: 60,
-          autoCapitalize: 'words',
-        })}
-        {campo('clubRut', 'card-outline', 'RUT del club (76123456-0) *', clubRut, (t) => setClubRut(formatRut(t)), {
-          maxLength: 10,
-          autoCapitalize: 'characters',
-        })}
-        <Text style={styles.ayuda}>Se revisa que el RUT esté bien escrito. La validación con el SII la hará el sistema.</Text>
+        <TouchableOpacity onPress={() => setExistente(!existente)} style={styles.cantidadOpcion}>
+          <Text style={styles.cantidadTexto}>
+            {existente ? '✓ ' : ''}Voy a administrar un club que ya existe
+          </Text>
+        </TouchableOpacity>
+        {existente ? <Text style={styles.ayuda}>Registra tu cuenta y pide al principal que asigne tu correo.</Text> : null}
+        {!existente ? (
+          <>
+            <Text style={styles.seccion}>Datos del club</Text>
+            {campo('clubNombre', 'shield-outline', 'Nombre del club *', clubNombre, setClubNombre, {
+              maxLength: 60,
+              autoCapitalize: 'words',
+            })}
+            {campo('clubRut', 'card-outline', 'RUT del club (76123456-0) *', clubRut,
+              (t) => setClubRut(formatRut(t)), { maxLength: 10, autoCapitalize: 'characters' })}
+            <Text style={styles.ayuda}>
+              Se revisa que el RUT esté bien escrito. La validación con el SII la hará el sistema.
+            </Text>
+          </>
+        ) : null}
 
         {/* Cantidad de representantes */}
-        <Text style={styles.seccion}>Representantes del club</Text>
-        <Text style={styles.ayuda}>
-          ¿Cuántas personas administrarán el club? Cada una entra con su propio correo y contraseña.
-        </Text>
-        <View style={styles.cantidadFila}>
-          {OPCIONES_CANTIDAD.map((n) => {
-            const activa = cantidad === n;
-            return (
-              <TouchableOpacity
-                key={n}
-                style={[styles.cantidadOpcion, activa && styles.cantidadOpcionActiva]}
-                onPress={() => setCantidad(n)}
-                accessibilityRole="button"
-                accessibilityLabel={`${n} ${n === 1 ? 'representante' : 'representantes'}`}
-                accessibilityState={{ selected: activa }}
-              >
-                <Text style={[styles.cantidadTexto, activa && styles.cantidadTextoActivo]}>{n}</Text>
-              </TouchableOpacity>
-            );
-          })}
-        </View>
+        <Text style={styles.seccion}>{existente ? 'Tu cuenta de administrador' : 'Representantes del club'}</Text>
+        {!existente ? (
+          <>
+            <Text style={styles.ayuda}>
+              ¿Cuántas personas administrarán el club? Cada una entra con su propio correo y contraseña.
+            </Text>
+            <View style={styles.cantidadFila}>
+              {OPCIONES_CANTIDAD.map((n) => {
+                const activa = cantidad === n;
+                return (
+                  <TouchableOpacity
+                    key={n}
+                    style={[styles.cantidadOpcion, activa && styles.cantidadOpcionActiva]}
+                    onPress={() => setCantidad(n)}
+                    accessibilityRole="button"
+                    accessibilityLabel={`${n} ${n === 1 ? 'representante' : 'representantes'}`}
+                    accessibilityState={{ selected: activa }}
+                  >
+                    <Text style={[styles.cantidadTexto, activa && styles.cantidadTextoActivo]}>{n}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </>
+        ) : null}
 
         {/* Un bloque por representante */}
         {activos.map((r, i) => {
@@ -223,7 +238,7 @@ export default function RegisterClubScreen() {
           return (
             <View key={i} style={styles.repCard}>
               <Text style={styles.repTitulo}>
-                {i === 0 ? 'Representante principal' : `Representante ${i + 1}`}
+                {existente ? 'Administrador' : i === 0 ? 'Representante principal' : `Representante ${i + 1}`}
               </Text>
 
               {campo(`r${i}_nombre`, 'person-outline', 'Nombre *', r.nombre, (t) => cambiarRep(i, { nombre: t }), {
@@ -306,17 +321,21 @@ export default function RegisterClubScreen() {
           );
         })}
 
-        <Text style={styles.ayuda}>
-          Cada representante podrá cambiar su contraseña después, desde el inicio del club.
-          {cantidad > 1 ? ' Los demás confirman su correo la primera vez que inicien sesión.' : ''}
-        </Text>
+        {!existente ? (
+          <Text style={styles.ayuda}>
+            Cada representante podrá cambiar su contraseña después, desde el inicio del club.
+            {cantidad > 1 ? ' Los demás confirman su correo la primera vez que inicien sesión.' : ''}
+          </Text>
+        ) : null}
 
         <TouchableOpacity
           style={[styles.loginButton, enviando && { opacity: 0.6 }]}
           onPress={handleRegister}
           disabled={enviando}
         >
-          <Text style={styles.loginButtonText}>{enviando ? 'Registrando club...' : 'Registrar club'}</Text>
+          <Text style={styles.loginButtonText}>
+            {enviando ? 'Registrando...' : existente ? 'Registrar cuenta' : 'Registrar club'}
+          </Text>
         </TouchableOpacity>
 
         <TouchableOpacity onPress={() => router.back()}>
