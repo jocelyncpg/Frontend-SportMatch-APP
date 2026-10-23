@@ -69,7 +69,7 @@ test('chat grupal reutiliza UUID al reintentar y valida 1000 caracteres', async 
 
 test('consultas mapea hilos y envía texto con UUID por la ruta del deportista', async () => {
   const { api, llamadas } = cargar('consultas.ts', async (ruta) => {
-    if (ruta === '/clubs/consultas/me') return [{ hilo_id: 4, club_id: 'c1', club_nombre: 'Club Uno', club_logo: null, ultimo: mensajeConsulta, no_leidos: 3 }];
+    if (ruta === '/clubs/consultas/me') return [{ hilo_id: '10000000-0000-4000-8000-000000000004', club_id: 'c1', club_nombre: 'Club Uno', club_logo: null, ultimo: mensajeConsulta, no_leidos: 3 }];
     if (ruta === '/clubs/c1/consultas/me/messages') return { id: 10, de: 'deportista', texto: 'Consulta', enviado_en: fecha, propio: true };
     throw Error(ruta);
   });
@@ -80,6 +80,27 @@ test('consultas mapea hilos y envía texto con UUID por la ruta del deportista',
   const envio = llamadas.find(([ruta]) => ruta === '/clubs/c1/consultas/me/messages');
   assert.equal(envio[1].body.texto, 'Consulta');
   assert.equal(envio[1].body.client_message_id, 'uuid-1');
+});
+
+test('la bandeja del club conserva el UUID del hilo para responder', async () => {
+  const hiloId = '10000000-0000-4000-8000-000000000005';
+  const { api, llamadas } = cargar('consultas.ts', async (ruta) => {
+    if (ruta === '/clubs/c1/consultas') {
+      return [{
+        hilo_id: hiloId,
+        deportista_id: 'u1',
+        deportista_nombre: 'Ana',
+        ultimo: mensajeConsulta,
+        no_leidos: 1,
+      }];
+    }
+    if (ruta === `/clubs/c1/consultas/${hiloId}/messages`) return mensajeConsulta;
+    throw Error(ruta);
+  });
+  await api.cargarHilosClub('c1', 'Club Uno');
+  assert.equal(api.useHilo(hiloId).id, hiloId);
+  assert.equal((await api.responderConsulta(hiloId, 'Hola')).ok, true);
+  assert.equal(llamadas[1][0], `/clubs/c1/consultas/${hiloId}/messages`);
 });
 
 test('administración crea el club con RUT y gestiona invitaciones sin guardar códigos', async () => {
@@ -98,15 +119,49 @@ test('administración crea el club con RUT y gestiona invitaciones sin guardar c
 });
 
 test('directorio toma la página pública del backend y carga el detalle', async () => {
-  const club = { id: 'c1', nombre: 'Club Uno', rut: '76123456-0' };
+  const club = { id: 'c1', nombre: 'Club Uno', comuna: 'Ñuñoa', deportes: [] };
   const { api, llamadas } = cargar('clubes.ts', async (ruta) => {
-    if (ruta === '/clubs?page=1') return { items: [club], total: 1, page: 1, page_size: 20 };
+    if (ruta === '/clubs?page=1&page_size=20') return { items: [club], total: 1, page: 1, page_size: 20 };
     if (ruta === '/clubs/c1') return club;
     throw Error(ruta);
   });
   await api.cargarClubes();
   await api.cargarClub('c1');
-  assert.equal(api.useEstadoClubes().clubes[0].rut, club.rut);
+  assert.equal(api.useEstadoClubes().clubes[0].comuna, club.comuna);
   assert.equal(api.useClub('c1').nombre, 'Club Uno');
   assert.equal(llamadas[0][1], undefined);
+});
+
+test('convocatorias usa el contrato público y publica y cierra con token', async () => {
+  const clubId = '10000000-0000-4000-8000-000000000001';
+  const anuncioId = '10000000-0000-4000-8000-000000000002';
+  const anuncio = { id: anuncioId, estado: 'ABIERTA' };
+  const { api, llamadas } = cargar('convocatorias.ts', async (ruta) => {
+    if (ruta.startsWith('/clubs/announcements?')) {
+      return { items: [anuncio], total: 1, page: 1, page_size: 20 };
+    }
+    if (ruta === `/clubs/${clubId}/announcements`) return anuncio;
+    if (ruta === `/clubs/${clubId}/announcements/${anuncioId}/close`) {
+      return { ...anuncio, estado: 'CERRADA' };
+    }
+    throw Error(ruta);
+  });
+  const pagina = await api.listarConvocatorias(clubId);
+  assert.equal(pagina.items[0].id, anuncioId);
+  assert.match(llamadas[0][0], /club_id=10000000-0000-4000-8000-000000000001/);
+  assert.match(llamadas[0][0], /estado=ABIERTA/);
+  const datos = {
+    deporte_id: 1,
+    categoria_edad: 'Sub-17',
+    fecha_prueba: '2026-11-07T13:00:00.000Z',
+    requisitos: ['Experiencia previa'],
+    cupos: 10,
+    direccion: 'Cancha Central 123',
+  };
+  await api.publicarConvocatoria(clubId, datos);
+  assert.equal(llamadas[1][1].token, 'token');
+  assert.equal(llamadas[1][1].body, datos);
+  await api.cerrarConvocatoria(clubId, anuncioId);
+  assert.equal(llamadas[2][1].method, 'POST');
+  assert.equal(llamadas[2][1].token, 'token');
 });
