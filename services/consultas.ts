@@ -1,8 +1,8 @@
 import * as Crypto from 'expo-crypto';
 import { useMemo, useSyncExternalStore } from 'react';
-import { AppState } from 'react-native';
 import { ApiError, apiRequest } from './api';
 import { getSession, getToken } from './auth';
+import { alCambiar, crearSondeo } from './sondeo';
 
 export const MAX_CONSULTA = 1000;
 export type Resultado = {
@@ -62,9 +62,11 @@ type Estado = {
 };
 let estado: Estado = { usuarioId: null, hilos: {}, cargando: false, error: null };
 const oyentes = new Set<() => void>();
-const intervalos = new Map<string, ReturnType<typeof setInterval>>();
+const intervalos = new Map<string, { detener(): void; ahora(): void; aviso(): void }>();
+const leidos = new Map<string, number>();
 const intentos = new Map<string, string>();
 const cargadas = new Set<string>();
+const cursores = new Map<string, string>();
 const emitir = () => oyentes.forEach((o) => o());
 const suscribir = (o: () => void) => {
   oyentes.add(o);
@@ -88,6 +90,8 @@ async function credenciales() {
   if (!sesion || !token) throw new ApiError('Tu sesión expiró. Vuelve a iniciar sesión.', 401, '');
   if (estado.usuarioId && estado.usuarioId !== sesion.id) {
     cargadas.clear();
+    cursores.clear();
+    leidos.clear();
     estado = { usuarioId: sesion.id, hilos: {}, cargando: false, error: null };
   }
   return { usuarioId: sesion.id, token };
@@ -98,19 +102,27 @@ function guardar(h: Hilo) {
   emitir();
 }
 
-export async function cargarHilosDeportista() {
+export async function cargarHilosDeportista(): Promise<boolean> {
   estado = { ...estado, cargando: true, error: null };
   emitir();
   try {
     const { usuarioId, token } = await credenciales();
     const lista = await apiRequest<HiloDeportistaApi[]>('/clubs/consultas/me', { token });
-    if ((await getSession())?.id !== usuarioId) return;
+    if ((await getSession())?.id !== usuarioId) return false;
+    const cambios = lista.some((h) => {
+      const previo = estado.hilos[idHilo(h.club_id, usuarioId)];
+      return previo?.mensajes.at(-1)?.id !== (h.ultimo ? String(h.ultimo.id) : undefined)
+        || previo?.noLeidosPostulante !== h.no_leidos;
+    }) || lista.length !== Object.keys(estado.hilos).filter((id) => id.endsWith('__me')).length;
     const hilos = { ...estado.hilos };
     for (const h of lista) {
       const id = idHilo(h.club_id, usuarioId);
       const ultimo = h.ultimo ? convertir(h.ultimo) : undefined;
       const cambio = ultimo && hilos[id]?.mensajes.at(-1)?.id !== ultimo.id;
-      if (cambio && !intervalos.has(id)) cargadas.delete(id);
+      if (cambio && !intervalos.has(id)) {
+        cargadas.delete(id);
+        cursores.delete(id);
+      }
       const mensajes = cambio && !intervalos.has(id) ? [ultimo] : hilos[id]?.mensajes ?? (ultimo ? [ultimo] : []);
       hilos[id] = {
         id,
@@ -125,6 +137,7 @@ export async function cargarHilosDeportista() {
     }
     estado = { usuarioId, hilos, cargando: false, error: null };
     emitir();
+    return cambios;
   } catch (e) {
     estado = { ...estado, cargando: false, error: motivo(e) };
     emitir();
@@ -132,19 +145,28 @@ export async function cargarHilosDeportista() {
   }
 }
 
-export async function cargarHilosClub(clubId: string, clubNombre: string) {
+export async function cargarHilosClub(clubId: string, clubNombre: string): Promise<boolean> {
   estado = { ...estado, cargando: true, error: null };
   emitir();
   try {
     const { usuarioId, token } = await credenciales();
     const lista = await apiRequest<HiloClubApi[]>('/clubs/' + encodeURIComponent(clubId) + '/consultas', { token });
-    if ((await getSession())?.id !== usuarioId) return;
+    if ((await getSession())?.id !== usuarioId) return false;
+    const cambios = lista.some((h) => {
+      const previo = estado.hilos[h.hilo_id];
+      return previo?.mensajes.at(-1)?.id !== (h.ultimo ? String(h.ultimo.id) : undefined)
+        || previo?.noLeidosClub !== h.no_leidos;
+    }) || lista.length !== Object.values(estado.hilos)
+      .filter((h) => h.clubId === clubId && !h.id.endsWith('__me')).length;
     const hilos = { ...estado.hilos };
     for (const h of lista) {
       const id = h.hilo_id;
       const ultimo = h.ultimo ? convertir(h.ultimo) : undefined;
       const cambio = ultimo && hilos[id]?.mensajes.at(-1)?.id !== ultimo.id;
-      if (cambio && !intervalos.has(id)) cargadas.delete(id);
+      if (cambio && !intervalos.has(id)) {
+        cargadas.delete(id);
+        cursores.delete(id);
+      }
       const mensajes = cambio && !intervalos.has(id) ? [ultimo] : hilos[id]?.mensajes ?? (ultimo ? [ultimo] : []);
       hilos[id] = {
         id,
@@ -159,6 +181,7 @@ export async function cargarHilosClub(clubId: string, clubNombre: string) {
     }
     estado = { usuarioId, hilos, cargando: false, error: null };
     emitir();
+    return cambios;
   } catch (e) {
     estado = { ...estado, cargando: false, error: motivo(e) };
     emitir();
@@ -166,18 +189,20 @@ export async function cargarHilosClub(clubId: string, clubNombre: string) {
   }
 }
 
-async function cargarMensajes(clave: string, ruta: string) {
+async function cargarMensajes(clave: string, ruta: string): Promise<boolean> {
   const { usuarioId, token } = await credenciales();
   const anterior = estado.hilos[clave];
-  const ultimo = cargadas.has(clave) ? anterior?.mensajes.at(-1) : undefined;
-  const query = ultimo ? '?after_id=' + encodeURIComponent(ultimo.id) + '&limit=50' : '?limit=50';
+  const cursor = cargadas.has(clave) ? cursores.get(clave) : undefined;
+  const query = cursor ? '?after_id=' + encodeURIComponent(cursor) + '&limit=50' : '?limit=50';
   const data = await apiRequest<MensajesApi>(ruta + '/messages' + query, { token });
-  if ((await getSession())?.id !== usuarioId) return;
+  if ((await getSession())?.id !== usuarioId) return false;
   const mensajes = [
     ...(cargadas.has(clave) ? anterior?.mensajes ?? [] : []),
     ...data.mensajes.map(convertir),
   ].filter((m, i, arr) => arr.findIndex((x) => x.id === m.id) === i);
   cargadas.add(clave);
+  const nuevoCursor = data.mensajes.at(-1)?.id;
+  if (nuevoCursor && nuevoCursor > Number(cursores.get(clave) ?? 0)) cursores.set(clave, String(nuevoCursor));
   const h: Hilo = anterior ?? {
     id: clave,
     clubId: clave.split('__')[0],
@@ -190,10 +215,12 @@ async function cargarMensajes(clave: string, ruta: string) {
   };
   guardar({ ...h, mensajes });
   const ultimoId = mensajes.at(-1)?.id;
-  if (intervalos.has(clave) && ultimoId) {
+  if (intervalos.has(clave) && ultimoId && Number(ultimoId) > (leidos.get(clave) ?? 0)) {
     await apiRequest<void>(ruta + '/read', { method: 'POST', token, body: { hasta_id: Number(ultimoId) } });
+    leidos.set(clave, Number(ultimoId));
     guardar({ ...estado.hilos[clave], noLeidosClub: 0, noLeidosPostulante: 0 });
   }
+  return data.mensajes.some((m) => !anterior?.mensajes.some((viejo) => viejo.id === String(m.id)));
 }
 
 export function abrirConsultaDeportista(clubId: string) {
@@ -208,19 +235,24 @@ export function abrirConsultaClub(clubId: string, hiloId: string) {
 
 function abrir(clave: string, ruta: string) {
   if (intervalos.has(clave)) return;
-  const actualizar = () => {
-    if (AppState.currentState === 'active') cargarMensajes(clave, ruta).catch((e) => {
-      estado = { ...estado, error: motivo(e) };
-      emitir();
-    });
-  };
-  intervalos.set(clave, setInterval(actualizar, 6000));
-  actualizar();
+  const sondeo = crearSondeo('consulta:' + clave, () => cargarMensajes(clave, ruta).catch((e) => {
+    estado = { ...estado, error: motivo(e) };
+    emitir();
+    return false;
+  }), { minMs: 3000, maxMs: 15000, factor: 1.5 });
+  const quitarAviso = alCambiar(({ tipo, id }) => {
+    if ((tipo === 'consulta' && clave === idHilo(id ?? '', '')) || (tipo === 'consulta_club' && id === clave)) {
+      sondeo.ahora();
+    }
+  });
+  intervalos.set(clave, { ...sondeo, aviso: quitarAviso });
+  sondeo.iniciar();
 }
 
 export function cerrarConsulta(clave: string) {
   const timer = intervalos.get(clave);
-  if (timer) clearInterval(timer);
+  timer?.detener();
+  timer?.aviso();
   intervalos.delete(clave);
 }
 
@@ -240,6 +272,7 @@ async function enviar(ruta: string, clave: string, texto: string): Promise<Resul
     const h = estado.hilos[clave];
     if (h) guardar({ ...h, mensajes: [...h.mensajes.filter((x) => x.id !== String(m.id)), convertir(m)] });
     else await cargarMensajes(clave, ruta).catch(() => { });
+    intervalos.get(clave)?.ahora();
     return { ok: true };
   } catch (e) {
     return { ok: false, motivo: motivo(e) };
@@ -257,10 +290,15 @@ export function responderConsulta(hiloId: string, texto: string) {
 }
 
 export function reiniciarConsultas() {
-  intervalos.forEach(clearInterval);
+  intervalos.forEach((timer) => {
+    timer.detener();
+    timer.aviso();
+  });
   intervalos.clear();
+  leidos.clear();
   intentos.clear();
   cargadas.clear();
+  cursores.clear();
   estado = { usuarioId: null, hilos: {}, cargando: false, error: null };
   emitir();
 }

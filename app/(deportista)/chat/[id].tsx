@@ -3,7 +3,7 @@ import * as Crypto from 'expo-crypto';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useCallback, useMemo, useRef, useState } from 'react';
 import {
-  ActivityIndicator, Alert, AppState, FlatList, Image, KeyboardAvoidingView, Linking, Platform, StyleSheet, Text, TextInput,
+  ActivityIndicator, Alert, FlatList, Image, KeyboardAvoidingView, Linking, Platform, StyleSheet, Text, TextInput,
   TouchableOpacity, View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -17,6 +17,7 @@ import {
 import { solicitarUbicacion } from '../../../services/location';
 import { Persona } from '../../../services/matchStore';
 import { bloquear, desbloquear, useBloqueados, type TipoReporte } from '../../../services/reportes';
+import { alCambiar, crearSondeo } from '../../../services/sondeo';
 import { Colors, useAppTheme } from '../../../theme/ThemeContext';
 
 /** Lo que se está reportando desde el chat (HU-42): la persona o un mensaje suyo. */
@@ -48,6 +49,7 @@ export default function ChatScreen() {
   const [cargandoAnteriores, setCargandoAnteriores] = useState(false);
   const [enviando, setEnviando] = useState(false);
   const actualizarRef = useRef<() => void>(() => {});
+  const sondeoRef = useRef<{ ahora(): void } | null>(null);
   const listaRef = useRef<FlatList<MensajeApi>>(null);
   const ultimoId = useRef<string | undefined>(undefined);
   const generacion = useRef(0);
@@ -71,39 +73,49 @@ export default function ChatScreen() {
   useFocusEffect(useCallback(() => {
     const version = ++generacion.current;
     let activo = true;
-    let consultando = false;
+    let fichaCargada = false;
     setPersona(null); setMensajes([]); setDisponible(false); setCargando(true); setError(null);
     setCargandoAnteriores(false); desplazar.current = true;
     setTexto(''); setEnviando(false); envioEnCurso.current = false; envioPendiente.current = null;
     ultimoId.current = undefined;
-    async function actualizar() {
-      if (!activo || consultando || AppState.currentState !== 'active') return;
-      consultando = true;
+    async function actualizar(): Promise<boolean> {
+      if (!activo) return false;
       try {
-        const chat = await getChat(id);
+        if (!fichaCargada) {
+          const chat = await getChat(id);
+          if (!activo || version !== generacion.current) return false;
+          setPersona(chat.persona);
+          setMiId(chat.userId);
+          fichaCargada = true;
+        }
         const nuevos = await getMensajes(id, { after: ultimoId.current });
-        if (!activo || version !== generacion.current) return;
-        setPersona(chat.persona); setMiId(chat.userId); setDisponible(true); setError(null);
+        if (!activo || version !== generacion.current) return false;
+        setDisponible(true); setError(null);
         if (!ultimoId.current) setAnteriores(nuevos.length === 50);
         if (nuevos.length) {
           ultimoId.current = nuevos[nuevos.length - 1].id;
           setMensajes((prev) => fusionar(prev, nuevos));
         }
+        return nuevos.length > 0;
       } catch (e) {
         if (activo && version === generacion.current) mostrarError(e);
+        return false;
       } finally {
-        consultando = false;
         if (activo && version === generacion.current) setCargando(false);
       }
     }
-    actualizarRef.current = () => { void actualizar(); };
+    const sondeo = crearSondeo('chat:' + id, actualizar, { minMs: 3000, maxMs: 15000, factor: 1.5 });
+    sondeoRef.current = sondeo;
+    actualizarRef.current = () => sondeo.ahora();
     // Mientras este chat está abierto, sus mensajes cuentan como leídos y no llegan avisos de él.
     abrirChat(id);
-    void actualizar();
-    const timer = setInterval(() => void actualizar(), 4000);
-    const listener = AppState.addEventListener('change', (state) => { if (state === 'active') void actualizar(); });
+    const quitarAviso = alCambiar(({ tipo, id: avisoId }) => {
+      if (tipo === 'chat' && avisoId === id) sondeo.ahora();
+    });
+    sondeo.iniciar();
     return () => {
-      activo = false; ++generacion.current; actualizarRef.current = () => {}; clearInterval(timer); listener.remove();
+      activo = false; ++generacion.current; actualizarRef.current = () => {}; sondeoRef.current = null;
+      sondeo.detener(); quitarAviso();
       cerrarChat(id);
     };
   }, [id, mostrarError]));
@@ -121,6 +133,7 @@ export default function ChatScreen() {
       setMensajes((prev) => fusionar(prev, [mensaje]));
       // The polling cursor only advances from reads, so simultaneous peer messages are not skipped.
       envioPendiente.current = null; setTexto(''); setError(null); desplazar.current = true;
+      sondeoRef.current?.ahora();
     } catch (e) {
       if (version === generacion.current) { setTexto(t); mostrarError(e); }
     } finally {
@@ -148,6 +161,7 @@ export default function ChatScreen() {
       const mensaje = await enviarUbicacion(id, r.ubicacion, Crypto.randomUUID());
       if (version !== generacion.current) return;
       setMensajes((prev) => fusionar(prev, [mensaje])); setError(null); desplazar.current = true;
+      sondeoRef.current?.ahora();
     } catch (e) {
       if (version === generacion.current) mostrarError(e);
     } finally {

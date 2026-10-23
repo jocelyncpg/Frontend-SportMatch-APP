@@ -36,16 +36,11 @@ export type AdministradorClub = {
   rol: 'PRINCIPAL' | 'ADMIN';
   fecha_alta: string;
 };
-export type InvitacionClub = {
+export type AsignacionRead = {
   id: string;
-  creada_por: string;
+  email: string;
+  asignada_por: string;
   fecha_creacion: string;
-  expira_en: string;
-};
-export type InvitacionCreada = {
-  id: string;
-  codigo: string;
-  expira_en: string;
 };
 type PaginaClubes = {
   items: ClubResumen[];
@@ -138,16 +133,6 @@ export async function crearClub(nombre: string, rut: string) {
   return club;
 }
 
-export async function aceptarInvitacion(codigo: string) {
-  const club = await apiRequest<ClubGestionado>('/clubs/admins/invitations/accept', {
-    method: 'POST',
-    token: await tokenActual(),
-    body: { codigo },
-  });
-  await guardarClubEnSesion(club.id, club.nombre);
-  return club;
-}
-
 export async function listarAdministradores(clubId: string) {
   return apiRequest<AdministradorClub[]>(`/clubs/${encodeURIComponent(clubId)}/admins`, {
     token: await tokenActual(),
@@ -159,21 +144,26 @@ export async function quitarAdministrador(clubId: string, usuarioId: string) {
   await apiRequest<void>(ruta, { method: 'DELETE', token: await tokenActual() });
 }
 
-export async function generarInvitacion(clubId: string) {
-  return apiRequest<InvitacionCreada>(`/clubs/${encodeURIComponent(clubId)}/admins/invitations`, {
+export async function asignarCorreo(clubId: string, email: string) {
+  const normalizado = email.trim().toLowerCase();
+  if (normalizado.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(normalizado)) {
+    throw new Error('Ingresa un correo válido.');
+  }
+  return apiRequest<AsignacionRead>(`/clubs/${encodeURIComponent(clubId)}/admins/assignments`, {
     method: 'POST',
     token: await tokenActual(),
+    body: { email: normalizado },
   });
 }
 
-export async function listarInvitaciones(clubId: string) {
-  return apiRequest<InvitacionClub[]>(`/clubs/${encodeURIComponent(clubId)}/admins/invitations`, {
+export async function listarAsignaciones(clubId: string) {
+  return apiRequest<AsignacionRead[]>(`/clubs/${encodeURIComponent(clubId)}/admins/assignments`, {
     token: await tokenActual(),
   });
 }
 
-export async function revocarInvitacion(clubId: string, invitacionId: string) {
-  const ruta = `/clubs/${encodeURIComponent(clubId)}/admins/invitations/${encodeURIComponent(invitacionId)}`;
+export async function revocarAsignacion(clubId: string, asignacionId: string) {
+  const ruta = `/clubs/${encodeURIComponent(clubId)}/admins/assignments/${encodeURIComponent(asignacionId)}`;
   await apiRequest<void>(ruta, { method: 'DELETE', token: await tokenActual() });
 }
 

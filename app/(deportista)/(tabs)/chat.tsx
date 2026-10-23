@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
-import { router } from 'expo-router';
-import { useMemo } from 'react';
+import { router, useFocusEffect } from 'expo-router';
+import { useCallback, useMemo } from 'react';
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Avatar from '../../../components/Avatar';
@@ -11,6 +11,7 @@ import { Hilo, useEstadoConsultas, useHilosDePostulante } from '../../../service
 import { Persona, cargarMatching, useMatches } from '../../../services/matchStore';
 import { useBloqueados } from '../../../services/reportes';
 import { useMatchingRefresh } from '../../../hooks/useMatchingRefresh';
+import { avisarCambio } from '../../../services/sondeo';
 import { Colors, useAppTheme } from '../../../theme/ThemeContext';
 type Item =
   | {
@@ -29,6 +30,7 @@ type Item =
     orden: number
   };
 export default function ChatListScreen() {
+  useFocusEffect(useCallback(() => { avisarCambio('listas'); }, []));
   const { colors } = useAppTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const insets = useSafeAreaInsets();

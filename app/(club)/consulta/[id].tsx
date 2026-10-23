@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
-import { router, useLocalSearchParams } from 'expo-router';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   KeyboardAvoidingView,
@@ -50,11 +50,11 @@ export default function ConsultaClubScreen() {
     }).finally(() => setCargando(false));
   }, [clubId]);
   // Al abrir (o si llega algo mientras está abierto), el club ya lo vio.
-  useEffect(() => {
+  useFocusEffect(useCallback(() => {
     if (!hilo?.clubId) return;
     abrirConsultaClub(hilo.clubId, hiloId);
     return () => cerrarConsulta(hiloId);
-  }, [hilo?.clubId, hiloId]);
+  }, [hilo?.clubId, hiloId]));
   const total = hilo?.mensajes.length ?? 0;
   useEffect(() => {
     setTimeout(() => scroll.current?.scrollToEnd({ animated: true }), 50);

@@ -1,16 +1,17 @@
-import * as Clipboard from 'expo-clipboard';
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Alert, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ConvocatoriasClub } from '../../components/ConvocatoriasClub';
 import { getSession, guardarClubEnSesion, logout, type Usuario } from '../../services/auth';
+import { ApiError } from '../../services/api';
 import { cargarHilosClub, useConsultasPendientes } from '../../services/consultas';
 import {
-  aceptarInvitacion, crearClub, generarInvitacion, listarAdministradores, listarInvitaciones,
-  miClubActual, quitarAdministrador, revocarInvitacion,
-  type AdministradorClub, type ClubGestionado, type InvitacionClub, type InvitacionCreada,
+  asignarCorreo, crearClub, listarAdministradores, listarAsignaciones,
+  miClubActual, quitarAdministrador, revocarAsignacion,
+  type AdministradorClub, type AsignacionRead, type ClubGestionado,
 } from '../../services/clubes';
+import { alCambiar, crearSondeo } from '../../services/sondeo';
 import { validateNombreClub, validateRutClub } from '../../services/validators';
 import { Colors, useAppTheme } from '../../theme/ThemeContext';
 export default function ClubHomeScreen() {
@@ -20,11 +21,10 @@ export default function ClubHomeScreen() {
   const [sesion, setSesion] = useState<Usuario | null>(null);
   const [club, setClub] = useState<ClubGestionado | null>(null);
   const [admins, setAdmins] = useState<AdministradorClub[]>([]);
-  const [invitaciones, setInvitaciones] = useState<InvitacionClub[]>([]);
-  const [codigoNuevo, setCodigoNuevo] = useState<InvitacionCreada | null>(null);
+  const [asignaciones, setAsignaciones] = useState<AsignacionRead[]>([]);
+  const [correo, setCorreo] = useState('');
   const [nombre, setNombre] = useState('');
   const [rut, setRut] = useState('');
-  const [codigo, setCodigo] = useState('');
   const [cargando, setCargando] = useState(true);
   const [ocupado, setOcupado] = useState(false);
   const [error, setError] = useState('');
@@ -39,18 +39,17 @@ export default function ClubHomeScreen() {
       if (actual) {
         await guardarClubEnSesion(actual.id, actual.nombre);
         setSesion(await getSession());
-        const [personas, vigentes] = await Promise.all([
+        const [personas, pendientesCorreo] = await Promise.all([
           listarAdministradores(actual.id),
-          listarInvitaciones(actual.id),
+          listarAsignaciones(actual.id),
         ]);
         setAdmins(personas);
-        setInvitaciones(vigentes);
-        cargarHilosClub(actual.id, actual.nombre).catch(() => { });
+        setAsignaciones(pendientesCorreo);
       } else {
         await guardarClubEnSesion(undefined, undefined);
         setSesion(await getSession());
         setAdmins([]);
-        setInvitaciones([]);
+        setAsignaciones([]);
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'No se pudo cargar el club.');
@@ -62,11 +61,19 @@ export default function ClubHomeScreen() {
   useEffect(() => {
     cargar();
   }, [cargar]);
-  useEffect(() => {
+  useFocusEffect(useCallback(() => {
     if (!club) return;
-    const timer = setInterval(() => cargarHilosClub(club.id, club.nombre).catch(() => { }), 6000);
-    return () => clearInterval(timer);
-  }, [club]);
+    const sondeo = crearSondeo('listas:club:' + club.id, () => cargarHilosClub(club.id, club.nombre)
+      .catch(() => false), { minMs: 10000, maxMs: 60000, factor: 1.5 });
+    const quitarAviso = alCambiar(({ tipo }) => {
+      if (tipo === 'consulta_club') sondeo.ahora();
+    });
+    sondeo.iniciar();
+    return () => {
+      sondeo.detener();
+      quitarAviso();
+    };
+  }, [club]));
   async function ejecutar(accion: () => Promise<unknown>) {
     setOcupado(true);
     setError('');
@@ -75,7 +82,8 @@ export default function ClubHomeScreen() {
       await cargar();
     }
     catch (e) {
-      setError(e instanceof Error ? e.message : 'No se pudo completar la acción.');
+      setError(e instanceof ApiError ? e.detail || e.message
+        : e instanceof Error ? e.message : 'No se pudo completar la acción.');
     }
     finally {
       setOcupado(false);
@@ -89,33 +97,23 @@ export default function ClubHomeScreen() {
     }
     ejecutar(() => crearClub(nombre.trim(), rut.trim().toUpperCase()));
   }
-  function unir() {
-    if (!codigo.trim()) {
-      setError('Ingresa el código de invitación.');
-      return;
-    }
-    ejecutar(() => aceptarInvitacion(codigo.trim()));
+  function agregarCorreo() {
+    ejecutar(async () => {
+      await asignarCorreo(club!.id, correo);
+      setCorreo('');
+    });
   }
-  async function invitar() {
-    setOcupado(true);
-    setError('');
-    try {
-      const nueva = await generarInvitacion(club!.id);
-      setCodigoNuevo(nueva);
-      const lista = await listarInvitaciones(club!.id);
-      setInvitaciones(lista);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'No se pudo generar la invitación.');
-    }
-    finally {
-      setOcupado(false);
-    }
+  function revocar(id: string, email: string) {
+    Alert.alert('Revocar asignación', '¿Revocar el correo ' + email + '?', [
+      { text: 'Cancelar', style: 'cancel' },
+      { text: 'Revocar', style: 'destructive', onPress: () => ejecutar(() => revocarAsignacion(club!.id, id)) },
+    ]);
   }
   function quitar(usuarioId: string, nombreAdmin: string) {
     Alert.alert('Quitar administrador', '¿Quitar a ' + nombreAdmin + ' del club?', [
       { text: 'Cancelar', style: 'cancel' },
       {
-        text: 'Quitar',
+        text: 'Quitar permisos',
         style: 'destructive',
         onPress: () => ejecutar(() => quitarAdministrador(club!.id, usuarioId))
       },
@@ -138,6 +136,7 @@ export default function ClubHomeScreen() {
     await logout();
     router.replace('/(auth)/login');
   }
+  const miRol = admins.find((a) => a.usuario_id === sesion?.id)?.rol;
   const boton = (texto: string, accion: () => void, deshabilitado = false) => (
     <TouchableOpacity
       style={[styles.boton, deshabilitado && styles.deshabilitado]}
@@ -161,7 +160,7 @@ export default function ClubHomeScreen() {
       {!cargando && !club && !error ? (
         <View style={styles.seccion}>
           <Text style={styles.subtitulo}>Tu cuenta aún no administra un club</Text>
-          <Text style={styles.info}>Crea un club o únete con una invitación.</Text>
+          <Text style={styles.subtitulo}>Crear mi club</Text>
           <TextInput
             style={styles.campo}
             placeholder="Nombre del club"
@@ -179,22 +178,17 @@ export default function ClubHomeScreen() {
             autoCapitalize="characters"
             maxLength={12}
           />
-          {boton('Crear club', crear, ocupado)}
-          <Text style={styles.subtitulo}>Unirse a un club</Text>
-          <TextInput
-            style={styles.campo}
-            placeholder="Código de invitación"
-            placeholderTextColor={colors.textMuted}
-            value={codigo}
-            onChangeText={setCodigo}
-            autoCapitalize="characters"
-          />
-          {boton('Aceptar invitación', unir, ocupado)}
+          {boton('Crear mi club', crear, ocupado)}
+          <Text style={styles.subtitulo}>Me asignaron un club</Text>
+          <Text style={styles.info}>
+            Pide al administrador principal que agregue tu correo {sesion?.email}; luego toca Actualizar.
+          </Text>
+          {boton('Actualizar', () => { void cargar(); }, cargando)}
         </View>
       ) : null}
       {club ? (
         <>
-          <Text style={styles.info}>RUT {club.rut} · Tu rol: {club.mi_rol}</Text>
+          <Text style={styles.info}>RUT {club.rut} · Tu rol: {miRol ?? club.mi_rol}</Text>
           <TouchableOpacity style={styles.tarjeta} onPress={() => router.push('/(club)/consultas' as never)}>
             <Text style={styles.subtitulo}>Consultas de deportistas</Text>
             <Text style={styles.info}>{pendientes} sin responder · Abrir bandeja</Text>
@@ -211,39 +205,36 @@ export default function ClubHomeScreen() {
                   <Text style={styles.nombre}>{a.nombre}</Text>
                   <Text style={styles.info}>{a.rol} · Desde {new Date(a.fecha_alta).toLocaleDateString('es-CL')}</Text>
                 </View>
-                {club.mi_rol === 'PRINCIPAL' && a.usuario_id !== sesion?.id ? (
+                {miRol === 'PRINCIPAL' && a.rol === 'ADMIN' ? (
                   <TouchableOpacity onPress={() => quitar(a.usuario_id, a.nombre)}>
-                    <Text style={styles.accion}>Quitar</Text>
+                    <Text style={styles.accion}>Quitar permisos</Text>
                   </TouchableOpacity>
                 ) : null}
               </View>
             ))}
-            {boton('Generar invitación', invitar, ocupado)}
-            {codigoNuevo ? (
-              <View style={styles.codigo}>
-                <Text style={styles.nombre}>Código: {codigoNuevo.codigo}</Text>
-                <Text style={styles.info}>Vence: {new Date(codigoNuevo.expira_en).toLocaleString('es-CL')}</Text>
-                <TouchableOpacity onPress={() => Clipboard.setStringAsync(codigoNuevo.codigo)}>
-                  <Text style={styles.accion}>Copiar código</Text>
-                </TouchableOpacity>
-                <TouchableOpacity onPress={() => setCodigoNuevo(null)}>
-                  <Text style={styles.accion}>Cerrar</Text>
-                </TouchableOpacity>
-              </View>
-            ) : null}
-            <Text style={styles.subtitulo}>Invitaciones vigentes</Text>
-            {invitaciones.length === 0 ? <Text style={styles.info}>No hay invitaciones vigentes.</Text> : null}
-            {invitaciones.map((i) => (
+            <Text style={styles.subtitulo}>Correos pendientes</Text>
+            {asignaciones.length === 0 ? <Text style={styles.info}>No hay correos pendientes.</Text> : null}
+            {asignaciones.map((i) => (
               <View key={i.id} style={styles.fila}>
                 <Text style={[styles.info, styles.expandir]}>
-                  Vence {new Date(i.expira_en).toLocaleString('es-CL')}
+                  {i.email}{'\n'}Pendiente: se activa cuando esa persona entre con una cuenta de club con este correo
                 </Text>
-                <TouchableOpacity onPress={() => ejecutar(() => revocarInvitacion(club.id, i.id))}>
-                  <Text style={styles.accion}>Revocar</Text>
-                </TouchableOpacity>
+                {miRol === 'PRINCIPAL' ? (
+                  <TouchableOpacity onPress={() => revocar(i.id, i.email)}>
+                    <Text style={styles.accion}>Revocar</Text>
+                  </TouchableOpacity>
+                ) : null}
               </View>
             ))}
-            {club.mi_rol === 'ADMIN' ? (
+            {miRol === 'PRINCIPAL' ? (
+              <>
+                <Text style={styles.subtitulo}>Agregar correo de administrador</Text>
+                <TextInput style={styles.campo} placeholder="Correo electrónico" value={correo}
+                  onChangeText={setCorreo} autoCapitalize="none" keyboardType="email-address" />
+                {boton('Agregar correo de administrador', agregarCorreo, ocupado)}
+              </>
+            ) : null}
+            {miRol === 'ADMIN' ? (
               <TouchableOpacity onPress={salir}>
                 <Text style={styles.accion}>Salir del club</Text>
               </TouchableOpacity>

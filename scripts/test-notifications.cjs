@@ -112,13 +112,28 @@ const notification = (id, read = false) => ({ id, kind: 'match', title: 'Match',
   data: { screen: 'matches' }, created_at: new Date().toISOString(), read_at: read ? new Date().toISOString() : null });
 function inbox(responder) {
   const auth = { session: { id: 'user-a' }, token: 'a' };
+  const avisos = [];
   const api = load('notificaciones.ts', {
     react: { useSyncExternalStore: (_subscribe, get) => get() },
     './auth': { getSession: async () => auth.session, getToken: async () => auth.token },
     './api': { apiRequest: responder },
+    './sondeo': { avisarCambio: (tipo, id) => avisos.push({ tipo, id }) },
   });
-  return { auth, api };
+  return { auth, api, avisos };
 }
+
+test('un aviso nuevo sin leer despierta la sala correspondiente', async () => {
+  let pagina = 0;
+  const { api, avisos } = inbox(async () => ({
+    items: pagina++ === 0 ? [] : [{ ...notification('chat-1'), kind: 'mensaje',
+      data: { screen: 'activity_chat', activityId: 'actividad-1' } }],
+    unread: 1,
+    next_cursor: null,
+  }));
+  await api.cargarNotificaciones();
+  await api.cargarNotificaciones();
+  assert.deepEqual(avisos, [{ tipo: 'activity_chat', id: 'actividad-1' }]);
+});
 
 test('el contador y el estado de lectura vienen del servidor', async () => {
   const calls = [];

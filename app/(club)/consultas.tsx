@@ -1,12 +1,13 @@
 import { Ionicons } from '@expo/vector-icons';
-import { router } from 'expo-router';
-import { useEffect, useMemo, useState } from 'react';
+import { router, useFocusEffect } from 'expo-router';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Avatar from '../../components/Avatar';
 import { getSession } from '../../services/auth';
 import { horaCorta } from '../../services/chat';
 import { cargarHilosClub, sinResponder, useEstadoConsultas, useHilosDelClub } from '../../services/consultas';
+import { alCambiar, crearSondeo } from '../../services/sondeo';
 import { Colors, useAppTheme } from '../../theme/ThemeContext';
 export default function ConsultasClubScreen() {
   const { colors } = useAppTheme();
@@ -23,13 +24,19 @@ export default function ConsultasClubScreen() {
       if (!s?.clubId) setErrorSesion('Tu sesión expiró o ya no administras un club.');
     });
   }, []);
-  useEffect(() => {
+  useFocusEffect(useCallback(() => {
     if (!clubId) return;
-    const cargar = () => cargarHilosClub(clubId, clubNombre).catch(() => { });
-    cargar();
-    const timer = setInterval(cargar, 6000);
-    return () => clearInterval(timer);
-  }, [clubId, clubNombre]);
+    const sondeo = crearSondeo('listas:club:' + clubId, () => cargarHilosClub(clubId, clubNombre)
+      .catch(() => false), { minMs: 10000, maxMs: 60000, factor: 1.5 });
+    const quitarAviso = alCambiar(({ tipo }) => {
+      if (tipo === 'consulta_club') sondeo.ahora();
+    });
+    sondeo.iniciar();
+    return () => {
+      sondeo.detener();
+      quitarAviso();
+    };
+  }, [clubId, clubNombre]));
   const hilos = useHilosDelClub(clubId);
   const pendientes = sinResponder(hilos).length;
   function abrir(id: string) {
