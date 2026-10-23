@@ -131,7 +131,11 @@ async function miClub(token: string, email: string): Promise<MiClubResponse | nu
   if (!pendiente || pendiente.email !== email.toLowerCase()) return null;
   try {
     if (!pendiente.rut) return null;
-    const club = await apiRequest<MiClubResponse>('/clubs', { method: 'POST', token, body: { nombre: pendiente.nombre, rut: pendiente.rut } });
+    const club = await apiRequest<MiClubResponse>('/clubs', {
+      method: 'POST',
+      token,
+      body: { nombre: pendiente.nombre, rut: pendiente.rut },
+    });
     await AsyncStorage.removeItem(CLUB_PENDIENTE_KEY);
     return club;
   } catch {
@@ -213,7 +217,11 @@ export async function registerClub(data: RegisterClubData): Promise<void> {
       apellido_paterno: principal.apellidoPaterno.trim(),
     },
   });
-  const pendiente: ClubPendiente = { email: principal.email.trim().toLowerCase(), nombre: data.clubNombre.trim(), rut: data.clubRut.trim().toUpperCase() };
+  const pendiente: ClubPendiente = {
+    email: principal.email.trim().toLowerCase(),
+    nombre: data.clubNombre.trim(),
+    rut: data.clubRut.trim().toUpperCase(),
+  };
   await AsyncStorage.setItem(CLUB_PENDIENTE_KEY, JSON.stringify(pendiente));
 }
 

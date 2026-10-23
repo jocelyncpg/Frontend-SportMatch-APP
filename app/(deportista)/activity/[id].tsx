@@ -1,7 +1,17 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Alert, Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import {
+  ActivityIndicator,
+  Alert,
+  Modal,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import RatingModal from '../../../components/RatingModal';
 import ReportarModal from '../../../components/ReportarModal';
@@ -28,17 +38,17 @@ import { Usuario, getSession } from '../../../services/auth';
 import { calificacionDe, calificar, cargarCalificaciones, useMatches } from '../../../services/matchStore';
 import { useSalaGrupal, useChatGrupal } from '../../../services/chatGrupal';
 import { Colors, useAppTheme } from '../../../theme/ThemeContext';
-
 export default function ActividadDetalleScreen() {
   const { colors } = useAppTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const insets = useSafeAreaInsets();
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id } = useLocalSearchParams<{
+    id: string
+  }>();
   const actividades = useActividades();
   const a = actividades.find((x) => x.id === id);
   const salaGrupal = useSalaGrupal(id ?? '');
   const chatGrupal = useChatGrupal(id ?? '');
-
   const [usuario, setUsuario] = useState<Usuario | null>(null);
   const [modalPostular, setModalPostular] = useState(false);
   const [mensaje, setMensaje] = useState('');
@@ -50,11 +60,9 @@ export default function ActividadDetalleScreen() {
   const [participantes, setParticipantes] = useState<Participante[]>([]);
   const [calificando, setCalificando] = useState<Participante | null>(null);
   const estadoMatches = useMatches();
-
   useEffect(() => {
     getSession().then(setUsuario);
   }, []);
-
   // Al abrir (o volver a) la pantalla se piden los datos frescos: cupos y postulaciones cambian.
   useFocusEffect(useCallback(() => {
     let activo = true;
@@ -64,19 +72,25 @@ export default function ActividadDetalleScreen() {
       setErrorCarga(r.ok ? null : r.motivo);
       setCargando(false);
     });
-    return () => { activo = false; };
+    return () => {
+      activo = false;
+    };
   }, [id]));
-
   // Una vez realizada, quienes estuvieron (organizador y aceptados) pueden calificarse entre sí.
-  const realizada = !!a && estadoActividad(a) === 'vencida' && ['organizador', 'aprobada'].includes(relacionConActividad(a) ?? '');
+  const realizada = !!a
+    && estadoActividad(a) === 'vencida'
+    && ['organizador', 'aprobada'].includes(relacionConActividad(a) ?? '');
   useEffect(() => {
     if (!realizada) return;
     let activo = true;
-    cargarParticipantes(id).then((lista) => { if (activo) setParticipantes(lista); }).catch(() => {});
-    cargarCalificaciones().catch(() => {});
-    return () => { activo = false; };
+    cargarParticipantes(id).then((lista) => {
+      if (activo) setParticipantes(lista);
+    }).catch(() => { });
+    cargarCalificaciones().catch(() => { });
+    return () => {
+      activo = false;
+    };
   }, [id, realizada]);
-
   async function enviarCalificacion(estrellas: number, comentario: string) {
     if (!calificando) return;
     try {
@@ -86,13 +100,11 @@ export default function ActividadDetalleScreen() {
       Alert.alert('No se pudo calificar', e instanceof Error ? e.message : 'Inténtalo de nuevo.');
     }
   }
-
   const atras = (
     <TouchableOpacity onPress={() => router.back()} style={[styles.backButton, { top: insets.top + 12 }]}>
       <Ionicons name="arrow-back" size={18} color={colors.text} />
     </TouchableOpacity>
   );
-
   if (!a) {
     return (
       <View style={[styles.container, { paddingTop: insets.top + 12 }]}>
@@ -105,7 +117,6 @@ export default function ActividadDetalleScreen() {
       </View>
     );
   }
-
   const ahora = Date.now();
   const estado = estadoActividad(a, ahora);
   const relacion = relacionConActividad(a);
@@ -118,13 +129,11 @@ export default function ActividadDetalleScreen() {
   // Chat grupal (HU-50): lo ven quien organiza y las personas aprobadas, mientras la actividad no se cancele.
   const accesoChat = chatGrupal?.acceso ?? 'ninguno';
   const noLeidosChat = salaGrupal?.noLeidos ?? 0;
-
   function abrirPostular() {
     setMensaje('');
     setCumplo(false);
     setModalPostular(true);
   }
-
   async function enviar() {
     if (!a || !cumplo || enviando) return;
     setEnviando(true);
@@ -137,7 +146,6 @@ export default function ActividadDetalleScreen() {
     }
     Alert.alert('Postulación enviada', 'Quien organiza revisará tu postulación y te avisará su decisión.');
   }
-
   function confirmarRetiro() {
     if (!a) return;
     const aprobada = relacion === 'aprobada';
@@ -146,16 +154,19 @@ export default function ActividadDetalleScreen() {
       aprobada ? 'Tu cupo quedará libre para otras personas. ¿Quieres retirarte?' : '¿Quieres cancelar tu postulación?',
       [
         { text: 'No', style: 'cancel' },
-        { text: aprobada ? 'Sí, retirarme' : 'Sí, cancelar', style: 'destructive', onPress: async () => {
-          setEnviando(true);
-          const r = await retirarse(a.id);
-          setEnviando(false);
-          if (!r.ok) Alert.alert('No se pudo completar', r.motivo);
-        } },
+        {
+          text: aprobada ? 'Sí, retirarme' : 'Sí, cancelar',
+          style: 'destructive',
+          onPress: async () => {
+            setEnviando(true);
+            const r = await retirarse(a.id);
+            setEnviando(false);
+            if (!r.ok) Alert.alert('No se pudo completar', r.motivo);
+          }
+        },
       ]
     );
   }
-
   async function responder(personaId: string, decision: 'aprobada' | 'rechazada') {
     if (!a || enviando) return;
     setEnviando(true);
@@ -163,20 +174,23 @@ export default function ActividadDetalleScreen() {
     setEnviando(false);
     if (!r.ok) Alert.alert('No se pudo responder', r.motivo);
   }
-
   function confirmarCancelacion() {
     if (!a) return;
-    Alert.alert('Cancelar actividad', 'Las personas postuladas verán que la actividad fue cancelada. ¿Quieres cancelarla?', [
+    Alert.alert('Cancelar actividad',
+      'Las personas postuladas verán que la actividad fue cancelada. ¿Quieres cancelarla?', [
       { text: 'No', style: 'cancel' },
-      { text: 'Sí, cancelar', style: 'destructive', onPress: async () => {
-        setEnviando(true);
-        const r = await cancelarActividad(a.id);
-        setEnviando(false);
-        if (!r.ok) Alert.alert('No se pudo cancelar', r.motivo);
-      } },
+      {
+        text: 'Sí, cancelar',
+        style: 'destructive',
+        onPress: async () => {
+          setEnviando(true);
+          const r = await cancelarActividad(a.id);
+          setEnviando(false);
+          if (!r.ok) Alert.alert('No se pudo cancelar', r.motivo);
+        }
+      },
     ]);
   }
-
   const fila = (icono: keyof typeof Ionicons.glyphMap, titulo: string, valor: string) => (
     <View style={styles.infoFila}>
       <View style={styles.infoIcono}>
@@ -188,7 +202,6 @@ export default function ActividadDetalleScreen() {
       </View>
     </View>
   );
-
   /** Zona de acciones, según tu relación con la actividad. */
   const acciones = () => {
     if (relacion === 'organizador') {
@@ -255,10 +268,10 @@ export default function ActividadDetalleScreen() {
       </View>
     );
   };
-
   const bannerEstado =
-    estado === 'llena' ? 'Esta actividad está completa' : estado === 'vencida' ? 'Esta actividad ya finalizó' : estado === 'cancelada' ? 'Esta actividad fue cancelada' : null;
-
+    estado === 'llena' ? 'Esta actividad está completa'
+      : estado === 'vencida' ? 'Esta actividad ya finalizó'
+        : estado === 'cancelada' ? 'Esta actividad fue cancelada' : null;
   return (
     <View style={[styles.container, { paddingTop: insets.top + 12 }]}>
       {atras}
@@ -271,7 +284,6 @@ export default function ActividadDetalleScreen() {
           <Ionicons name="flag-outline" size={17} color={colors.textMuted} />
         </TouchableOpacity>
       ) : null}
-
       <ScrollView contentContainerStyle={styles.content}>
         <View style={styles.hero}>
           <View style={[styles.heroIcono, { backgroundColor: visual.colorBg }]}>
@@ -280,14 +292,12 @@ export default function ActividadDetalleScreen() {
           <Text style={styles.titulo}>{a.titulo}</Text>
           <Text style={styles.organiza}>Organiza {a.organizadorId === YO ? 'tú' : a.organizadorNombre}</Text>
         </View>
-
         {bannerEstado ? (
           <View style={styles.banner}>
             <Ionicons name="alert-circle-outline" size={16} color={colors.textMuted} />
             <Text style={styles.bannerTexto}>{bannerEstado}</Text>
           </View>
         ) : null}
-
         <View style={styles.infoCard}>
           {fila('calendar-outline', 'Fecha y hora', formatearCuando(a.fecha, ahora))}
           <View style={styles.separador} />
@@ -302,7 +312,6 @@ export default function ActividadDetalleScreen() {
             </View>
           ) : null}
         </View>
-
         {accesoChat !== 'ninguno' ? (
           <TouchableOpacity
             style={styles.chatGrupo}
@@ -328,21 +337,18 @@ export default function ActividadDetalleScreen() {
             <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
           </TouchableOpacity>
         ) : null}
-
         {a.descripcion ? (
           <>
             <Text style={styles.seccion}>Descripción</Text>
             <Text style={styles.texto}>{a.descripcion}</Text>
           </>
         ) : null}
-
         {a.requisitos ? (
           <>
             <Text style={styles.seccion}>Requisitos para postular</Text>
             <Text style={styles.texto}>{a.requisitos}</Text>
           </>
         ) : null}
-
         {relacion === 'organizador' ? (
           <>
             <Text style={styles.seccion}>Postulantes ({lista.length})</Text>
@@ -371,7 +377,6 @@ export default function ActividadDetalleScreen() {
             ))}
           </>
         ) : null}
-
         {realizada ? (
           <>
             <Text style={styles.seccion}>Participantes</Text>
@@ -394,7 +399,6 @@ export default function ActividadDetalleScreen() {
             })}
           </>
         ) : null}
-
         {miMensaje ? (
           <>
             <Text style={styles.seccion}>Tu mensaje</Text>
@@ -402,9 +406,7 @@ export default function ActividadDetalleScreen() {
           </>
         ) : null}
       </ScrollView>
-
       <View style={[styles.acciones, { paddingBottom: insets.bottom + 16 }]}>{acciones()}</View>
-
       {/* Formulario de postulación */}
       <Modal visible={modalPostular} transparent animationType="fade" onRequestClose={() => setModalPostular(false)}>
         <View style={styles.modalOverlay}>
@@ -414,7 +416,6 @@ export default function ActividadDetalleScreen() {
               {a.requisitos ? `Requisitos: ${a.requisitos}` : 'Esta actividad no pide requisitos adicionales.'}
               {a.nivelMinimo !== null ? `\nNivel mínimo: ${NOMBRES_NIVEL[a.nivelMinimo]} en ${a.deporte}.` : ''}
             </Text>
-
             <TextInput
               style={styles.mensajeInput}
               placeholder="Mensaje para quien organiza (opcional)"
@@ -425,12 +426,10 @@ export default function ActividadDetalleScreen() {
               onChangeText={setMensaje}
             />
             <Text style={styles.charCount}>{mensaje.length}/140</Text>
-
             <TouchableOpacity style={styles.checkFila} onPress={() => setCumplo((v) => !v)} accessibilityLabel="Confirmo que cumplo los requisitos">
               <Ionicons name={cumplo ? 'checkbox' : 'square-outline'} size={20} color={cumplo ? colors.accent : colors.textMuted} />
               <Text style={styles.checkTexto}>Confirmo que cumplo los requisitos de la actividad</Text>
             </TouchableOpacity>
-
             <View style={styles.modalActions}>
               <TouchableOpacity style={styles.modalCancel} onPress={() => setModalPostular(false)}>
                 <Text style={styles.modalCancelText}>Cancelar</Text>
@@ -442,7 +441,6 @@ export default function ActividadDetalleScreen() {
           </View>
         </View>
       </Modal>
-
       <RatingModal
         visible={calificando !== null}
         nombre={calificando?.nombre ?? ''}
@@ -450,7 +448,6 @@ export default function ActividadDetalleScreen() {
         onEnviar={enviarCalificacion}
         onCerrar={() => setCalificando(null)}
       />
-
       {/* Reportar actividad (HU-42) */}
       <ReportarModal
         visible={modalReporte}
@@ -462,114 +459,239 @@ export default function ActividadDetalleScreen() {
     </View>
   );
 }
-
 const makeStyles = (c: Colors) =>
   StyleSheet.create({
     container: { flex: 1, backgroundColor: c.bg },
     backButton: {
-      position: 'absolute', left: 20, zIndex: 2, width: 36, height: 36, borderRadius: 18,
-      backgroundColor: c.card, borderWidth: 1, borderColor: c.border, alignItems: 'center', justifyContent: 'center',
+      position: 'absolute',
+      left: 20,
+      zIndex: 2,
+      width: 36,
+      height: 36,
+      borderRadius: 18,
+      backgroundColor: c.card,
+      borderWidth: 1,
+      borderColor: c.border,
+      alignItems: 'center',
+      justifyContent: 'center',
     },
     reportButton: {
-      position: 'absolute', right: 20, zIndex: 2, width: 36, height: 36, borderRadius: 18,
-      backgroundColor: c.card, borderWidth: 1, borderColor: c.border, alignItems: 'center', justifyContent: 'center',
+      position: 'absolute',
+      right: 20,
+      zIndex: 2,
+      width: 36,
+      height: 36,
+      borderRadius: 18,
+      backgroundColor: c.card,
+      borderWidth: 1,
+      borderColor: c.border,
+      alignItems: 'center',
+      justifyContent: 'center',
     },
     noEncontrada: { flex: 1, alignItems: 'center', justifyContent: 'center' },
     noEncontradaTexto: { color: c.textMuted, fontSize: 13 },
-
     content: { padding: 20, paddingTop: 52, paddingBottom: 30 },
     hero: { alignItems: 'center', marginBottom: 18 },
     heroIcono: { width: 72, height: 72, borderRadius: 20, alignItems: 'center', justifyContent: 'center', marginBottom: 12 },
     heroEmoji: { fontSize: 34 },
     titulo: { color: c.text, fontSize: 19, fontWeight: '700', textAlign: 'center' },
     organiza: { color: c.textMuted, fontSize: 12, marginTop: 4 },
-
     banner: {
-      flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
-      backgroundColor: c.chip, borderRadius: 12, paddingVertical: 10, marginBottom: 14,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 8,
+      backgroundColor: c.chip,
+      borderRadius: 12,
+      paddingVertical: 10,
+      marginBottom: 14,
     },
     bannerTexto: { color: c.textMuted, fontSize: 12, fontWeight: '600' },
-
-    infoCard: { backgroundColor: c.card, borderWidth: 1, borderColor: c.border, borderRadius: 14, padding: 14, marginBottom: 18 },
+    infoCard: {
+      backgroundColor: c.card,
+      borderWidth: 1,
+      borderColor: c.border,
+      borderRadius: 14,
+      padding: 14,
+      marginBottom: 18
+    },
     infoFila: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 6 },
-    infoIcono: { width: 30, height: 30, borderRadius: 9, backgroundColor: c.chip, alignItems: 'center', justifyContent: 'center' },
+    infoIcono: {
+      width: 30,
+      height: 30,
+      borderRadius: 9,
+      backgroundColor: c.chip,
+      alignItems: 'center',
+      justifyContent: 'center'
+    },
     infoTextos: { flex: 1 },
     infoTitulo: { color: c.textMuted, fontSize: 10.5, fontWeight: '600' },
     infoValor: { color: c.text, fontSize: 12.5, fontWeight: '600', marginTop: 1 },
     separador: { height: 1, backgroundColor: c.border, marginVertical: 2 },
     barra: { height: 6, borderRadius: 3, backgroundColor: c.chip, marginTop: 6, overflow: 'hidden' },
     barraRelleno: { height: 6, borderRadius: 3, backgroundColor: c.accent },
-
     chatGrupo: {
-      flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: c.card,
-      borderWidth: 1, borderColor: c.border, borderRadius: 14, padding: 12, marginBottom: 18,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 12,
+      backgroundColor: c.card,
+      borderWidth: 1,
+      borderColor: c.border,
+      borderRadius: 14,
+      padding: 12,
+      marginBottom: 18,
     },
-    chatGrupoIcono: { width: 36, height: 36, borderRadius: 11, backgroundColor: c.chip, alignItems: 'center', justifyContent: 'center' },
+    chatGrupoIcono: {
+      width: 36,
+      height: 36,
+      borderRadius: 11,
+      backgroundColor: c.chip,
+      alignItems: 'center',
+      justifyContent: 'center'
+    },
     chatGrupoTextos: { flex: 1 },
     chatGrupoTitulo: { color: c.text, fontSize: 13, fontWeight: '700' },
     chatGrupoSub: { color: c.textMuted, fontSize: 11, marginTop: 2 },
-    chatGrupoContador: { minWidth: 18, height: 18, borderRadius: 9, paddingHorizontal: 5, backgroundColor: c.primary, alignItems: 'center', justifyContent: 'center' },
+    chatGrupoContador: {
+      minWidth: 18,
+      height: 18,
+      borderRadius: 9,
+      paddingHorizontal: 5,
+      backgroundColor: c.primary,
+      alignItems: 'center',
+      justifyContent: 'center'
+    },
     chatGrupoContadorTexto: { color: '#fff', fontSize: 10, fontWeight: '700' },
-
     seccion: { color: c.text, fontSize: 13, fontWeight: '700', marginBottom: 6 },
     texto: { color: c.textMuted, fontSize: 12.5, lineHeight: 18, marginBottom: 16 },
-
     acciones: {
-      flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 12,
-      paddingTop: 14, paddingHorizontal: 20, borderTopWidth: 1, borderColor: c.border,
+      flexDirection: 'row',
+      justifyContent: 'center',
+      alignItems: 'center',
+      gap: 12,
+      paddingTop: 14,
+      paddingHorizontal: 20,
+      borderTopWidth: 1,
+      borderColor: c.border,
     },
     nota: { color: c.textMuted, fontSize: 12.5, textAlign: 'center', paddingVertical: 8 },
     pillPrimario: {
-      flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
-      backgroundColor: c.primary, borderRadius: 14, paddingVertical: 14,
+      flex: 1,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 8,
+      backgroundColor: c.primary,
+      borderRadius: 14,
+      paddingVertical: 14,
     },
     pillPrimarioTexto: { color: '#fff', fontSize: 13, fontWeight: '700' },
     pill: {
-      flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
-      backgroundColor: c.card, borderWidth: 1, borderColor: c.border, borderRadius: 14, paddingVertical: 14,
+      flex: 1,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 8,
+      backgroundColor: c.card,
+      borderWidth: 1,
+      borderColor: c.border,
+      borderRadius: 14,
+      paddingVertical: 14,
     },
     pillTexto: { color: c.text, fontSize: 12.5, fontWeight: '700' },
     pillCancelar: {
-      alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: c.danger,
-      borderRadius: 14, paddingVertical: 14, paddingHorizontal: 16,
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderWidth: 1,
+      borderColor: c.danger,
+      borderRadius: 14,
+      paddingVertical: 14,
+      paddingHorizontal: 16,
     },
     pillCancelarTexto: { color: c.danger, fontSize: 12.5, fontWeight: '700' },
     bloqueado: {
-      flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10,
-      backgroundColor: c.card, borderWidth: 1, borderColor: c.border, borderRadius: 14, padding: 12,
+      flex: 1,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+      backgroundColor: c.card,
+      borderWidth: 1,
+      borderColor: c.border,
+      borderRadius: 14,
+      padding: 12,
     },
     bloqueadoTexto: { color: c.textMuted, fontSize: 12, flex: 1, lineHeight: 17 },
-
     postulante: {
-      flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: c.card,
-      borderWidth: 1, borderColor: c.border, borderRadius: 12, padding: 12, marginBottom: 8,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+      backgroundColor: c.card,
+      borderWidth: 1,
+      borderColor: c.border,
+      borderRadius: 12,
+      padding: 12,
+      marginBottom: 8,
     },
     postulanteInfo: { flex: 1 },
     postulanteNombre: { color: c.text, fontSize: 12.5, fontWeight: '700' },
     postulanteMensaje: { color: c.textMuted, fontSize: 11, marginTop: 3, lineHeight: 15 },
     postulanteBotones: { flexDirection: 'row', gap: 8 },
-    btnRechazar: { width: 34, height: 34, borderRadius: 17, borderWidth: 1, borderColor: c.danger, alignItems: 'center', justifyContent: 'center' },
-    btnAprobar: { width: 34, height: 34, borderRadius: 17, backgroundColor: c.primary, alignItems: 'center', justifyContent: 'center' },
+    btnRechazar: {
+      width: 34,
+      height: 34,
+      borderRadius: 17,
+      borderWidth: 1,
+      borderColor: c.danger,
+      alignItems: 'center',
+      justifyContent: 'center'
+    },
+    btnAprobar: {
+      width: 34,
+      height: 34,
+      borderRadius: 17,
+      backgroundColor: c.primary,
+      alignItems: 'center',
+      justifyContent: 'center'
+    },
     estadoPost: { color: c.textMuted, fontSize: 11, fontWeight: '700' },
     btnCalificar: {
-      flexDirection: 'row', alignItems: 'center', gap: 5, borderWidth: 1, borderColor: c.border,
-      borderRadius: 16, paddingHorizontal: 10, paddingVertical: 7,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 5,
+      borderWidth: 1,
+      borderColor: c.border,
+      borderRadius: 16,
+      paddingHorizontal: 10,
+      paddingVertical: 7,
     },
     btnCalificarTexto: { color: c.accent, fontSize: 11.5, fontWeight: '700' },
-
     modalOverlay: { flex: 1, backgroundColor: c.overlay, justifyContent: 'center', padding: 24 },
     modalBox: { backgroundColor: c.card, borderRadius: 18, padding: 20, borderWidth: 1, borderColor: c.border },
     modalTitle: { color: c.text, fontSize: 16, fontWeight: '700', marginBottom: 6 },
     modalHint: { color: c.textMuted, fontSize: 11.5, marginBottom: 14, lineHeight: 16 },
     mensajeInput: {
-      backgroundColor: c.bg, borderWidth: 1, borderColor: c.border, borderRadius: 12,
-      padding: 12, color: c.text, fontSize: 13, height: 80, textAlignVertical: 'top',
+      backgroundColor: c.bg,
+      borderWidth: 1,
+      borderColor: c.border,
+      borderRadius: 12,
+      padding: 12,
+      color: c.text,
+      fontSize: 13,
+      height: 80,
+      textAlignVertical: 'top',
     },
     charCount: { color: c.textMuted, fontSize: 10, textAlign: 'right', marginTop: 4, marginBottom: 12 },
     checkFila: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 16 },
     checkTexto: { color: c.text, fontSize: 12, flex: 1 },
     modalActions: { flexDirection: 'row', gap: 10 },
-    modalCancel: { flex: 1, paddingVertical: 12, borderRadius: 12, borderWidth: 1, borderColor: c.border, alignItems: 'center' },
+    modalCancel: {
+      flex: 1,
+      paddingVertical: 12,
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: c.border,
+      alignItems: 'center'
+    },
     modalCancelText: { color: c.textMuted, fontSize: 13, fontWeight: '700' },
     modalSave: { flex: 1, backgroundColor: c.primary, borderRadius: 12, paddingVertical: 12, alignItems: 'center' },
     modalSaveOff: { opacity: 0.4 },

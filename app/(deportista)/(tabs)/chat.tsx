@@ -12,17 +12,26 @@ import { Persona, cargarMatching, useMatches } from '../../../services/matchStor
 import { useBloqueados } from '../../../services/reportes';
 import { useMatchingRefresh } from '../../../hooks/useMatchingRefresh';
 import { Colors, useAppTheme } from '../../../theme/ThemeContext';
-
 type Item =
-  | { tipo: 'persona'; persona: Persona; orden: number }
-  | { tipo: 'grupo'; grupo: ChatGrupal; orden: number }
-  | { tipo: 'club'; hilo: Hilo; orden: number };
-
+  | {
+    tipo: 'persona';
+    persona: Persona;
+    orden: number
+  }
+  | {
+    tipo: 'grupo';
+    grupo: ChatGrupal;
+    orden: number
+  }
+  | {
+    tipo: 'club';
+    hilo: Hilo;
+    orden: number
+  };
 export default function ChatListScreen() {
   const { colors } = useAppTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const insets = useSafeAreaInsets();
-
   useMatchingRefresh();
   const { confirmados, matchingError, cargandoMatches, sesionExpirada } = useMatches();
   const resumenes = useChats();
@@ -32,16 +41,18 @@ export default function ChatListScreen() {
   const consultas = useHilosDePostulante(YO);
   const estadoGrupos = useEstadoChatGrupal();
   const estadoConsultas = useEstadoConsultas();
-
   /** Último mensaje: el de /chats (con no leídos) o, si aún no carga, el que trae el match. */
   function ultimoDe(p: Persona) {
     const r = p.matchId ? resumenes[p.matchId] : undefined;
     if (r) return r.ultimo;
     return p.ultimoMensaje
-      ? { texto: p.ultimoMensaje, propio: false, enviadoEn: p.ultimoMensajeFecha ? Date.parse(p.ultimoMensajeFecha) : 0 }
+      ? {
+        texto: p.ultimoMensaje,
+        propio: false,
+        enviadoEn: p.ultimoMensajeFecha ? Date.parse(p.ultimoMensajeFecha) : 0
+      }
       : null;
   }
-
   // Los matches nuevos (sin mensajes todavía) van arriba, el más reciente primero.
   // Después, chats 1 a 1, grupos de actividad y consultas a clubes juntos, con el mensaje más reciente primero.
   const items = useMemo<Item[]>(() => {
@@ -65,7 +76,6 @@ export default function ChatListScreen() {
     return [...nuevos, ...[...conMensajes, ...deGrupos, ...deClubes].sort((a, b) => b.orden - a.orden)];
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [confirmados, resumenes, grupos, consultas]);
-
   function abrirChat(persona: Persona) {
     if (!persona.matchId) return;
     router.push({
@@ -73,15 +83,12 @@ export default function ChatListScreen() {
       params: { id: persona.matchId, personaId: persona.id },
     });
   }
-
   function abrirGrupo(g: ChatGrupal) {
     router.push({ pathname: '/(deportista)/chat-grupo/[id]', params: { id: g.actividadId } });
   }
-
   function abrirClub(h: Hilo) {
     router.push({ pathname: '/(deportista)/chat-club/[id]', params: { id: h.clubId } } as never);
   }
-
   function tarjetaPersona(persona: Persona) {
     const ultimo = ultimoDe(persona);
     const noLeidos = (persona.matchId && resumenes[persona.matchId]?.noLeidos) || 0;
@@ -138,7 +145,6 @@ export default function ChatListScreen() {
       </TouchableOpacity>
     );
   }
-
   function tarjetaGrupo(g: ChatGrupal) {
     const { sala, acceso, participantes } = g;
     const visual = visualDeporte(g.deporteCodigo);
@@ -183,7 +189,6 @@ export default function ChatListScreen() {
       </TouchableOpacity>
     );
   }
-
   // Consulta a un club por su convocatoria (HU-51).
   function tarjetaClub(h: Hilo) {
     const ultimo = h.mensajes[h.mensajes.length - 1];
@@ -216,13 +221,11 @@ export default function ChatListScreen() {
       </TouchableOpacity>
     );
   }
-
   return (
     <View style={[styles.container, { paddingTop: insets.top + 12 }]}>
       <View style={styles.topbar}>
         <Text style={styles.title}>Chats</Text>
       </View>
-
       <ScrollView contentContainerStyle={styles.list}>
         {estadoGrupos.error ? <Text style={styles.cardMessage}>{estadoGrupos.error}</Text> : null}
         {estadoConsultas.error ? <Text style={styles.cardMessage}>{estadoConsultas.error}</Text> : null}
@@ -232,8 +235,11 @@ export default function ChatListScreen() {
             <Text style={styles.emptyText}>{matchingError} · {sesionExpirada ? 'Iniciar sesión' : 'Reintentar'}</Text>
           </TouchableOpacity>
         )}
-        {items.map((it) => (it.tipo === 'grupo' ? tarjetaGrupo(it.grupo) : it.tipo === 'club' ? tarjetaClub(it.hilo) : tarjetaPersona(it.persona)))}
-
+        {items.map((it) => {
+          if (it.tipo === 'grupo') return tarjetaGrupo(it.grupo);
+          if (it.tipo === 'club') return tarjetaClub(it.hilo);
+          return tarjetaPersona(it.persona);
+        })}
         {!matchingError && items.length === 0 && (
           <View style={styles.emptyState}>
             <Ionicons name="chatbubbles-outline" size={44} color={colors.textMuted} />
@@ -247,7 +253,6 @@ export default function ChatListScreen() {
     </View>
   );
 }
-
 const makeStyles = (c: Colors) =>
   StyleSheet.create({
     container: { flex: 1, backgroundColor: c.bg },
@@ -255,9 +260,15 @@ const makeStyles = (c: Colors) =>
     title: { color: c.text, fontSize: 20, fontWeight: '700' },
     list: { paddingHorizontal: 20, paddingBottom: 30 },
     card: {
-      flexDirection: 'row', alignItems: 'center', gap: 12,
-      backgroundColor: c.card, borderWidth: 1, borderColor: c.border,
-      borderRadius: 14, padding: 12, marginBottom: 10,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 12,
+      backgroundColor: c.card,
+      borderWidth: 1,
+      borderColor: c.border,
+      borderRadius: 14,
+      padding: 12,
+      marginBottom: 10,
     },
     avatar: { width: 46, height: 46, borderRadius: 23 },
     grupoIcono: { width: 46, height: 46, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
@@ -266,7 +277,15 @@ const makeStyles = (c: Colors) =>
     nombreFila: { flexDirection: 'row', alignItems: 'center', gap: 6 },
     cardName: { color: c.text, fontSize: 13, fontWeight: '700' },
     cardNameGrupo: { flexShrink: 1 },
-    grupoTag: { flexDirection: 'row', alignItems: 'center', gap: 3, backgroundColor: c.chip, borderRadius: 9, paddingHorizontal: 6, paddingVertical: 2 },
+    grupoTag: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 3,
+      backgroundColor: c.chip,
+      borderRadius: 9,
+      paddingHorizontal: 6,
+      paddingVertical: 2
+    },
     grupoTagTexto: { color: c.accent, fontSize: 10, fontWeight: '700' },
     cardMessage: { color: c.textMuted, fontSize: 11.5, marginTop: 2 },
     cardMessageSinLeer: { color: c.text, fontWeight: '700' },
@@ -277,8 +296,13 @@ const makeStyles = (c: Colors) =>
     cardHora: { color: c.textMuted, fontSize: 10 },
     cardHoraSinLeer: { color: c.primary, fontWeight: '700' },
     contador: {
-      minWidth: 18, height: 18, borderRadius: 9, paddingHorizontal: 5,
-      backgroundColor: c.primary, alignItems: 'center', justifyContent: 'center',
+      minWidth: 18,
+      height: 18,
+      borderRadius: 9,
+      paddingHorizontal: 5,
+      backgroundColor: c.primary,
+      alignItems: 'center',
+      justifyContent: 'center',
     },
     contadorSilenciado: { backgroundColor: c.textMuted },
     contadorTexto: { color: '#fff', fontSize: 10, fontWeight: '700' },

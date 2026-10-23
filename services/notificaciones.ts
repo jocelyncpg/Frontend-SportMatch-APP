@@ -3,7 +3,13 @@ import { apiRequest } from './api';
 import { getSession, getToken } from './auth';
 
 export type TipoNotificacion = 'solicitud' | 'match' | 'mensaje' | 'calificacion' | 'actividad';
-export type DestinoNotificacion = { screen?: string; activityId?: string; matchId?: string };
+export type DestinoNotificacion = {
+  screen?: string;
+  activityId?: string;
+  matchId?: string;
+  clubId?: string;
+  hiloId?: string;
+};
 export type Notificacion = {
   id: string; tipo: TipoNotificacion; titulo: string; detalle: string;
   cuando: string; leida: boolean; data: DestinoNotificacion;

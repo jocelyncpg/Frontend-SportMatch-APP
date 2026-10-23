@@ -141,9 +141,27 @@ test('una respuesta atrasada no mezcla avisos entre cuentas', async () => {
 });
 
 test('los destinos de push aceptan solo rutas conocidas e identificadores UUID', () => {
-  const calls = []; const api = load('notificationNavigation.ts', { 'expo-router': { router: { push: (dest) => calls.push(dest) } } });
+  const calls = [];
+  const api = load('notificationNavigation.ts', {
+    'expo-router': { router: { push: (dest) => calls.push(dest) } },
+  });
+  const valid = '10000000-0000-4000-8000-000000000001';
   api.abrirDestino({ screen: 'https://evil.test', activityId: '../../admin' });
-  api.abrirDestino({ screen: 'chat', matchId: '10000000-0000-4000-8000-000000000001' });
+  api.abrirDestino({ screen: 'chat', matchId: valid });
+  api.abrirDestino({ screen: 'activity_chat', activityId: valid });
+  api.abrirDestino({ screen: 'consulta', clubId: valid, hiloId: valid });
+  api.abrirDestino({ screen: 'consulta_club', clubId: valid, hiloId: valid });
+  api.abrirDestino({ screen: 'activity_chat', activityId: '../../admin' });
+  api.abrirDestino({ screen: 'consulta', clubId: '../../admin' });
+  api.abrirDestino({ screen: 'consulta', clubId: valid, hiloId: '../../admin' });
+  api.abrirDestino({ screen: 'consulta_club', clubId: valid, hiloId: '../../admin' });
   assert.equal(calls[0], '/(deportista)/notificaciones');
   assert.equal(calls[1].pathname, '/(deportista)/chat/[id]');
+  assert.equal(calls[2].pathname, '/(deportista)/chat-grupo/[id]');
+  assert.equal(calls[2].params.id, valid);
+  assert.equal(calls[3].pathname, '/(deportista)/chat-club/[id]');
+  assert.equal(calls[4].pathname, '/(club)/consulta/[id]');
+  assert.equal(calls[4].params.id, valid);
+  assert.equal(calls[4].params.clubId, valid);
+  assert.deepEqual(calls.slice(5), Array(4).fill('/(deportista)/notificaciones'));
 });
