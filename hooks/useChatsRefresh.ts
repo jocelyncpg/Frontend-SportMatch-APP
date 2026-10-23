@@ -1,6 +1,8 @@
 import { useEffect } from 'react';
 import { AppState } from 'react-native';
 import { cargarChats } from '../services/chat';
+import { cargarChatsGrupales } from '../services/chatGrupal';
+import { cargarHilosDeportista } from '../services/consultas';
 import { cargarBloqueados } from '../services/reportes';
 
 /**
@@ -10,7 +12,12 @@ import { cargarBloqueados } from '../services/reportes';
  */
 export function useChatsRefresh(intervaloMs = 6000) {
   useEffect(() => {
-    const refresh = () => { if (AppState.currentState === 'active') cargarChats().catch(() => {}); };
+    const refresh = () => {
+      if (AppState.currentState !== 'active') return;
+      cargarChats().catch(() => {});
+      cargarChatsGrupales().catch(() => {});
+      cargarHilosDeportista().catch(() => {});
+    };
     refresh();
     // Para marcar "Bloqueado" en la lista; cambia solo cuando bloqueas o desbloqueas desde la app.
     cargarBloqueados().catch(() => {});

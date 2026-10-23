@@ -19,12 +19,11 @@ import { horaCorta } from '../../../services/chat';
 import {
     MAX_MENSAJE_GRUPAL,
     abrirSala,
-    accesoGrupal,
     cerrarSala,
     enviarMensajeGrupal,
-    miembrosDe,
     silenciarSala,
-    simularRespuestaGrupal,
+    useChatGrupal,
+    useEstadoChatGrupal,
     useSalaGrupal,
     type MensajeGrupal,
 } from '../../../services/chatGrupal';
@@ -39,6 +38,8 @@ export default function ChatGrupoScreen() {
   const actividadId = id ?? '';
   const actividades = useActividades();
   const actividad = actividades.find((x) => x.id === actividadId);
+  const chat = useChatGrupal(actividadId);
+  const estadoChat = useEstadoChatGrupal();
   const sala = useSalaGrupal(actividadId);
 
   const [texto, setTexto] = useState('');
@@ -49,18 +50,18 @@ export default function ChatGrupoScreen() {
   const listaRef = useRef<FlatList<MensajeGrupal>>(null);
 
   // Se vuelve a calcular con cada cambio de la actividad: retirarte, ser rechazado o que se cancele corta el acceso al instante.
-  const acceso = actividad ? accesoGrupal(actividad) : 'ninguno';
+  const acceso = sala?.acceso ?? chat?.acceso ?? 'ninguno';
   const hayAcceso = acceso !== 'ninguno';
 
   // Mientras el chat está abierto, sus mensajes cuentan como leídos.
   useEffect(() => {
-    if (!actividadId || !hayAcceso) return;
+    if (!actividadId) return;
     abrirSala(actividadId);
     return () => cerrarSala(actividadId);
-  }, [actividadId, hayAcceso]);
+  }, [actividadId]);
 
   // ---------- sin acceso (HU-50: se actualiza si te retiras o se cancela) ----------
-  if (!actividad || !sala || !hayAcceso) {
+  if (!sala || !hayAcceso) {
     const cancelada = actividad?.cancelada === true;
     return (
       <View style={[styles.container, { paddingTop: insets.top + 12 }]}>
@@ -71,7 +72,7 @@ export default function ChatGrupoScreen() {
         </View>
         <View style={styles.sinAcceso}>
           <Ionicons name="lock-closed-outline" size={44} color={colors.textMuted} />
-          <Text style={styles.sinAccesoTitulo}>{cancelada ? 'La actividad fue cancelada' : 'Ya no tienes acceso a este chat'}</Text>
+          <Text style={styles.sinAccesoTitulo}>{estadoChat.error ?? (cancelada ? 'La actividad fue cancelada' : 'Cargando chat...')}</Text>
           <Text style={styles.sinAccesoTexto}>
             {cancelada
               ? 'El chat grupal se cerró junto con la actividad.'
@@ -85,12 +86,12 @@ export default function ChatGrupoScreen() {
     );
   }
 
-  const visual = visualDeporte(actividad.deporte);
-  const participantes = miembrosDe(actividad).length;
+  const visual = visualDeporte(actividad?.deporte ?? chat?.deporteCodigo ?? '');
+  const participantes = sala.participantes;
   const soloLectura = acceso === 'leer';
 
-  function enviar() {
-    const r = enviarMensajeGrupal(actividadId, texto);
+  async function enviar() {
+    const r = await enviarMensajeGrupal(actividadId, texto);
     if (r.ok) {
       setTexto('');
       setError('');
@@ -100,10 +101,10 @@ export default function ChatGrupoScreen() {
   }
 
   function abrirOpciones() {
-    Alert.alert(actividad!.titulo, undefined, [
+    Alert.alert(chat?.titulo ?? actividad?.titulo ?? 'Chat grupal', undefined, [
       {
         text: sala!.silenciado ? 'Reactivar avisos' : 'Silenciar avisos',
-        onPress: () => silenciarSala(actividadId, !sala!.silenciado),
+        onPress: () => { silenciarSala(actividadId, !sala!.silenciado).then((r) => { if (!r.ok) setError(r.motivo); }); },
       },
       { text: 'Ver la actividad', onPress: verActividad },
       { text: 'Cancelar', style: 'cancel' },
@@ -120,13 +121,6 @@ export default function ChatGrupoScreen() {
   }
 
   function renderMensaje({ item }: { item: MensajeGrupal }) {
-    if (item.sistema) {
-      return (
-        <View style={styles.sistema}>
-          <Text style={styles.sistemaTexto}>{item.texto}</Text>
-        </View>
-      );
-    }
     if (item.propio) {
       return (
         <View style={[styles.bubble, styles.bubbleOwn]}>
@@ -166,7 +160,7 @@ export default function ChatGrupoScreen() {
             <Text style={styles.icon}>{visual.icon}</Text>
           </View>
           <View style={styles.topbarTextos}>
-            <Text style={styles.name} numberOfLines={1}>{actividad.titulo}</Text>
+            <Text style={styles.name} numberOfLines={1}>{chat?.titulo ?? actividad?.titulo}</Text>
             <View style={styles.subtitulo}>
               <Text style={styles.sport}>{participantes} {participantes === 1 ? 'participante' : 'participantes'}</Text>
               {sala.silenciado ? (
@@ -199,13 +193,6 @@ export default function ChatGrupoScreen() {
         </View>
       ) : (
         <>
-          {/* DEMO: quitar cuando los mensajes lleguen del backend */}
-          {participantes > 1 ? (
-            <TouchableOpacity style={styles.demoLink} onPress={() => simularRespuestaGrupal(actividadId)}>
-              <Text style={styles.demoLinkTexto}>Demo: simular que otro participante escribe</Text>
-            </TouchableOpacity>
-          ) : null}
-
           {error ? <Text style={styles.errorTexto}>{error}</Text> : null}
 
           <View style={[styles.inputRow, { paddingBottom: insets.bottom + 12 }]}>

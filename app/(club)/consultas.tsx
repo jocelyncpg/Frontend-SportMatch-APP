@@ -6,20 +6,28 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Avatar from '../../components/Avatar';
 import { getSession } from '../../services/auth';
 import { horaCorta } from '../../services/chat';
-import { sinResponder, useHilosDelClub } from '../../services/consultas';
+import { cargarHilosClub, sinResponder, useEstadoConsultas, useHilosDelClub } from '../../services/consultas';
 import { Colors, useAppTheme } from '../../theme/ThemeContext';
-
-const CLUB_ID_DEMO = 'club-demo';
 
 export default function ConsultasClubScreen() {
   const { colors } = useAppTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const insets = useSafeAreaInsets();
 
-  const [clubId, setClubId] = useState(CLUB_ID_DEMO);
+  const [clubId, setClubId] = useState('');
+  const [clubNombre, setClubNombre] = useState('');
+  const [errorSesion, setErrorSesion] = useState('');
+  const estado = useEstadoConsultas();
   useEffect(() => {
-    getSession().then((s) => setClubId(s?.clubId ?? CLUB_ID_DEMO));
+    getSession().then((s) => { setClubId(s?.clubId ?? ''); setClubNombre(s?.clubNombre ?? ''); if (!s?.clubId) setErrorSesion('Tu sesión expiró o ya no administras un club.'); });
   }, []);
+  useEffect(() => {
+    if (!clubId) return;
+    const cargar = () => cargarHilosClub(clubId, clubNombre).catch(() => {});
+    cargar();
+    const timer = setInterval(cargar, 6000);
+    return () => clearInterval(timer);
+  }, [clubId, clubNombre]);
 
   const hilos = useHilosDelClub(clubId);
   const pendientes = sinResponder(hilos).length;
@@ -43,6 +51,9 @@ export default function ConsultasClubScreen() {
       </View>
 
       <ScrollView contentContainerStyle={styles.list}>
+        {errorSesion ? <Text style={styles.vacioTexto}>{errorSesion}</Text> : null}
+        {estado.cargando ? <Text style={styles.vacioTexto}>Cargando consultas...</Text> : null}
+        {estado.error ? <Text style={styles.vacioTexto}>{estado.error}</Text> : null}
         {hilos.map((h) => {
           const ultimo = h.mensajes[h.mensajes.length - 1];
           const sinResp = ultimo?.de === 'postulante';

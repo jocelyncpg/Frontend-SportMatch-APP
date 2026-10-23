@@ -26,7 +26,7 @@ import {
 } from '../../../services/actividades';
 import { Usuario, getSession } from '../../../services/auth';
 import { calificacionDe, calificar, cargarCalificaciones, useMatches } from '../../../services/matchStore';
-import { accesoGrupal, miembrosDe, useSalaGrupal } from '../../../services/chatGrupal';
+import { useSalaGrupal, useChatGrupal } from '../../../services/chatGrupal';
 import { Colors, useAppTheme } from '../../../theme/ThemeContext';
 
 export default function ActividadDetalleScreen() {
@@ -37,6 +37,7 @@ export default function ActividadDetalleScreen() {
   const actividades = useActividades();
   const a = actividades.find((x) => x.id === id);
   const salaGrupal = useSalaGrupal(id ?? '');
+  const chatGrupal = useChatGrupal(id ?? '');
 
   const [usuario, setUsuario] = useState<Usuario | null>(null);
   const [modalPostular, setModalPostular] = useState(false);
@@ -115,7 +116,7 @@ export default function ActividadDetalleScreen() {
   const miMensaje = a.mensajes[YO];
   const lista = postulantes(a);
   // Chat grupal (HU-50): lo ven quien organiza y las personas aprobadas, mientras la actividad no se cancele.
-  const accesoChat = accesoGrupal(a, ahora);
+  const accesoChat = chatGrupal?.acceso ?? 'ninguno';
   const noLeidosChat = salaGrupal?.noLeidos ?? 0;
 
   function abrirPostular() {
@@ -315,7 +316,7 @@ export default function ActividadDetalleScreen() {
             <View style={styles.chatGrupoTextos}>
               <Text style={styles.chatGrupoTitulo}>Chat del grupo</Text>
               <Text style={styles.chatGrupoSub}>
-                {miembrosDe(a).length} {miembrosDe(a).length === 1 ? 'participante' : 'participantes'}
+                {chatGrupal?.participantes} {chatGrupal?.participantes === 1 ? 'participante' : 'participantes'}
                 {accesoChat === 'leer' ? ' · solo lectura' : ''}
               </Text>
             </View>
