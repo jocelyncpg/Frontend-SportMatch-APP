@@ -42,7 +42,7 @@ export default function ContratarPlanModal({ visible, plan, cuenta, onClose }: P
               <Ionicons name="checkmark-circle" size={54} color={colors.success} />
               <Text style={styles.titulo}>¡Listo!</Text>
               <Text style={styles.texto}>Tu plan ahora es {plan.nombre}. Los beneficios ya están activos.</Text>
-              <TouchableOpacity style={styles.botonPrimario} onPress={onClose}>
+              <TouchableOpacity style={styles.botonCerrar} onPress={onClose}>
                 <Text style={styles.botonPrimarioTexto}>Cerrar</Text>
               </TouchableOpacity>
             </View>
@@ -105,5 +105,7 @@ const makeStyles = (c: Colors) =>
     botonSecundario: { flex: 1, borderWidth: 1, borderColor: c.border, borderRadius: 13, paddingVertical: 13, alignItems: 'center' },
     botonSecundarioTexto: { color: c.text, fontSize: 13, fontWeight: '700' },
     botonPrimario: { flex: 1.4, backgroundColor: c.primary, borderRadius: 13, paddingVertical: 13, alignItems: 'center', minWidth: 120 },
+    // Botón de la pantalla "¡Listo!": sin flex, porque está en una columna y flex le quitaría el alto.
+    botonCerrar: { backgroundColor: c.primary, borderRadius: 13, paddingVertical: 13, paddingHorizontal: 40, alignItems: 'center', marginTop: 8 },
     botonPrimarioTexto: { color: '#fff', fontSize: 13, fontWeight: '700' },
   });
