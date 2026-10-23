@@ -1,30 +1,16 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import { useMemo } from 'react';
+import { useEffect, useMemo } from 'react';
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { useConvocatoriasAbiertas } from '../../services/consultas';
+import { cargarClubes, useEstadoClubes } from '../../services/clubes';
 import { Colors, useAppTheme } from '../../theme/ThemeContext';
-
-type ClubItem = { id: string; name: string; sport: string; comuna: string; miembros?: number; colorFrom: string };
-
-const CLUBES: ClubItem[] = [
-  { id: '1', name: 'Club Atlético Ñuñoa', sport: 'Atletismo', comuna: 'Ñuñoa', miembros: 84, colorFrom: '#7C3AED' },
-  { id: '2', name: 'Fútbol Amateur Maipú', sport: 'Fútbol', comuna: 'Maipú', miembros: 132, colorFrom: '#1F2A5C' },
-  { id: '3', name: 'Ciclistas La Florida', sport: 'Ciclismo', comuna: 'La Florida', miembros: 56, colorFrom: '#22C55E' },
-];
 
 export default function ClubsScreen() {
   const { colors } = useAppTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
-  // Clubes que publicaron su convocatoria desde su panel (HU-51): se suman a los de ejemplo.
-  const abiertas = useConvocatoriasAbiertas();
-  const clubes = useMemo<ClubItem[]>(() => {
-    const extra = abiertas
-      .filter((c) => !CLUBES.some((x) => x.id === c.clubId))
-      .map((c) => ({ id: c.clubId, name: c.clubNombre, sport: c.deporte ?? 'Club deportivo', comuna: c.comuna ?? '', colorFrom: c.colorFrom }));
-    return [...CLUBES, ...extra];
-  }, [abiertas]);
+  const { clubes, total, pagina, cargando, error } = useEstadoClubes();
+  useEffect(() => { cargarClubes().catch(() => {}); }, []);
 
   return (
     <View style={styles.container}>
@@ -36,23 +22,26 @@ export default function ClubsScreen() {
       </View>
 
       <ScrollView contentContainerStyle={styles.list}>
+        {cargando ? <Text style={styles.cardMeta}>Cargando clubes...</Text> : null}
+        {error ? <Text style={styles.cardMeta}>{error}</Text> : null}
+        {error ? <TouchableOpacity onPress={() => cargarClubes().catch(() => {})}><Text style={styles.cardName}>Reintentar</Text></TouchableOpacity> : null}
         {clubes.map((club) => (
           <TouchableOpacity
             key={club.id}
             style={styles.card}
-            onPress={() => router.push({ pathname: '/(deportista)/club/[id]', params: { id: club.id, name: club.name, sport: club.sport, comuna: club.comuna, colorFrom: club.colorFrom } })}
+            onPress={() => router.push({ pathname: '/(deportista)/club/[id]', params: { id: club.id } })}
           >
-            <View style={[styles.avatar, { backgroundColor: club.colorFrom }]}>
+            <View style={[styles.avatar, { backgroundColor: colors.primary }]}>
               <Ionicons name="shield" size={22} color="#fff" />
             </View>
             <View style={styles.cardInfo}>
-              <Text style={styles.cardName}>{club.name}</Text>
-              <Text style={styles.cardMeta}>{[club.sport, club.comuna].filter(Boolean).join(' · ')}</Text>
-              {club.miembros !== undefined ? <Text style={styles.cardMembers}>{club.miembros} miembros</Text> : null}
+              <Text style={styles.cardName}>{club.nombre}</Text>
+              <Text style={styles.cardMeta}>RUT {club.rut}</Text>
             </View>
             <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
           </TouchableOpacity>
         ))}
+        {clubes.length < total ? <TouchableOpacity onPress={() => cargarClubes(pagina + 1).catch(() => {})}><Text style={styles.cardName}>Cargar más clubes</Text></TouchableOpacity> : null}
       </ScrollView>
     </View>
   );

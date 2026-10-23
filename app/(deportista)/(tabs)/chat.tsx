@@ -6,8 +6,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Avatar from '../../../components/Avatar';
 import { YO, visualDeporte } from '../../../services/actividades';
 import { horaCorta, useChats, useSilenciados } from '../../../services/chat';
-import { ChatGrupal, ultimoMensajeGrupal, useChatsGrupales } from '../../../services/chatGrupal';
-import { Hilo, getConvocatoria, useHilosDePostulante } from '../../../services/consultas';
+import { ChatGrupal, ultimoMensajeGrupal, useChatsGrupales, useEstadoChatGrupal } from '../../../services/chatGrupal';
+import { Hilo, useEstadoConsultas, useHilosDePostulante } from '../../../services/consultas';
 import { Persona, cargarMatching, useMatches } from '../../../services/matchStore';
 import { useBloqueados } from '../../../services/reportes';
 import { useMatchingRefresh } from '../../../hooks/useMatchingRefresh';
@@ -30,6 +30,8 @@ export default function ChatListScreen() {
   const bloqueados = useBloqueados();
   const grupos = useChatsGrupales();
   const consultas = useHilosDePostulante(YO);
+  const estadoGrupos = useEstadoChatGrupal();
+  const estadoConsultas = useEstadoConsultas();
 
   /** Último mensaje: el de /chats (con no leídos) o, si aún no carga, el que trae el match. */
   function ultimoDe(p: Persona) {
@@ -73,7 +75,7 @@ export default function ChatListScreen() {
   }
 
   function abrirGrupo(g: ChatGrupal) {
-    router.push({ pathname: '/(deportista)/chat-grupo/[id]', params: { id: g.actividad.id } });
+    router.push({ pathname: '/(deportista)/chat-grupo/[id]', params: { id: g.actividadId } });
   }
 
   function abrirClub(h: Hilo) {
@@ -138,8 +140,8 @@ export default function ChatListScreen() {
   }
 
   function tarjetaGrupo(g: ChatGrupal) {
-    const { actividad, sala, acceso, participantes } = g;
-    const visual = visualDeporte(actividad.deporte);
+    const { sala, acceso, participantes } = g;
+    const visual = visualDeporte(g.deporteCodigo);
     const ultimo = ultimoMensajeGrupal(sala);
     const ultimoCualquiera = sala.mensajes[sala.mensajes.length - 1];
     const { noLeidos, silenciado } = sala;
@@ -147,13 +149,13 @@ export default function ChatListScreen() {
       ? `${ultimo.propio ? 'Tú' : ultimo.autorNombre.split(' ')[0]}: ${ultimo.texto}`
       : 'Aún no hay mensajes. ¡Saluda al grupo! 👋';
     return (
-      <TouchableOpacity key={`g-${actividad.id}`} style={styles.card} onPress={() => abrirGrupo(g)}>
+      <TouchableOpacity key={`g-${g.actividadId}`} style={styles.card} onPress={() => abrirGrupo(g)}>
         <View style={[styles.grupoIcono, { backgroundColor: visual.colorBg }]}>
           <Text style={styles.grupoEmoji}>{visual.icon}</Text>
         </View>
         <View style={styles.cardInfo}>
           <View style={styles.nombreFila}>
-            <Text style={[styles.cardName, styles.cardNameGrupo]} numberOfLines={1}>{actividad.titulo}</Text>
+            <Text style={[styles.cardName, styles.cardNameGrupo]} numberOfLines={1}>{g.titulo}</Text>
             <View style={styles.grupoTag}>
               <Ionicons name="people" size={10} color={colors.accent} />
               <Text style={styles.grupoTagTexto}>{participantes}</Text>
@@ -186,7 +188,7 @@ export default function ChatListScreen() {
   function tarjetaClub(h: Hilo) {
     const ultimo = h.mensajes[h.mensajes.length - 1];
     const noLeidos = h.noLeidosPostulante;
-    const color = getConvocatoria(h.clubId)?.colorFrom ?? '#7C3AED';
+    const color = '#7C3AED';
     return (
       <TouchableOpacity key={`c-${h.id}`} style={styles.card} onPress={() => abrirClub(h)}>
         <View style={[styles.grupoIcono, { backgroundColor: color }]}>
@@ -222,6 +224,9 @@ export default function ChatListScreen() {
       </View>
 
       <ScrollView contentContainerStyle={styles.list}>
+        {estadoGrupos.error ? <Text style={styles.cardMessage}>{estadoGrupos.error}</Text> : null}
+        {estadoConsultas.error ? <Text style={styles.cardMessage}>{estadoConsultas.error}</Text> : null}
+        {estadoGrupos.cargando || estadoConsultas.cargando ? <Text style={styles.cardMessage}>Actualizando chats...</Text> : null}
         {matchingError && (
           <TouchableOpacity onPress={() => sesionExpirada ? router.replace('/(auth)/login') : void cargarMatching()}>
             <Text style={styles.emptyText}>{matchingError} · {sesionExpirada ? 'Iniciar sesión' : 'Reintentar'}</Text>

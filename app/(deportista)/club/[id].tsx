@@ -1,29 +1,25 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useMemo, useState } from 'react';
-import { Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useEffect, useMemo, useState } from 'react';
+import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { YO } from '../../../services/actividades';
-import { idHilo, useConvocatoria, useHilo } from '../../../services/consultas';
+import { idHilo, useHilo } from '../../../services/consultas';
+import { cargarClub, useClub } from '../../../services/clubes';
 import { Colors, useAppTheme } from '../../../theme/ThemeContext';
 
 export default function ClubProfileScreen() {
   const { colors } = useAppTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
-  const { id, name, sport, comuna, colorFrom } = useLocalSearchParams<{ id: string; name: string; sport: string; comuna: string; colorFrom: string }>();
+  const { id } = useLocalSearchParams<{ id: string }>();
   const clubId = id ?? '';
-  const [postulado, setPostulado] = useState(false);
+  const club = useClub(clubId);
+  const [error, setError] = useState('');
+  useEffect(() => { if (clubId) cargarClub(clubId).catch((e) => setError(e instanceof Error ? e.message : 'No se pudo cargar el club.')); }, [clubId]);
 
   // La convocatoria la publica el club desde su panel (HU-51); aquí se ve la versión actual.
-  const convocatoria = useConvocatoria(clubId);
-  const abierta = convocatoria?.abierta === true;
   const hilo = useHilo(idHilo(clubId, YO));
   const noLeidos = hilo?.noLeidosPostulante ?? 0;
-
-  function postular() {
-    setPostulado(true);
-    Alert.alert('Postulación enviada', 'El club revisará tu perfil y te avisaremos con el resultado.');
-  }
 
   function abrirConsultas() {
     router.push({ pathname: '/(deportista)/chat-club/[id]', params: { id: clubId } } as never);
@@ -35,51 +31,26 @@ export default function ClubProfileScreen() {
         <Ionicons name="arrow-back" size={18} color={colors.text} />
       </TouchableOpacity>
 
-      <View style={[styles.avatar, { backgroundColor: colorFrom ?? '#7C3AED' }]}>
+      <View style={[styles.avatar, { backgroundColor: colors.primary }]}>
         <Ionicons name="shield" size={36} color="#fff" />
       </View>
-      <Text style={styles.name}>{name}</Text>
-      <Text style={styles.meta}>{[sport, comuna].filter(Boolean).join(' · ')}</Text>
+      <Text style={styles.name}>{club?.nombre ?? (error || 'Cargando club...')}</Text>
+      {error ? <TouchableOpacity onPress={() => cargarClub(clubId).then(() => setError('')).catch((e) => setError(e instanceof Error ? e.message : 'No se pudo cargar el club.'))}><Text style={styles.consultaTitulo}>Reintentar</Text></TouchableOpacity> : null}
+      {club ? <Text style={styles.meta}>RUT {club.rut}</Text> : null}
 
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Sobre el club</Text>
-        <Text style={styles.sectionText}>
-          Club deportivo con entrenamientos regulares y espacio para nuevos integrantes que quieran competir y mejorar su nivel.
-        </Text>
+        <Text style={styles.sectionText}>Información del club.</Text>
       </View>
 
-      {abierta && convocatoria ? (
-        <View style={styles.convocatoria}>
-          <View style={styles.convocatoriaHeader}>
-            <Ionicons name="megaphone-outline" size={16} color={colors.success} />
-            <Text style={styles.convocatoriaTitle}>Convocatoria abierta</Text>
-          </View>
-          <Text style={styles.convocatoriaNombre}>{convocatoria.titulo}</Text>
-          {convocatoria.descripcion ? <Text style={styles.convocatoriaText}>{convocatoria.descripcion}</Text> : null}
-
-          {postulado ? (
-            <View style={styles.postuladoBadge}>
-              <Ionicons name="checkmark-circle" size={16} color={colors.success} />
-              <Text style={styles.postuladoText}>Postulación enviada</Text>
-            </View>
-          ) : (
-            <TouchableOpacity style={styles.postularButton} onPress={postular}>
-              <Text style={styles.postularButtonText}>Postular a esta convocatoria</Text>
-            </TouchableOpacity>
-          )}
-        </View>
-      ) : (
-        <View style={styles.convocatoria}>
-          <View style={styles.convocatoriaHeader}>
-            <Ionicons name="lock-closed-outline" size={16} color={colors.textMuted} />
-            <Text style={styles.convocatoriaTitle}>Sin convocatoria abierta</Text>
-          </View>
-          <Text style={styles.convocatoriaText}>Este club no tiene una convocatoria abierta por ahora.</Text>
-        </View>
-      )}
+      <View style={styles.convocatoria}>
+        <Text style={styles.convocatoriaTitle}>Convocatorias</Text>
+        {/* PENDIENTE BACKEND: confirmar la forma de GET /clubs/announcements para mostrar las abiertas. */}
+        <Text style={styles.convocatoriaText}>Las convocatorias estarán disponibles cuando se confirme su formato.</Text>
+      </View>
 
       {/* HU-51: canal de consultas con el club */}
-      {abierta || hilo ? (
+      {club || hilo ? (
         <TouchableOpacity style={styles.consultaButton} onPress={abrirConsultas} activeOpacity={0.8} accessibilityLabel="Abrir consultas con el club">
           <View style={styles.consultaIcono}>
             <Ionicons name="chatbubbles-outline" size={18} color={colors.accent} />
@@ -87,7 +58,7 @@ export default function ClubProfileScreen() {
           <View style={styles.consultaTextos}>
             <Text style={styles.consultaTitulo}>{hilo ? 'Mis consultas al club' : 'Hacer una consulta'}</Text>
             <Text style={styles.consultaSub}>
-              {hilo ? (abierta ? 'Revisa las respuestas o escribe de nuevo' : 'La convocatoria está cerrada') : 'Resuelve tus dudas sobre pruebas y convocatoria'}
+              {hilo ? 'Revisa las respuestas o escribe de nuevo' : 'Escribe al club'}
             </Text>
           </View>
           {noLeidos > 0 ? (

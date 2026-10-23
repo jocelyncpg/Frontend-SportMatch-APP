@@ -12,7 +12,8 @@
     "test:discovery": "node --test scripts/test-discovery.cjs",
     "test:activities": "node --test scripts/test-activities.cjs",
     "test:notifications": "node --test scripts/test-notifications.cjs",
-    "test:reports": "node --test scripts/test-reports.cjs"
+    "test:reports": "node --test scripts/test-reports.cjs",
+    "test:clubes-chat": "node --test scripts/test-clubes-chat.cjs"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.3",
@@ -22,6 +23,7 @@
     "@react-navigation/elements": "^2.6.3",
     "@react-navigation/native": "^7.1.8",
     "expo": "~54.0.36",
+    "expo-clipboard": "~8.0.8",
     "expo-constants": "~18.0.13",
     "expo-crypto": "~15.0.9",
     "expo-device": "~8.0.10",

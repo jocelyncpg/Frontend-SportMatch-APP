@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { horaCorta } from '../../../services/chat';
-import { MAX_CONSULTA, marcarLeidoClub, responderConsulta, useConvocatoria, useHilo } from '../../../services/consultas';
+import { MAX_CONSULTA, abrirConsultaClub, cerrarConsulta, responderConsulta, useEstadoConsultas, useHilo } from '../../../services/consultas';
 import { Colors, useAppTheme } from '../../../theme/ThemeContext';
 
 export default function ConsultaClubScreen() {
@@ -15,23 +15,24 @@ export default function ConsultaClubScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const hiloId = id ?? '';
   const hilo = useHilo(hiloId);
-  const convocatoria = useConvocatoria(hilo?.clubId ?? '');
+  const estado = useEstadoConsultas();
   const [texto, setTexto] = useState('');
   const scroll = useRef<ScrollView>(null);
 
   // Al abrir (o si llega algo mientras está abierto), el club ya lo vio.
-  const noLeidos = hilo?.noLeidosClub ?? 0;
   useEffect(() => {
-    if (noLeidos > 0) marcarLeidoClub(hiloId);
-  }, [noLeidos, hiloId]);
+    if (!hilo?.clubId) return;
+    abrirConsultaClub(hilo.clubId, hiloId);
+    return () => cerrarConsulta(hiloId);
+  }, [hilo?.clubId, hiloId]);
 
   const total = hilo?.mensajes.length ?? 0;
   useEffect(() => {
     setTimeout(() => scroll.current?.scrollToEnd({ animated: true }), 50);
   }, [total]);
 
-  function enviar() {
-    const r = responderConsulta(hiloId, texto);
+  async function enviar() {
+    const r = await responderConsulta(hiloId, texto);
     if (!r.ok) {
       Alert.alert('No se pudo enviar', r.motivo);
       return;
@@ -59,17 +60,12 @@ export default function ConsultaClubScreen() {
         <View style={{ flex: 1 }}>
           <Text style={styles.title} numberOfLines={1}>{hilo.postulanteNombre}</Text>
           <Text style={styles.sub} numberOfLines={1}>
-            {convocatoria ? convocatoria.titulo : 'Consulta de convocatoria'}
+            Consulta del deportista
           </Text>
         </View>
       </View>
 
-      {convocatoria && !convocatoria.abierta ? (
-        <View style={styles.aviso}>
-          <Ionicons name="lock-closed-outline" size={14} color={colors.textMuted} />
-          <Text style={styles.avisoTexto}>La convocatoria está cerrada. Aún puedes responder esta consulta.</Text>
-        </View>
-      ) : null}
+      {estado.error ? <Text style={styles.avisoTexto}>{estado.error}</Text> : null}
 
       <ScrollView ref={scroll} style={{ flex: 1 }} contentContainerStyle={styles.mensajes}>
         {hilo.mensajes.map((m) => {

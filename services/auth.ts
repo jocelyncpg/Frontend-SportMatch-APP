@@ -70,7 +70,7 @@ export type RegisterClubData = {
   representantes: RepresentanteData[];
 };
 
-type ClubPendiente = { email: string; nombre: string };
+type ClubPendiente = { email: string; nombre: string; rut: string };
 type MiClubResponse = { id: string; nombre: string };
 
 type ProfileResponse = {
@@ -130,7 +130,8 @@ async function miClub(token: string, email: string): Promise<MiClubResponse | nu
   const pendiente: ClubPendiente | null = raw ? JSON.parse(raw) : null;
   if (!pendiente || pendiente.email !== email.toLowerCase()) return null;
   try {
-    const club = await apiRequest<MiClubResponse>('/clubs', { method: 'POST', token, body: { nombre: pendiente.nombre } });
+    if (!pendiente.rut) return null;
+    const club = await apiRequest<MiClubResponse>('/clubs', { method: 'POST', token, body: { nombre: pendiente.nombre, rut: pendiente.rut } });
     await AsyncStorage.removeItem(CLUB_PENDIENTE_KEY);
     return club;
   } catch {
@@ -195,8 +196,7 @@ export async function register(data: RegisterData): Promise<void> {
  * Registra un club (HU-06): Ms_Users crea la cuenta del representante con el rol club_admin
  * (queda inactiva hasta confirmar el correo) y el club se crea en ms-club con POST /clubs
  * apenas hay sesión (ver miClub).
- * PENDIENTE BACKEND: Ms_Users / ms-club admiten un solo representante por club y el club no
- * guarda RUT, así que MAX_REPRESENTANTES es 1 y el RUT del club solo se valida en el formulario.
+ * Los demás administradores entran mediante invitación.
  */
 export async function registerClub(data: RegisterClubData): Promise<void> {
   const reps = data.representantes;
@@ -213,7 +213,7 @@ export async function registerClub(data: RegisterClubData): Promise<void> {
       apellido_paterno: principal.apellidoPaterno.trim(),
     },
   });
-  const pendiente: ClubPendiente = { email: principal.email.trim().toLowerCase(), nombre: data.clubNombre.trim() };
+  const pendiente: ClubPendiente = { email: principal.email.trim().toLowerCase(), nombre: data.clubNombre.trim(), rut: data.clubRut.trim().toUpperCase() };
   await AsyncStorage.setItem(CLUB_PENDIENTE_KEY, JSON.stringify(pendiente));
 }
 
@@ -283,6 +283,10 @@ export async function logout(): Promise<void> {
   reiniciarPlanes();
   const { reiniciarChat } = await import('./chat');
   reiniciarChat();
+  const { reiniciarChatGrupal } = await import('./chatGrupal');
+  reiniciarChatGrupal();
+  const { reiniciarConsultas } = await import('./consultas');
+  reiniciarConsultas();
 }
 
 export async function getSession(): Promise<Usuario | null> {
@@ -304,6 +308,11 @@ async function actualizarSesion(userId: string, datos: Partial<Usuario>): Promis
   if (session && session.id === userId) {
     await AsyncStorage.setItem(SESSION_KEY, JSON.stringify({ ...session, ...datos }));
   }
+}
+
+export async function guardarClubEnSesion(clubId?: string, clubNombre?: string): Promise<void> {
+  const sesion = await getSession();
+  if (sesion) await actualizarSesion(sesion.id, { clubId, clubNombre });
 }
 
 async function tokenActual(): Promise<string> {

@@ -8,13 +8,14 @@ import { getSession } from '../../../services/auth';
 import { horaCorta } from '../../../services/chat';
 import {
     MAX_CONSULTA,
+    abrirConsultaDeportista,
+    cerrarConsulta,
     enviarConsulta,
     idHilo,
-    marcarLeidoPostulante,
-    simularRespuestaClub,
-    useConvocatoria,
+    useEstadoConsultas,
     useHilo,
 } from '../../../services/consultas';
+import { cargarClub, useClub } from '../../../services/clubes';
 import { Colors, useAppTheme } from '../../../theme/ThemeContext';
 
 export default function ChatClubScreen() {
@@ -25,42 +26,39 @@ export default function ChatClubScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const clubId = id ?? '';
   const hiloId = idHilo(clubId, YO);
-  const convocatoria = useConvocatoria(clubId);
+  const club = useClub(clubId);
+  const estado = useEstadoConsultas();
   const hilo = useHilo(hiloId);
-  const abierta = convocatoria?.abierta === true;
-  const nombreClub = convocatoria?.clubNombre ?? hilo?.clubNombre ?? 'Club';
+  const nombreClub = club?.nombre ?? hilo?.clubNombre ?? 'Club';
 
   const [texto, setTexto] = useState('');
   const scroll = useRef<ScrollView>(null);
 
   // Nombre con el que el club verá esta consulta: el de la cuenta con la que se inició sesión.
-  const [miNombre, setMiNombre] = useState('Postulante');
+  const [miNombre, setMiNombre] = useState('');
   useEffect(() => {
+    if (!clubId) return;
+    cargarClub(clubId).catch(() => {});
+    abrirConsultaDeportista(clubId);
     getSession().then((s) => {
       if (s?.nombre) setMiNombre(s.nombre);
     });
-  }, []);
+    return () => cerrarConsulta(hiloId);
+  }, [clubId, hiloId]);
 
   // Al abrir (o si llega una respuesta mientras está abierto), ya la vio.
-  const noLeidos = hilo?.noLeidosPostulante ?? 0;
-  useEffect(() => {
-    if (noLeidos > 0) marcarLeidoPostulante(hiloId);
-  }, [noLeidos, hiloId]);
-
   const total = hilo?.mensajes.length ?? 0;
   useEffect(() => {
     setTimeout(() => scroll.current?.scrollToEnd({ animated: true }), 50);
   }, [total]);
 
-  function enviar() {
-    const r = enviarConsulta(clubId, YO, miNombre, texto);
+  async function enviar() {
+    const r = await enviarConsulta(clubId, YO, miNombre, texto);
     if (!r.ok) {
       Alert.alert('No se pudo enviar', r.motivo);
       return;
     }
     setTexto('');
-    // SOLO DEMO: el club responde solo. En la app real responde quien administra el club.
-    setTimeout(() => simularRespuestaClub(hiloId), 2500);
   }
 
   return (
@@ -69,18 +67,19 @@ export default function ChatClubScreen() {
         <TouchableOpacity onPress={() => router.back()} style={styles.backButton} accessibilityLabel="Volver">
           <Ionicons name="arrow-back" size={18} color={colors.text} />
         </TouchableOpacity>
-        <View style={[styles.icono, { backgroundColor: convocatoria?.colorFrom ?? '#7C3AED' }]}>
+        <View style={[styles.icono, { backgroundColor: '#7C3AED' }]}>
           <Ionicons name="shield" size={18} color="#fff" />
         </View>
         <View style={{ flex: 1 }}>
           <Text style={styles.title} numberOfLines={1}>{nombreClub}</Text>
           <Text style={styles.sub} numberOfLines={1}>
-            {convocatoria ? convocatoria.titulo : 'Consultas de convocatoria'}
+            Consultas con el club
           </Text>
         </View>
       </View>
 
       <ScrollView ref={scroll} style={{ flex: 1 }} contentContainerStyle={styles.mensajes}>
+        {estado.error ? <Text style={styles.cerradaTexto}>{estado.error}</Text> : null}
         {total === 0 ? (
           <View style={styles.vacio}>
             <Ionicons name="chatbubbles-outline" size={40} color={colors.textMuted} />
@@ -101,7 +100,7 @@ export default function ChatClubScreen() {
         })}
       </ScrollView>
 
-      {abierta ? (
+      {(
         <View style={[styles.inputBar, { paddingBottom: insets.bottom + 10 }]}>
           <TextInput
             style={styles.input}
@@ -120,13 +119,6 @@ export default function ChatClubScreen() {
           >
             <Ionicons name="send" size={16} color="#fff" />
           </TouchableOpacity>
-        </View>
-      ) : (
-        <View style={[styles.cerrada, { paddingBottom: insets.bottom + 12 }]}>
-          <Ionicons name="lock-closed-outline" size={14} color={colors.textMuted} />
-          <Text style={styles.cerradaTexto}>
-            La convocatoria está cerrada: ya no se pueden enviar consultas nuevas.
-          </Text>
         </View>
       )}
     </KeyboardAvoidingView>

@@ -1,236 +1,132 @@
+import * as Crypto from 'expo-crypto';
 import { useMemo, useSyncExternalStore } from 'react';
+import { AppState } from 'react-native';
+import { ApiError, apiRequest } from './api';
+import { getSession, getToken } from './auth';
 
-// Consultas sobre convocatorias de club (HU-51): el deportista le escribe al club y el club responde
-// desde una bandeja compartida por todos sus representantes.
-
-export const MAX_CONSULTA = 500;
-
+export const MAX_CONSULTA = 1000;
 export type Resultado = { ok: true } | { ok: false; motivo: string };
-
-export type Convocatoria = {
-  clubId: string;
-  clubNombre: string;
-  titulo: string;
-  descripcion: string;
-  abierta: boolean;
-  deporte?: string;
-  comuna?: string;
-  colorFrom: string;
-};
-export type DatosConvocatoria = { titulo: string; descripcion: string };
-
-export type MensajeConsulta = { id: string; de: 'postulante' | 'club'; texto: string; enviadoEn: number };
-/** Una conversación entre un postulante y un club. */
-export type Hilo = {
-  id: string;
-  clubId: string;
-  clubNombre: string;
-  postulanteId: string;
-  postulanteNombre: string;
-  mensajes: MensajeConsulta[];
-  /** Mensajes del postulante que el club aún no ha visto (bandeja del club). */
-  noLeidosClub: number;
-  /** Respuestas del club que el postulante aún no ha visto. */
-  noLeidosPostulante: number;
-};
-
-// ---------- datos de ejemplo ----------
-const COLOR_CLUB = '#7C3AED';
-// Los mismos clubes del directorio (clubs.tsx). Con el backend, las convocatorias vendrán de la API.
-const CONVOCATORIAS_DEMO: Convocatoria[] = [
-  { clubId: '1', clubNombre: 'Club Atlético Ñuñoa', deporte: 'Atletismo', comuna: 'Ñuñoa', colorFrom: '#7C3AED', abierta: true, titulo: 'Buscamos velocistas nivel intermedio-avanzado', descripcion: 'Completar el equipo de pista para la temporada.' },
-  { clubId: '2', clubNombre: 'Fútbol Amateur Maipú', deporte: 'Fútbol', comuna: 'Maipú', colorFrom: '#1F2A5C', abierta: true, titulo: 'Pruebas para el plantel de la temporada', descripcion: 'Buscamos defensas y arqueros. Pruebas abiertas los sábados.' },
-  { clubId: '3', clubNombre: 'Ciclistas La Florida', deporte: 'Ciclismo', comuna: 'La Florida', colorFrom: '#22C55E', abierta: true, titulo: 'Nuevos integrantes para salidas de ruta', descripcion: 'Salidas de 60 km los domingos. Nivel medio.' },
-];
-
-// ---------- almacén en memoria ----------
-let convocatorias: Record<string, Convocatoria> = Object.fromEntries(CONVOCATORIAS_DEMO.map((c) => [c.clubId, c]));
-let hilos: Record<string, Hilo> = {};
-let sembrados = new Set<string>();
-let contador = 1;
+export type MensajeConsulta = { id: string; de: 'postulante' | 'club'; texto: string; enviadoEn: number; propio: boolean };
+export type Hilo = { id: string; clubId: string; clubNombre: string; postulanteId: string; postulanteNombre: string; mensajes: MensajeConsulta[]; noLeidosClub: number; noLeidosPostulante: number };
+type MensajeApi = { id: number; de: 'deportista' | 'club'; texto: string; enviado_en: string; propio: boolean };
+type HiloDeportistaApi = { hilo_id: number; club_id: string; club_nombre: string; club_logo: string | null; ultimo: MensajeApi | null; no_leidos: number };
+type HiloClubApi = { hilo_id: number; deportista_id: string; deportista_nombre: string; ultimo: MensajeApi | null; no_leidos: number };
+type MensajesApi = { hilo_id: number | null; mensajes: MensajeApi[] };
+type Estado = { usuarioId: string | null; hilos: Record<string, Hilo>; cargando: boolean; error: string | null };
+let estado: Estado = { usuarioId: null, hilos: {}, cargando: false, error: null };
 const oyentes = new Set<() => void>();
+const intervalos = new Map<string, ReturnType<typeof setInterval>>();
+const intentos = new Map<string, string>();
+const cargadas = new Set<string>();
 const emitir = () => oyentes.forEach((o) => o());
 const suscribir = (o: () => void) => { oyentes.add(o); return () => { oyentes.delete(o); }; };
-export const getConvocatorias = () => convocatorias;
-export const getHilos = () => hilos;
-const idMensaje = () => `cs-${contador++}`;
-export const idHilo = (clubId: string, postulanteId: string) => `${clubId}__${postulanteId}`;
-
-// ---------- convocatorias ----------
-export function getConvocatoria(clubId: string): Convocatoria | undefined {
-  return convocatorias[clubId];
+const getEstado = () => estado;
+const motivo = (e: unknown) => e instanceof Error ? e.message : 'No se pudo conectar con el servidor.';
+const convertir = (m: MensajeApi): MensajeConsulta => ({ id: String(m.id), de: m.de === 'deportista' ? 'postulante' : 'club', texto: m.texto, enviadoEn: Date.parse(m.enviado_en), propio: m.propio });
+export const idHilo = (clubId: string, _postulanteId: string) => clubId + '__me';
+async function credenciales() {
+  const [sesion, token] = await Promise.all([getSession(), getToken()]);
+  if (!sesion || !token) throw new ApiError('Tu sesión expiró. Vuelve a iniciar sesión.', 401, '');
+  if (estado.usuarioId && estado.usuarioId !== sesion.id) { cargadas.clear(); estado = { usuarioId: sesion.id, hilos: {}, cargando: false, error: null }; }
+  return { usuarioId: sesion.id, token };
 }
-
-/** El club publica su convocatoria o edita la que tiene; queda abierta. */
-export function publicarConvocatoria(clubId: string, clubNombre: string, datos: DatosConvocatoria): Resultado {
-  const titulo = datos.titulo.trim();
-  if (titulo.length < 3) return { ok: false, motivo: 'Escribe un título de al menos 3 letras.' };
-  const previa = convocatorias[clubId];
-  convocatorias = {
-    ...convocatorias,
-    [clubId]: {
-      ...previa,
-      clubId,
-      clubNombre,
-      titulo,
-      descripcion: datos.descripcion.trim(),
-      abierta: true,
-      colorFrom: previa?.colorFrom ?? COLOR_CLUB,
-    },
-  };
-  emitir();
-  return { ok: true };
+function guardar(h: Hilo) { estado = { ...estado, hilos: { ...estado.hilos, [h.id]: h } }; emitir(); }
+export async function cargarHilosDeportista() {
+  estado = { ...estado, cargando: true, error: null }; emitir();
+  try {
+    const { usuarioId, token } = await credenciales();
+    const lista = await apiRequest<HiloDeportistaApi[]>('/clubs/consultas/me', { token });
+    if ((await getSession())?.id !== usuarioId) return;
+    const hilos = { ...estado.hilos };
+    for (const h of lista) {
+      const id = idHilo(h.club_id, usuarioId);
+      const ultimo = h.ultimo ? convertir(h.ultimo) : undefined;
+      const cambio = ultimo && hilos[id]?.mensajes.at(-1)?.id !== ultimo.id;
+      if (cambio && !intervalos.has(id)) cargadas.delete(id);
+      const mensajes = cambio && !intervalos.has(id) ? [ultimo] : hilos[id]?.mensajes ?? (ultimo ? [ultimo] : []);
+      hilos[id] = { id, clubId: h.club_id, clubNombre: h.club_nombre, postulanteId: usuarioId, postulanteNombre: '', mensajes, noLeidosClub: 0, noLeidosPostulante: h.no_leidos };
+    }
+    estado = { usuarioId, hilos, cargando: false, error: null }; emitir();
+  } catch (e) { estado = { ...estado, cargando: false, error: motivo(e) }; emitir(); throw e; }
 }
-
-/** Cierra la convocatoria: nadie puede iniciar o seguir consultando, pero el club puede responder lo pendiente. */
-export function cerrarConvocatoria(clubId: string): Resultado {
-  const c = convocatorias[clubId];
-  if (!c) return { ok: false, motivo: 'Este club no tiene convocatoria.' };
-  convocatorias = { ...convocatorias, [clubId]: { ...c, abierta: false } };
-  emitir();
-  return { ok: true };
+export async function cargarHilosClub(clubId: string, clubNombre: string) {
+  estado = { ...estado, cargando: true, error: null }; emitir();
+  try {
+    const { usuarioId, token } = await credenciales();
+    const lista = await apiRequest<HiloClubApi[]>('/clubs/' + encodeURIComponent(clubId) + '/consultas', { token });
+    if ((await getSession())?.id !== usuarioId) return;
+    const hilos = { ...estado.hilos };
+    for (const h of lista) {
+      const id = String(h.hilo_id);
+      const ultimo = h.ultimo ? convertir(h.ultimo) : undefined;
+      const cambio = ultimo && hilos[id]?.mensajes.at(-1)?.id !== ultimo.id;
+      if (cambio && !intervalos.has(id)) cargadas.delete(id);
+      const mensajes = cambio && !intervalos.has(id) ? [ultimo] : hilos[id]?.mensajes ?? (ultimo ? [ultimo] : []);
+      hilos[id] = { id, clubId, clubNombre, postulanteId: h.deportista_id, postulanteNombre: h.deportista_nombre, mensajes, noLeidosClub: h.no_leidos, noLeidosPostulante: 0 };
+    }
+    estado = { usuarioId, hilos, cargando: false, error: null }; emitir();
+  } catch (e) { estado = { ...estado, cargando: false, error: motivo(e) }; emitir(); throw e; }
 }
-
-// ---------- consultas ----------
-function validarTexto(texto: string): { ok: true; limpio: string } | { ok: false; motivo: string } {
+async function cargarMensajes(clave: string, ruta: string) {
+  const { usuarioId, token } = await credenciales();
+  const anterior = estado.hilos[clave];
+  const ultimo = cargadas.has(clave) ? anterior?.mensajes.at(-1) : undefined;
+  const query = ultimo ? '?after_id=' + encodeURIComponent(ultimo.id) + '&limit=50' : '?limit=50';
+  const data = await apiRequest<MensajesApi>(ruta + '/messages' + query, { token });
+  if ((await getSession())?.id !== usuarioId) return;
+  const mensajes = [...(cargadas.has(clave) ? anterior?.mensajes ?? [] : []), ...data.mensajes.map(convertir)].filter((m, i, arr) => arr.findIndex((x) => x.id === m.id) === i);
+  cargadas.add(clave);
+  const h: Hilo = anterior ?? { id: clave, clubId: clave.split('__')[0], clubNombre: '', postulanteId: usuarioId, postulanteNombre: '', mensajes: [], noLeidosClub: 0, noLeidosPostulante: 0 };
+  guardar({ ...h, mensajes });
+  const ultimoId = mensajes.at(-1)?.id;
+  if (intervalos.has(clave) && ultimoId) {
+    await apiRequest<void>(ruta + '/read', { method: 'POST', token, body: { hasta_id: Number(ultimoId) } });
+    guardar({ ...estado.hilos[clave], noLeidosClub: 0, noLeidosPostulante: 0 });
+  }
+}
+export function abrirConsultaDeportista(clubId: string) {
+  const clave = idHilo(clubId, '');
+  const ruta = '/clubs/' + encodeURIComponent(clubId) + '/consultas/me';
+  abrir(clave, ruta);
+}
+export function abrirConsultaClub(clubId: string, hiloId: string) {
+  abrir(hiloId, '/clubs/' + encodeURIComponent(clubId) + '/consultas/' + encodeURIComponent(hiloId));
+}
+function abrir(clave: string, ruta: string) {
+  if (intervalos.has(clave)) return;
+  const actualizar = () => { if (AppState.currentState === 'active') cargarMensajes(clave, ruta).catch((e) => { estado = { ...estado, error: motivo(e) }; emitir(); }); };
+  intervalos.set(clave, setInterval(actualizar, 6000));
+  actualizar();
+}
+export function cerrarConsulta(clave: string) { const timer = intervalos.get(clave); if (timer) clearInterval(timer); intervalos.delete(clave); }
+async function enviar(ruta: string, clave: string, texto: string): Promise<Resultado> {
   const limpio = texto.trim();
-  if (!limpio) return { ok: false, motivo: 'Escribe tu mensaje.' };
-  if (limpio.length > MAX_CONSULTA) return { ok: false, motivo: `El mensaje no puede pasar de ${MAX_CONSULTA} caracteres.` };
-  return { ok: true, limpio };
+  if (!limpio || limpio.length > MAX_CONSULTA) return { ok: false, motivo: 'Escribe entre 1 y 1000 caracteres.' };
+  const intento = clave + ':' + limpio;
+  if (!intentos.has(intento)) intentos.set(intento, Crypto.randomUUID());
+  try {
+    const { token } = await credenciales();
+    const m = await apiRequest<MensajeApi>(ruta + '/messages', { method: 'POST', token, body: { texto: limpio, client_message_id: intentos.get(intento) } });
+    intentos.delete(intento);
+    const h = estado.hilos[clave];
+    if (h) guardar({ ...h, mensajes: [...h.mensajes.filter((x) => x.id !== String(m.id)), convertir(m)] });
+    else await cargarMensajes(clave, ruta).catch(() => {});
+    return { ok: true };
+  } catch (e) { return { ok: false, motivo: motivo(e) }; }
 }
-
-function agregar(hilo: Hilo, de: MensajeConsulta['de'], texto: string, ahora: number): Hilo {
-  return {
-    ...hilo,
-    mensajes: [...hilo.mensajes, { id: idMensaje(), de, texto, enviadoEn: ahora }],
-    noLeidosClub: de === 'postulante' ? hilo.noLeidosClub + 1 : hilo.noLeidosClub,
-    noLeidosPostulante: de === 'club' ? hilo.noLeidosPostulante + 1 : hilo.noLeidosPostulante,
-  };
+export function enviarConsulta(clubId: string, _postulanteId: string, _postulanteNombre: string, texto: string) {
+  return enviar('/clubs/' + encodeURIComponent(clubId) + '/consultas/me', idHilo(clubId, ''), texto);
 }
-
-/** El postulante le escribe al club. Solo mientras la convocatoria está abierta. */
-export function enviarConsulta(clubId: string, postulanteId: string, postulanteNombre: string, texto: string, ahora: number = Date.now()): Resultado {
-  const c = convocatorias[clubId];
-  if (!c) return { ok: false, motivo: 'Este club no tiene una convocatoria.' };
-  if (!c.abierta) return { ok: false, motivo: 'La convocatoria está cerrada: ya no se reciben consultas.' };
-  const v = validarTexto(texto);
-  if (!v.ok) return v;
-  const id = idHilo(clubId, postulanteId);
-  const base: Hilo = hilos[id] ?? { id, clubId, clubNombre: c.clubNombre, postulanteId, postulanteNombre, mensajes: [], noLeidosClub: 0, noLeidosPostulante: 0 };
-  hilos = { ...hilos, [id]: agregar({ ...base, postulanteNombre }, 'postulante', v.limpio, ahora) };
-  emitir();
-  return { ok: true };
+export function responderConsulta(hiloId: string, texto: string) {
+  const h = estado.hilos[hiloId];
+  if (!h) return Promise.resolve({ ok: false, motivo: 'No encontramos esta consulta.' } as Resultado);
+  return enviar('/clubs/' + encodeURIComponent(h.clubId) + '/consultas/' + encodeURIComponent(hiloId), hiloId, texto);
 }
-
-/** El club responde en una consulta. Puede hacerlo aunque la convocatoria ya esté cerrada. */
-export function responderConsulta(hiloId: string, texto: string, ahora: number = Date.now()): Resultado {
-  const h = hilos[hiloId];
-  if (!h) return { ok: false, motivo: 'No encontramos esta consulta.' };
-  const v = validarTexto(texto);
-  if (!v.ok) return v;
-  hilos = { ...hilos, [hiloId]: agregar(h, 'club', v.limpio, ahora) };
-  emitir();
-  return { ok: true };
-}
-
-const RESPUESTAS_CLUB = [
-  'Hola, gracias por escribirnos. Las pruebas son este sábado a las 10:00 en nuestra cancha.',
-  'Sí, puedes venir a probar sin costo. Lleva ropa deportiva y agua.',
-  '¡Perfecto! Te esperamos. Cualquier otra duda, escríbenos por aquí.',
-];
-
-/** SOLO DEMO: el club de ejemplo responde. En la app real lo hace quien administra el club. */
-export function simularRespuestaClub(hiloId: string, ahora: number = Date.now()): Resultado {
-  const h = hilos[hiloId];
-  if (!h) return { ok: false, motivo: 'No encontramos esta consulta.' };
-  const delClub = h.mensajes.filter((m) => m.de === 'club').length;
-  return responderConsulta(hiloId, RESPUESTAS_CLUB[delClub % RESPUESTAS_CLUB.length], ahora);
-}
-
-export function marcarLeidoClub(hiloId: string) {
-  const h = hilos[hiloId];
-  if (!h || h.noLeidosClub === 0) return;
-  hilos = { ...hilos, [hiloId]: { ...h, noLeidosClub: 0 } };
-  emitir();
-}
-export function marcarLeidoPostulante(hiloId: string) {
-  const h = hilos[hiloId];
-  if (!h || h.noLeidosPostulante === 0) return;
-  hilos = { ...hilos, [hiloId]: { ...h, noLeidosPostulante: 0 } };
-  emitir();
-}
-
-/** SOLO DEMO: deja dos consultas de ejemplo en la bandeja del club, una sin responder y otra respondida. */
-export function sembrarDemoClub(clubId: string, clubNombre: string, ahora: number = Date.now()) {
-  if (sembrados.has(clubId)) return;
-  sembrados.add(clubId);
-  const min = 60 * 1000;
-  const matias = idHilo(clubId, 'matias');
-  const valentina = idHilo(clubId, 'valentina');
-  const nuevo = (id: string, postulanteId: string, nombre: string, mensajes: Omit<MensajeConsulta, 'id'>[], noLeidosClub: number): Hilo => ({
-    id, clubId, clubNombre, postulanteId, postulanteNombre: nombre, noLeidosClub, noLeidosPostulante: 0,
-    mensajes: mensajes.map((m) => ({ ...m, id: idMensaje() })),
-  });
-  hilos = {
-    ...hilos,
-    [matias]: nuevo(matias, 'matias', 'Matías P.', [{ de: 'postulante', texto: '¿Hay que llevar zapatillas de clavos para la prueba?', enviadoEn: ahora - 40 * min }], 1),
-    [valentina]: nuevo(valentina, 'valentina', 'Valentina S.', [
-      { de: 'postulante', texto: '¿Hasta cuándo puedo postular a la convocatoria?', enviadoEn: ahora - 5 * 60 * min },
-      { de: 'club', texto: 'Hasta el viernes de esta semana. ¡Te esperamos!', enviadoEn: ahora - 4 * 60 * min },
-    ], 0),
-  };
-  emitir();
-}
-
-// ---------- consultas derivadas ----------
-/** Hilos cuyo último mensaje es del postulante: el club todavía no responde. */
-export function sinResponder(lista: Hilo[]): Hilo[] {
-  return lista.filter((h) => h.mensajes[h.mensajes.length - 1]?.de === 'postulante');
-}
-const ultimoEn = (h: Hilo) => h.mensajes[h.mensajes.length - 1]?.enviadoEn ?? 0;
-
-/** Solo para pruebas y para reiniciar la demo. */
-export function reiniciarConsultas() {
-  convocatorias = Object.fromEntries(CONVOCATORIAS_DEMO.map((c) => [c.clubId, c]));
-  hilos = {};
-  sembrados = new Set();
-  contador = 1;
-  emitir();
-}
-
-// ---------- hooks ----------
-export function useConvocatoria(clubId: string): Convocatoria | undefined {
-  return useSyncExternalStore(suscribir, getConvocatorias, getConvocatorias)[clubId];
-}
-
-/** Clubes con convocatoria abierta, para el directorio. */
-export function useConvocatoriasAbiertas(): Convocatoria[] {
-  const todas = useSyncExternalStore(suscribir, getConvocatorias, getConvocatorias);
-  return useMemo(() => Object.values(todas).filter((c) => c.abierta), [todas]);
-}
-
-export function useHilo(hiloId: string): Hilo | undefined {
-  return useSyncExternalStore(suscribir, getHilos, getHilos)[hiloId];
-}
-
-/** Bandeja del club: todas las consultas de sus postulantes, las más recientes primero. */
-export function useHilosDelClub(clubId: string): Hilo[] {
-  const todos = useSyncExternalStore(suscribir, getHilos, getHilos);
-  return useMemo(() => Object.values(todos).filter((h) => h.clubId === clubId).sort((a, b) => ultimoEn(b) - ultimoEn(a)), [todos, clubId]);
-}
-
-/** Consultas que hizo una persona a distintos clubes, para su lista de Chats. */
-export function useHilosDePostulante(postulanteId: string): Hilo[] {
-  const todos = useSyncExternalStore(suscribir, getHilos, getHilos);
-  return useMemo(() => Object.values(todos).filter((h) => h.postulanteId === postulanteId).sort((a, b) => ultimoEn(b) - ultimoEn(a)), [todos, postulanteId]);
-}
-
-/** Consultas del club sin responder (para el contador de su panel). */
-export function useConsultasPendientes(clubId: string): number {
-  return sinResponder(useHilosDelClub(clubId)).length;
-}
-
-/** Respuestas de clubes que el postulante aún no ve (para el globo de Chats). */
-export function useNoLeidosConsultas(postulanteId: string): number {
-  return useHilosDePostulante(postulanteId).reduce((n, h) => n + h.noLeidosPostulante, 0);
-}
+export function reiniciarConsultas() { intervalos.forEach(clearInterval); intervalos.clear(); intentos.clear(); cargadas.clear(); estado = { usuarioId: null, hilos: {}, cargando: false, error: null }; emitir(); }
+export function useEstadoConsultas() { return useSyncExternalStore(suscribir, getEstado, getEstado); }
+export function useHilo(id: string) { return useEstadoConsultas().hilos[id]; }
+export function useHilosDelClub(clubId: string) { const hilos = useEstadoConsultas().hilos; return useMemo(() => Object.values(hilos).filter((h) => h.clubId === clubId && !h.id.endsWith('__me')).sort((a,b) => (b.mensajes.at(-1)?.enviadoEn ?? 0) - (a.mensajes.at(-1)?.enviadoEn ?? 0)), [hilos,clubId]); }
+export function useHilosDePostulante(_id: string) { const hilos = useEstadoConsultas().hilos; return useMemo(() => Object.values(hilos).filter((h) => h.id.endsWith('__me')).sort((a,b) => (b.mensajes.at(-1)?.enviadoEn ?? 0) - (a.mensajes.at(-1)?.enviadoEn ?? 0)), [hilos]); }
+export function useConsultasPendientes(clubId: string) { return useHilosDelClub(clubId).filter((h) => h.mensajes.at(-1)?.de === 'postulante').length; }
+export function useNoLeidosConsultas(id: string) { return useHilosDePostulante(id).reduce((n,h) => n + h.noLeidosPostulante, 0); }
+export function sinResponder(lista: Hilo[]) { return lista.filter((h) => h.mensajes.at(-1)?.de === 'postulante'); }
