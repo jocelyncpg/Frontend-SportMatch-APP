@@ -13,20 +13,14 @@ import {
   useConsultasPendientes,
   useConvocatoria,
 } from '../../services/consultas';
+import { resolverPostulacion, sembrarDemoPostulaciones, usePostulacionesDelClub } from '../../services/postulaciones';
 import { PASSWORD_MAX, passwordRules, validatePassword, validatePasswordMatch } from '../../services/validators';
 import { Colors, useAppTheme } from '../../theme/ThemeContext';
-
-type Postulante = { id: string; name: string; sport: string; level: string; colorFrom: string; fotoUri?: string | null };
 
 // DATOS DE EJEMPLO: el nombre del club sale de la cuenta con la que se inició sesión; este texto solo se usa
 // si no hay sesión. La foto del club y el resto del perfil vendrán del backend (HU-30).
 const NOMBRE_CLUB_DEMO = 'Club de Atletismo';
 const CLUB_ID_DEMO = 'club-demo';
-
-const POSTULANTES_INICIALES: Postulante[] = [
-  { id: '1', name: 'Matías P.', sport: 'Atletismo', level: 'Avanzado', colorFrom: '#7C3AED' },
-  { id: '2', name: 'Valentina S.', sport: 'Atletismo', level: 'Intermedio', colorFrom: '#22C55E' },
-];
 
 export default function ClubHomeScreen() {
   const { colors } = useAppTheme();
@@ -36,16 +30,17 @@ export default function ClubHomeScreen() {
 
   const [fotoClub, setFotoClub] = useState<string | null>(null);
   const [tab, setTab] = useState<'postulantes' | 'confirmados'>('postulantes');
-  const [postulantes, setPostulantes] = useState(POSTULANTES_INICIALES);
-  const [confirmados, setConfirmados] = useState<Postulante[]>([]);
 
   // Cuenta con la que se inició sesión (representante del club).
   const [sesion, setSesion] = useState<Usuario | null>(null);
   useEffect(() => {
     getSession().then((s) => {
       setSesion(s);
-      // DEMO: deja dos consultas de ejemplo en la bandeja de este club (HU-51).
-      sembrarDemoClub(s?.clubId ?? CLUB_ID_DEMO, s?.clubNombre ?? NOMBRE_CLUB_DEMO);
+      // DEMO: deja consultas y postulaciones de ejemplo en el panel de este club (HU-51 y HU-34).
+      const id = s?.clubId ?? CLUB_ID_DEMO;
+      const nombre = s?.clubNombre ?? NOMBRE_CLUB_DEMO;
+      sembrarDemoClub(id, nombre);
+      sembrarDemoPostulaciones(id, nombre);
     });
   }, []);
   const nombreClub = sesion?.clubNombre ?? NOMBRE_CLUB_DEMO;
@@ -55,6 +50,11 @@ export default function ClubHomeScreen() {
   const convocatoriaGuardada = useConvocatoria(clubId);
   const convocatoria = convocatoriaGuardada?.abierta ? convocatoriaGuardada : null;
   const consultasPendientes = useConsultasPendientes(clubId);
+
+  // Las postulaciones viven en services/postulaciones.ts: llegan desde el perfil del club del deportista (HU-33).
+  const postulaciones = usePostulacionesDelClub(clubId);
+  const postulantes = useMemo(() => postulaciones.filter((p) => p.estado === 'pendiente'), [postulaciones]);
+  const confirmados = useMemo(() => postulaciones.filter((p) => p.estado === 'aceptada'), [postulaciones]);
 
   // Cambio de contraseña
   const [passModal, setPassModal] = useState(false);
@@ -173,16 +173,24 @@ export default function ClubHomeScreen() {
     cerrarConvocatoriaEnAlmacen(clubId);
   }
 
-  // ---------- Postulantes ----------
+  // ---------- Postulantes (HU-34) ----------
   function confirmar(id: string) {
-    const persona = postulantes.find((p) => p.id === id);
-    if (!persona) return;
-    setConfirmados((prev) => [...prev, persona]);
-    setPostulantes((prev) => prev.filter((p) => p.id !== id));
+    const r = resolverPostulacion(id, 'aceptada');
+    if (!r.ok) Alert.alert('No se pudo aceptar', r.motivo);
   }
 
-  function rechazar(id: string) {
-    setPostulantes((prev) => prev.filter((p) => p.id !== id));
+  function rechazar(id: string, nombre: string) {
+    Alert.alert('Rechazar postulación', `¿Quieres rechazar la postulación de ${nombre}? No podrá volver a postular a esta convocatoria.`, [
+      { text: 'Cancelar', style: 'cancel' },
+      {
+        text: 'Rechazar',
+        style: 'destructive',
+        onPress: () => {
+          const r = resolverPostulacion(id, 'rechazada');
+          if (!r.ok) Alert.alert('No se pudo rechazar', r.motivo);
+        },
+      },
+    ]);
   }
 
   const lista = tab === 'postulantes' ? postulantes : confirmados;
@@ -312,25 +320,25 @@ export default function ClubHomeScreen() {
           </TouchableOpacity>
         </View>
 
-        {lista.map((persona) => (
-          <View key={persona.id} style={styles.card}>
+        {lista.map((p) => (
+          <View key={p.id} style={styles.card}>
             <Avatar
-              name={persona.name}
-              colorFrom={persona.colorFrom}
-              uri={persona.fotoUri}
+              name={p.postulante.nombre}
+              colorFrom={p.postulante.colorFrom}
+              uri={p.postulante.fotoUri}
               style={styles.avatar}
               fontSize={16}
             />
             <View style={styles.cardInfo}>
-              <Text style={styles.cardName}>{persona.name}</Text>
-              <Text style={styles.cardMeta}>{persona.sport} · {persona.level}</Text>
+              <Text style={styles.cardName}>{p.postulante.nombre}</Text>
+              <Text style={styles.cardMeta}>{p.postulante.deporte} · {p.postulante.nivel}</Text>
             </View>
             {tab === 'postulantes' && (
               <View style={styles.actions}>
-                <TouchableOpacity style={styles.rejectButton} onPress={() => rechazar(persona.id)}>
+                <TouchableOpacity style={styles.rejectButton} onPress={() => rechazar(p.id, p.postulante.nombre)} accessibilityLabel={`Rechazar a ${p.postulante.nombre}`}>
                   <Ionicons name="close" size={16} color={colors.textMuted} />
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.acceptButton} onPress={() => confirmar(persona.id)}>
+                <TouchableOpacity style={styles.acceptButton} onPress={() => confirmar(p.id)} accessibilityLabel={`Aceptar a ${p.postulante.nombre}`}>
                   <Ionicons name="checkmark" size={16} color="#fff" />
                 </TouchableOpacity>
               </View>

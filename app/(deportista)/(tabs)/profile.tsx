@@ -478,7 +478,8 @@ export default function ProfileScreen() {
             </View>
             <View style={styles.infoTextos}>
               <Text style={styles.infoTitulo}>Planes y beneficios</Text>
-              <Text numberOfLines={1} style={styles.infoValor}>Tu plan: {nombreDelPlan(planActual)}</Text>            </View>
+              <Text numberOfLines={1} style={styles.infoValor}>Tu plan: {nombreDelPlan(planActual)}</Text>
+            </View>
             <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
           </TouchableOpacity>
         </View>

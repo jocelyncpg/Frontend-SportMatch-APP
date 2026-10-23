@@ -1,9 +1,11 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { YO } from '../../../services/actividades';
+import { NOMBRES_NIVEL, YO } from '../../../services/actividades';
+import { Usuario, getSession } from '../../../services/auth';
 import { idHilo, useConvocatoria, useHilo } from '../../../services/consultas';
+import { PerfilPostulante, idPostulacion, postular, retirarPostulacion, usePostulacion } from '../../../services/postulaciones';
 import { Colors, useAppTheme } from '../../../theme/ThemeContext';
 
 export default function ClubProfileScreen() {
@@ -12,7 +14,12 @@ export default function ClubProfileScreen() {
 
   const { id, name, sport, comuna, colorFrom } = useLocalSearchParams<{ id: string; name: string; sport: string; comuna: string; colorFrom: string }>();
   const clubId = id ?? '';
-  const [postulado, setPostulado] = useState(false);
+
+  // Cuenta con la que se inició sesión: de ahí sale el nombre y el nivel con que el club ve tu postulación.
+  const [sesion, setSesion] = useState<Usuario | null>(null);
+  useEffect(() => {
+    getSession().then(setSesion);
+  }, []);
 
   // La convocatoria la publica el club desde su panel (HU-51); aquí se ve la versión actual.
   const convocatoria = useConvocatoria(clubId);
@@ -20,14 +27,73 @@ export default function ClubProfileScreen() {
   const hilo = useHilo(idHilo(clubId, YO));
   const noLeidos = hilo?.noLeidosPostulante ?? 0;
 
-  function postular() {
-    setPostulado(true);
+  // Postulación (HU-33): una retirada se trata como si no hubiera postulado.
+  const postulacion = usePostulacion(clubId, YO);
+  const estado = postulacion && postulacion.estado !== 'retirada' ? postulacion.estado : null;
+
+  function miPerfil(): PerfilPostulante {
+    const deportes = sesion?.deportes ?? [];
+    const delClub = deportes.find((d) => d.nombre === sport) ?? deportes[0];
+    return {
+      id: YO,
+      nombre: sesion ? `${sesion.nombre} ${sesion.apellidoPaterno}`.trim() : 'Postulante',
+      deporte: sport || delClub?.nombre || 'Sin deporte',
+      nivel: delClub ? NOMBRES_NIVEL[delClub.nivel] ?? 'Sin nivel' : 'Sin nivel',
+      colorFrom: colorFrom ?? '#7C3AED',
+      fotoUri: sesion?.fotoPerfil ?? null,
+    };
+  }
+
+  function enviarPostulacion() {
+    const r = postular(clubId, miPerfil());
+    if (!r.ok) {
+      Alert.alert('No se pudo postular', r.motivo);
+      return;
+    }
     Alert.alert('Postulación enviada', 'El club revisará tu perfil y te avisaremos con el resultado.');
+  }
+
+  function confirmarRetiro() {
+    Alert.alert('Retirar postulación', '¿Quieres retirar tu postulación a esta convocatoria?', [
+      { text: 'Cancelar', style: 'cancel' },
+      {
+        text: 'Retirar',
+        style: 'destructive',
+        onPress: () => {
+          const r = retirarPostulacion(idPostulacion(clubId, YO));
+          if (!r.ok) Alert.alert('No se pudo retirar', r.motivo);
+        },
+      },
+    ]);
   }
 
   function abrirConsultas() {
     router.push({ pathname: '/(deportista)/chat-club/[id]', params: { id: clubId } } as never);
   }
+
+  // Resultado de tu postulación (se ve aunque la convocatoria ya esté cerrada).
+  const bloqueEstado =
+    estado === 'pendiente' ? (
+      <>
+        <View style={styles.pendienteBadge}>
+          <Ionicons name="time-outline" size={16} color={colors.textMuted} />
+          <Text style={styles.pendienteText}>Postulación enviada · en revisión</Text>
+        </View>
+        <TouchableOpacity onPress={confirmarRetiro} style={styles.retirarButton} accessibilityLabel="Retirar postulación">
+          <Text style={styles.retirarText}>Retirar postulación</Text>
+        </TouchableOpacity>
+      </>
+    ) : estado === 'aceptada' ? (
+      <View style={styles.postuladoBadge}>
+        <Ionicons name="checkmark-circle" size={16} color={colors.success} />
+        <Text style={styles.postuladoText}>¡El club aceptó tu postulación!</Text>
+      </View>
+    ) : estado === 'rechazada' ? (
+      <View style={styles.rechazadoBadge}>
+        <Ionicons name="close-circle" size={16} color={colors.danger} />
+        <Text style={styles.rechazadoText}>El club no aceptó tu postulación</Text>
+      </View>
+    ) : null;
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
@@ -57,25 +123,25 @@ export default function ClubProfileScreen() {
           <Text style={styles.convocatoriaNombre}>{convocatoria.titulo}</Text>
           {convocatoria.descripcion ? <Text style={styles.convocatoriaText}>{convocatoria.descripcion}</Text> : null}
 
-          {postulado ? (
-            <View style={styles.postuladoBadge}>
-              <Ionicons name="checkmark-circle" size={16} color={colors.success} />
-              <Text style={styles.postuladoText}>Postulación enviada</Text>
-            </View>
-          ) : (
-            <TouchableOpacity style={styles.postularButton} onPress={postular}>
+          {bloqueEstado ?? (
+            <TouchableOpacity style={styles.postularButton} onPress={enviarPostulacion}>
               <Text style={styles.postularButtonText}>Postular a esta convocatoria</Text>
             </TouchableOpacity>
           )}
         </View>
       ) : (
-        <View style={styles.convocatoria}>
-          <View style={styles.convocatoriaHeader}>
-            <Ionicons name="lock-closed-outline" size={16} color={colors.textMuted} />
-            <Text style={styles.convocatoriaTitle}>Sin convocatoria abierta</Text>
+        <>
+          <View style={styles.convocatoria}>
+            <View style={styles.convocatoriaHeader}>
+              <Ionicons name="lock-closed-outline" size={16} color={colors.textMuted} />
+              <Text style={styles.convocatoriaTitle}>Sin convocatoria abierta</Text>
+            </View>
+            <Text style={[styles.convocatoriaText, !bloqueEstado && styles.sinMargen]}>
+              Este club no tiene una convocatoria abierta por ahora.
+            </Text>
+            {bloqueEstado}
           </View>
-          <Text style={styles.convocatoriaText}>Este club no tiene una convocatoria abierta por ahora.</Text>
-        </View>
+        </>
       )}
 
       {/* HU-51: canal de consultas con el club */}
@@ -118,10 +184,17 @@ const makeStyles = (c: Colors) =>
     convocatoriaTitle: { color: c.text, fontSize: 13, fontWeight: '700' },
     convocatoriaNombre: { color: c.text, fontSize: 13.5, fontWeight: '700', marginBottom: 4 },
     convocatoriaText: { color: c.textMuted, fontSize: 12, lineHeight: 18, marginBottom: 14 },
+    sinMargen: { marginBottom: 0 },
     postularButton: { backgroundColor: c.primary, borderRadius: 12, paddingVertical: 13, alignItems: 'center' },
     postularButtonText: { color: '#fff', fontSize: 13, fontWeight: '700' },
     postuladoBadge: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: c.successBg, borderRadius: 12, paddingVertical: 12, justifyContent: 'center' },
     postuladoText: { color: c.success, fontSize: 13, fontWeight: '700' },
+    pendienteBadge: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: c.chip, borderRadius: 12, paddingVertical: 12, justifyContent: 'center' },
+    pendienteText: { color: c.textMuted, fontSize: 13, fontWeight: '700' },
+    rechazadoBadge: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: c.dangerBg, borderRadius: 12, paddingVertical: 12, justifyContent: 'center' },
+    rechazadoText: { color: c.danger, fontSize: 13, fontWeight: '700' },
+    retirarButton: { alignItems: 'center', paddingTop: 12 },
+    retirarText: { color: c.danger, fontSize: 12, fontWeight: '700' },
     consultaButton: { width: '100%', flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: c.card, borderWidth: 1, borderColor: c.border, borderRadius: 14, padding: 12 },
     consultaIcono: { width: 36, height: 36, borderRadius: 11, backgroundColor: c.chip, alignItems: 'center', justifyContent: 'center' },
     consultaTextos: { flex: 1 },
