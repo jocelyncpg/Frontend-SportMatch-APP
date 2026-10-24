@@ -13,7 +13,7 @@ import { codigoDeporte, nombreDeporte } from './deportes';
 export const YO = 'yo';
 
 export type EstadoActividad = 'abierta' | 'llena' | 'vencida' | 'cancelada';
-export type EstadoPostulacion = 'pendiente' | 'aprobada' | 'rechazada';
+export type EstadoPostulacion = 'pendiente' | 'aprobada' | 'rechazada' | 'removed';
 export type MiRelacion = 'organizador' | EstadoPostulacion | null;
 export type Resultado = { ok: true } | { ok: false; motivo: string };
 export type Postulante = { id: string; nombre: string; estado: EstadoPostulacion; mensaje: string };
@@ -224,7 +224,7 @@ function limpiar(d: DatosActividad): DatosActividad {
 
 /** Lista de postulantes (sin contarte a ti), con las pendientes primero. */
 export function postulantes(a: Actividad): Postulante[] {
-  const orden: Record<EstadoPostulacion, number> = { pendiente: 0, aprobada: 1, rechazada: 2 };
+  const orden: Record<EstadoPostulacion, number> = { pendiente: 0, aprobada: 1, rechazada: 2, removed: 3 };
   return a.postulantesRecibidos
     .map(({ postulacionId: _id, ...p }) => p)
     .sort((x, y) => orden[x.estado] - orden[y.estado] || x.nombre.localeCompare(y.nombre));
@@ -243,11 +243,11 @@ type ActividadApi = {
 type PaginaApi = { items: ActividadApi[]; next_cursor: string | null };
 type HistorialApi = { count: number; items: (ActividadApi & { role: 'organizer' | 'participant' })[] };
 type ParticipanteApi = DeportistaApi & { role: 'organizer' | 'participant' };
-type EstadoApi = 'pending' | 'accepted' | 'rejected';
+type EstadoApi = 'pending' | 'accepted' | 'rejected' | 'removed';
 type PostulacionApi = { id: string; activity_id: string; status: EstadoApi; created_at: string; decided_at: string | null };
 type PostulacionRecibidaApi = PostulacionApi & { applicant: DeportistaApi };
 
-const ESTADOS: Record<EstadoApi, EstadoPostulacion> = { pending: 'pendiente', accepted: 'aprobada', rejected: 'rechazada' };
+const ESTADOS: Record<EstadoApi, EstadoPostulacion> = { pending: 'pendiente', accepted: 'aprobada', rejected: 'rechazada', removed: 'removed' };
 const SEPARADOR_COMUNA = ' · ';
 const PREFIJO_REQUISITOS = 'Requisitos: ';
 const PATRON_NIVEL = /^Nivel mínimo: .* \(([1-5])\/5\)$/;
@@ -658,4 +658,18 @@ export async function cargarParticipantes(id: string): Promise<Participante[]> {
     id: p.user_id, nombre: `${p.nombre} ${p.apellido_inicial}`,
     rol: p.role === 'organizer' ? 'organizador' : 'participante',
   }));
+}
+
+/** El organizador retira a una persona aceptada antes del inicio. */
+export async function sacarParticipante(actividadId: string, usuarioId: string): Promise<Resultado> {
+  try {
+    const { token } = await credenciales();
+    await apiRequest<void>(`/activities/${encodeURIComponent(actividadId)}/participants/${encodeURIComponent(usuarioId)}`, {
+      method: 'DELETE', token,
+    });
+    await cargarActividad(actividadId);
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, motivo: mensajeDe(e, 'No se pudo sacar al participante.') };
+  }
 }

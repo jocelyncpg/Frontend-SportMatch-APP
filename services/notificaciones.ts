@@ -3,18 +3,21 @@ import { apiRequest } from './api';
 import { getSession, getToken } from './auth';
 import { avisarCambio } from './sondeo';
 
-export type TipoNotificacion = 'solicitud' | 'match' | 'mensaje' | 'calificacion' | 'actividad';
+export type TipoNotificacion = 'solicitud' | 'match' | 'mensaje' | 'calificacion' | 'actividad' | 'canal';
 export type DestinoNotificacion = {
   screen?: string;
   activityId?: string;
   matchId?: string;
   clubId?: string;
   hiloId?: string;
+  canalId?: string;
 };
 export function avisarDestino(data: DestinoNotificacion) {
   if (data.screen === 'activity_chat') avisarCambio('activity_chat', data.activityId);
   if (data.screen === 'consulta') avisarCambio('consulta', data.clubId);
   if (data.screen === 'consulta_club') avisarCambio('consulta_club', data.hiloId);
+  if (data.screen === 'canal_inactivo') avisarCambio('canal_inactivo', data.canalId);
+  if (data.screen === 'canal') avisarCambio('canal', data.canalId);
   if (data.screen === 'chat') avisarCambio('chat', data.matchId);
 }
 export type Notificacion = {

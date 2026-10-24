@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { cargarChats } from '../services/chat';
 import { cargarChatsGrupales } from '../services/chatGrupal';
 import { cargarHilosDeportista } from '../services/consultas';
+import { cargarCanalesDeportista } from '../services/canales';
 import { cargarBloqueados } from '../services/reportes';
 import { alCambiar, crearSondeo } from '../services/sondeo';
 /**
@@ -12,12 +13,12 @@ import { alCambiar, crearSondeo } from '../services/sondeo';
 export function useChatsRefresh() {
   useEffect(() => {
     const sondeo = crearSondeo('listas:deportista', async () => {
-      const resultados = await Promise.allSettled([cargarChats(), cargarChatsGrupales(), cargarHilosDeportista()]);
+      const resultados = await Promise.allSettled([cargarChats(), cargarChatsGrupales(), cargarHilosDeportista(), cargarCanalesDeportista()]);
       return resultados.some((resultado) => resultado.status === 'fulfilled' && resultado.value);
     }, { minMs: 10000, maxMs: 60000, factor: 1.5 });
     sondeo.iniciar();
     const quitarAviso = alCambiar(({ tipo }) => {
-      if (['activity_chat', 'consulta', 'consulta_club', 'chat', 'listas'].includes(tipo)) sondeo.ahora();
+      if (['activity_chat', 'consulta', 'consulta_club', 'canal', 'canales', 'chat', 'listas'].includes(tipo)) sondeo.ahora();
     });
     // Para marcar "Bloqueado" en la lista; cambia solo cuando bloqueas o desbloqueas desde la app.
     cargarBloqueados().catch(() => { });

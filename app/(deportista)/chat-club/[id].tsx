@@ -39,6 +39,7 @@ export default function ChatClubScreen() {
   const club = useClub(clubId);
   const estado = useEstadoConsultas();
   const hilo = useHilo(hiloId);
+  const sinPermiso = estado.error?.includes('Solo puedes escribir a clubes a los que postulaste.') ?? false;
   const nombreClub = club?.nombre ?? hilo?.clubNombre ?? 'Club';
   const [texto, setTexto] = useState('');
   const scroll = useRef<ScrollView>(null);
@@ -103,7 +104,7 @@ export default function ChatClubScreen() {
           );
         })}
       </ScrollView>
-      {(
+      {!sinPermiso ? (
         <View style={[styles.inputBar, { paddingBottom: insets.bottom + 10 }]}>
           <TextInput
             style={styles.input}
@@ -123,7 +124,7 @@ export default function ChatClubScreen() {
             <Ionicons name="send" size={16} color="#fff" />
           </TouchableOpacity>
         </View>
-      )}
+      ) : null}
     </KeyboardAvoidingView>
   );
 }

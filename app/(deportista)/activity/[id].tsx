@@ -30,6 +30,7 @@ import {
   puedePostular,
   relacionConActividad,
   responderPostulacion,
+  sacarParticipante,
   retirarse,
   useActividades,
   visualDeporte,
@@ -146,6 +147,15 @@ export default function ActividadDetalleScreen() {
     }
     Alert.alert('Postulación enviada', 'Quien organiza revisará tu postulación y te avisará su decisión.');
   }
+  function confirmarSacar(p: { id: string; nombre: string }) {
+    Alert.alert('Sacar participante', 'Ya no podrá volver a postular a esta actividad', [
+      { text: 'Cancelar', style: 'cancel' },
+      { text: 'Sacar', style: 'destructive', onPress: async () => {
+        const r = await sacarParticipante(id, p.id);
+        if (!r.ok) Alert.alert('No se pudo sacar', r.motivo);
+      } },
+    ]);
+  }
   function confirmarRetiro() {
     if (!a) return;
     const aprobada = relacion === 'aprobada';
@@ -253,6 +263,7 @@ export default function ActividadDetalleScreen() {
       );
     }
     if (relacion === 'rechazada') return <Text style={styles.nota}>Tu postulación no fue aprobada.</Text>;
+    if (relacion === 'removed') return <Text style={styles.nota}>El organizador te retiró de esta actividad</Text>;
     if (verificacion.ok) {
       return (
         <TouchableOpacity style={styles.pillPrimario} onPress={abrirPostular}>
@@ -368,9 +379,13 @@ export default function ActividadDetalleScreen() {
                       <Ionicons name="checkmark" size={16} color="#fff" />
                     </TouchableOpacity>
                   </View>
+                ) : p.estado === 'aprobada' && activa ? (
+                  <TouchableOpacity style={styles.btnRechazar} onPress={() => confirmarSacar(p)} accessibilityLabel={`Sacar a ${p.nombre}`}>
+                    <Text style={{ color: colors.danger, fontSize: 12, fontWeight: '700' }}>Sacar</Text>
+                  </TouchableOpacity>
                 ) : (
                   <Text style={[styles.estadoPost, p.estado === 'aprobada' && { color: colors.success }]}>
-                    {p.estado === 'aprobada' ? 'Aprobado' : p.estado === 'rechazada' ? 'Rechazado' : 'Pendiente'}
+                    {p.estado === 'aprobada' ? 'Aprobado' : p.estado === 'rechazada' ? 'Rechazado' : p.estado === 'removed' ? 'Retirado' : 'Pendiente'}
                   </Text>
                 )}
               </View>

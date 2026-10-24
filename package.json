@@ -14,7 +14,8 @@
     "test:notifications": "node --test scripts/test-notifications.cjs",
     "test:reports": "node --test scripts/test-reports.cjs",
     "test:clubes-chat": "node --test scripts/test-clubes-chat.cjs",
-    "test:sondeo": "node --test scripts/test-sondeo.cjs"
+    "test:sondeo": "node --test scripts/test-sondeo.cjs",
+    "test:canales": "node --test scripts/test-canales.cjs"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.3",

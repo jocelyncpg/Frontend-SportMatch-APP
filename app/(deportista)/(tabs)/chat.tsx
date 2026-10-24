@@ -8,6 +8,7 @@ import { YO, visualDeporte } from '../../../services/actividades';
 import { horaCorta, useChats, useSilenciados } from '../../../services/chat';
 import { ChatGrupal, ultimoMensajeGrupal, useChatsGrupales, useEstadoChatGrupal } from '../../../services/chatGrupal';
 import { Hilo, useEstadoConsultas, useHilosDePostulante } from '../../../services/consultas';
+import { CanalDeportista, useCanales } from '../../../services/canales';
 import { Persona, cargarMatching, useMatches } from '../../../services/matchStore';
 import { useBloqueados } from '../../../services/reportes';
 import { useMatchingRefresh } from '../../../hooks/useMatchingRefresh';
@@ -28,6 +29,11 @@ type Item =
     tipo: 'club';
     hilo: Hilo;
     orden: number
+  }
+  | {
+    tipo: 'canal';
+    canal: CanalDeportista;
+    orden: number
   };
 export default function ChatListScreen() {
   useFocusEffect(useCallback(() => { avisarCambio('listas'); }, []));
@@ -41,6 +47,7 @@ export default function ChatListScreen() {
   const bloqueados = useBloqueados();
   const grupos = useChatsGrupales();
   const consultas = useHilosDePostulante(YO);
+  const canales = useCanales().deportista;
   const estadoGrupos = useEstadoChatGrupal();
   const estadoConsultas = useEstadoConsultas();
   /** Último mensaje: el de /chats (con no leídos) o, si aún no carga, el que trae el match. */
@@ -75,9 +82,12 @@ export default function ChatListScreen() {
       hilo,
       orden: hilo.mensajes[hilo.mensajes.length - 1]?.enviadoEn ?? 0,
     }));
-    return [...nuevos, ...[...conMensajes, ...deGrupos, ...deClubes].sort((a, b) => b.orden - a.orden)];
+    const deCanales: Item[] = canales.map((canal) => ({
+      tipo: 'canal', canal, orden: canal.ultimo?.enviadoEn ?? 0,
+    }));
+    return [...nuevos, ...[...conMensajes, ...deGrupos, ...deClubes, ...deCanales].sort((a, b) => b.orden - a.orden)];
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [confirmados, resumenes, grupos, consultas]);
+  }, [confirmados, resumenes, grupos, consultas, canales]);
   function abrirChat(persona: Persona) {
     if (!persona.matchId) return;
     router.push({
@@ -90,6 +100,9 @@ export default function ChatListScreen() {
   }
   function abrirClub(h: Hilo) {
     router.push({ pathname: '/(deportista)/chat-club/[id]', params: { id: h.clubId } } as never);
+  }
+  function abrirCanal(c: CanalDeportista) {
+    router.push({ pathname: '/(deportista)/canal/[id]', params: { id: c.id } } as never);
   }
   function tarjetaPersona(persona: Persona) {
     const ultimo = ultimoDe(persona);
@@ -223,6 +236,21 @@ export default function ChatListScreen() {
       </TouchableOpacity>
     );
   }
+  function tarjetaCanal(c: CanalDeportista) {
+    return (
+      <TouchableOpacity key={`canal-${c.id}`} style={styles.card} onPress={() => abrirCanal(c)}>
+        <View style={[styles.grupoIcono, { backgroundColor: '#0F766E' }]}><Ionicons name="megaphone" size={20} color="#fff" /></View>
+        <View style={styles.cardInfo}>
+          <Text style={styles.cardName} numberOfLines={1}>{c.nombre} · {c.clubNombre}</Text>
+          <Text style={[styles.cardMessage, c.noLeidos > 0 && styles.cardMessageSinLeer]} numberOfLines={1}>
+            {c.ultimo ? `${c.ultimo.autorNombre}: ${c.ultimo.texto}` : 'Canal del club'}
+          </Text>
+        </View>
+        {c.noLeidos > 0 ? <View style={styles.contador}><Text style={styles.contadorTexto}>{c.noLeidos > 9 ? '9+' : c.noLeidos}</Text></View> : null}
+        {c.silenciado ? <Ionicons name="notifications-off-outline" size={13} color={colors.textMuted} /> : null}
+      </TouchableOpacity>
+    );
+  }
   return (
     <View style={[styles.container, { paddingTop: insets.top + 12 }]}>
       <View style={styles.topbar}>
@@ -240,6 +268,7 @@ export default function ChatListScreen() {
         {items.map((it) => {
           if (it.tipo === 'grupo') return tarjetaGrupo(it.grupo);
           if (it.tipo === 'club') return tarjetaClub(it.hilo);
+          if (it.tipo === 'canal') return tarjetaCanal(it.canal);
           return tarjetaPersona(it.persona);
         })}
         {!matchingError && items.length === 0 && (
