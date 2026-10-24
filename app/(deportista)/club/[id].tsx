@@ -3,7 +3,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { YO } from '../../../services/actividades';
-import { idHilo, useHilo } from '../../../services/consultas';
+import { idHilo, puedeConsultarClub, useHilo } from '../../../services/consultas';
 import { cargarClub, useClub } from '../../../services/clubes';
 import { listarConvocatorias, type Convocatoria } from '../../../services/convocatorias';
 import { Colors, useAppTheme } from '../../../theme/ThemeContext';
@@ -20,6 +20,7 @@ export default function ClubProfileScreen() {
   const [pagina, setPagina] = useState(1);
   const [total, setTotal] = useState(0);
   const [errorConvocatorias, setErrorConvocatorias] = useState('');
+  const [puedeEscribir, setPuedeEscribir] = useState(false);
   const cargarConvocatorias = useCallback(async () => {
     try {
       const data = await listarConvocatorias(clubId);
@@ -41,6 +42,7 @@ export default function ClubProfileScreen() {
       setError(e instanceof Error ? e.message : 'No se pudo cargar el club.');
     });
     cargarConvocatorias();
+    puedeConsultarClub(clubId).then(() => setPuedeEscribir(true)).catch(() => setPuedeEscribir(false));
   }, [clubId, cargarConvocatorias]);
   async function cargarMas() {
     try {
@@ -112,7 +114,7 @@ export default function ClubProfileScreen() {
         ) : null}
       </View>
       {/* HU-51: canal de consultas con el club */}
-      {club || hilo ? (
+      {hilo || puedeEscribir ? (
         <TouchableOpacity
           style={styles.consultaButton}
           onPress={abrirConsultas}
@@ -123,7 +125,7 @@ export default function ClubProfileScreen() {
             <Ionicons name="chatbubbles-outline" size={18} color={colors.accent} />
           </View>
           <View style={styles.consultaTextos}>
-            <Text style={styles.consultaTitulo}>{hilo ? 'Mis consultas al club' : 'Hacer una consulta'}</Text>
+            <Text style={styles.consultaTitulo}>{hilo ? 'Mis consultas al club' : 'Escribir al club'}</Text>
             <Text style={styles.consultaSub}>
               {hilo ? 'Revisa las respuestas o escribe de nuevo' : 'Escribe al club'}
             </Text>

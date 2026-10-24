@@ -115,6 +115,8 @@ export async function cargarHilosDeportista(): Promise<boolean> {
         || previo?.noLeidosPostulante !== h.no_leidos;
     }) || lista.length !== Object.keys(estado.hilos).filter((id) => id.endsWith('__me')).length;
     const hilos = { ...estado.hilos };
+    const idsActivos = new Set(lista.map((h) => idHilo(h.club_id, usuarioId)));
+    Object.keys(hilos).filter((id) => id.endsWith('__me') && !idsActivos.has(id)).forEach((id) => delete hilos[id]);
     for (const h of lista) {
       const id = idHilo(h.club_id, usuarioId);
       const ultimo = h.ultimo ? convertir(h.ultimo) : undefined;
@@ -187,6 +189,33 @@ export async function cargarHilosClub(clubId: string, clubNombre: string): Promi
     emitir();
     throw e;
   }
+}
+
+/** El club inicia el hilo al contactar a un postulante activo. */
+export async function iniciarConsultaClub(clubId: string, postulanteId: string, texto: string) {
+  const limpio = texto.trim();
+  if (!limpio || limpio.length > MAX_CONSULTA) return { ok: false as const, motivo: 'Escribe entre 1 y 1000 caracteres.' };
+  const clave = `inicio:${clubId}:${postulanteId}:${limpio}`;
+  if (!intentos.has(clave)) intentos.set(clave, Crypto.randomUUID());
+  try {
+    const { token } = await credenciales();
+    const respuesta = await apiRequest<{ hilo_id: string; mensaje: MensajeApi }>(
+      `/clubs/${encodeURIComponent(clubId)}/consultas/postulantes/${encodeURIComponent(postulanteId)}/messages`,
+      { method: 'POST', token, body: { texto: limpio, client_message_id: intentos.get(clave) } });
+    intentos.delete(clave);
+    const mensajeNuevo = convertir(respuesta.mensaje);
+    guardar({ id: respuesta.hilo_id, clubId, clubNombre: '', postulanteId, postulanteNombre: '',
+      mensajes: [mensajeNuevo], noLeidosClub: 0, noLeidosPostulante: 0 });
+    return { ok: true as const, hiloId: respuesta.hilo_id };
+  } catch (e) {
+    return { ok: false as const, motivo: motivo(e) };
+  }
+}
+
+/** Comprueba el permiso del postulante usando la misma autorización que la lectura. */
+export async function puedeConsultarClub(clubId: string) {
+  const { token } = await credenciales();
+  await apiRequest<MensajesApi>(`/clubs/${encodeURIComponent(clubId)}/consultas/me/messages?limit=1`, { token });
 }
 
 async function cargarMensajes(clave: string, ruta: string): Promise<boolean> {

@@ -193,6 +193,10 @@ export default function ClubHomeScreen() {
             <Text style={styles.subtitulo}>Consultas de deportistas</Text>
             <Text style={styles.info}>{pendientes} sin responder · Abrir bandeja</Text>
           </TouchableOpacity>
+          <TouchableOpacity style={styles.tarjeta} onPress={() => router.push('/(club)/canales' as never)}>
+            <Text style={styles.subtitulo}>Canales del club</Text>
+            <Text style={styles.info}>Gestionar anuncios y miembros</Text>
+          </TouchableOpacity>
           <TouchableOpacity style={styles.tarjeta} onPress={() => router.push('/(club)/planes' as never)}>
             <Text style={styles.subtitulo}>Planes y beneficios</Text>
           </TouchableOpacity>

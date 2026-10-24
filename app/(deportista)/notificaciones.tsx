@@ -10,7 +10,7 @@ import { cargarNotificaciones, marcarLeida, marcarTodasLeidas, Notificacion, Tip
 import { Colors, useAppTheme } from '../../theme/ThemeContext';
 
 const ICONO: Record<TipoNotificacion, keyof typeof Ionicons.glyphMap> = {
-  solicitud: 'person-add-outline', match: 'heart', mensaje: 'chatbubble-outline', calificacion: 'star', actividad: 'calendar-outline',
+  solicitud: 'person-add-outline', match: 'heart', mensaje: 'chatbubble-outline', calificacion: 'star', actividad: 'calendar-outline', canal: 'megaphone',
 };
 
 export default function NotificacionesScreen() {

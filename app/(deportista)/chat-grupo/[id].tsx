@@ -185,6 +185,7 @@ export default function ChatGrupoScreen() {
         onContentSizeChange={() => listaRef.current?.scrollToEnd({ animated: true })}
         renderItem={renderMensaje}
       />
+      <Text style={styles.errorTexto}>El chat se borra 7 días después de la actividad</Text>
       {soloLectura ? (
         <View style={[styles.avisoBox, { paddingBottom: insets.bottom + 12 }]}>
           <Ionicons name="time-outline" size={18} color={colors.textMuted} />
