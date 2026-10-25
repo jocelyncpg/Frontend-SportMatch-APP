@@ -4,7 +4,7 @@ import { useCallback, useMemo, useState } from 'react';
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import CatalogoPlanes from '../../components/CatalogoPlanes';
 import ContratarPlanModal from '../../components/ContratarPlanModal';
-import { cargarPlanes, nombreDelPlan, planesParaContratar, precioTexto, usePlanActual, usePlanes, type Plan } from '../../services/planes';
+import { cargarPlanes, fechaVencimientoTexto, nombreDelPlan, planesParaContratar, precioTexto, useFechaFinPlan, usePlanActual, usePlanes, type Plan } from '../../services/planes';
 import { Colors, useAppTheme } from '../../theme/ThemeContext';
 
 /** HU-39: consultar el catálogo de planes y beneficios. HU-42: contratar un plan. */
@@ -12,6 +12,7 @@ export default function PlanesScreen() {
   const { colors } = useAppTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const planActual = usePlanActual('deportista');
+  const fechaFin = useFechaFinPlan('deportista');
   const planes = usePlanes();
   const [elegido, setElegido] = useState<Plan | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -39,6 +40,13 @@ export default function PlanesScreen() {
       </View>
 
       {error ? <Text style={styles.error}>{error}</Text> : null}
+
+      {planActual === 'pro' && fechaFin ? (
+        <View style={styles.vencimiento} accessibilityRole="summary">
+          <Ionicons name="time-outline" size={18} color={colors.accent} />
+          <Text style={styles.vencimientoTexto}>Tu plan Pro vence el {fechaVencimientoTexto(fechaFin)}.</Text>
+        </View>
+      ) : null}
 
       {planesParaContratar('deportista', planes).map((p) => {
         const yaLoTienes = planActual === p.id;
@@ -78,6 +86,11 @@ const makeStyles = (c: Colors) =>
       backgroundColor: c.chip, borderRadius: 12, padding: 12,
     },
     avisoTexto: { flex: 1, color: c.textMuted, fontSize: 11.5, lineHeight: 16 },
+    vencimiento: {
+      flexDirection: 'row', gap: 10, alignItems: 'center', marginTop: 14,
+      backgroundColor: c.chip, borderRadius: 12, padding: 12,
+    },
+    vencimientoTexto: { flex: 1, color: c.text, fontSize: 12, lineHeight: 17 },
     boton: {
       marginTop: 16, backgroundColor: c.primary, borderRadius: 13,
       paddingVertical: 13, alignItems: 'center',

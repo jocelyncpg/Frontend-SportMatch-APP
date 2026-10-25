@@ -1,8 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
 import * as WebBrowser from 'expo-web-browser';
-import { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Modal, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { beneficiosDe, confirmarPago, iniciarPago, precioTexto, type CuentaPlan, type Plan } from '../services/planes';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { ActivityIndicator, Linking, Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { beneficiosDe, confirmarPago, iniciarPago, leerRetornoWebpay, precioTexto, type CuentaPlan, type Plan, type RetornoWebpay } from '../services/planes';
 import { Colors, useAppTheme } from '../theme/ThemeContext';
 
 type Props = {
@@ -24,20 +24,37 @@ export default function ContratarPlanModal({ visible, plan, cuenta, onClose }: P
   const [error, setError] = useState<string | null>(null);
   const [procesando, setProcesando] = useState(false);
   /** token_ws del pago en curso: si el navegador se cerró antes de tiempo, se puede volver a confirmar. */
-  const [pendiente, setPendiente] = useState<string | null>(null);
+  const [pendiente, setPendiente] = useState<RetornoWebpay | null>(null);
+
+  const confirmar = useCallback(async (retorno: string | RetornoWebpay) => {
+    const payload = typeof retorno === 'string' ? { token_ws: retorno } : retorno;
+    const r = await confirmarPago(cuenta, payload);
+    if (r.ok) { setListo(true); setPendiente(null); }
+    else { setError(r.motivo); setPendiente(r.reintentar ? payload : null); }
+  }, [cuenta]);
 
   // Cada vez que se abre, parte desde el resumen.
   useEffect(() => {
     if (visible) { setListo(false); setError(null); setPendiente(null); setProcesando(false); }
   }, [visible]);
 
-  if (!plan) return null;
+  useEffect(() => {
+    if (!visible) return;
+    let atendiendo = false;
+    const procesarUrl = (url: string) => {
+      const retorno = leerRetornoWebpay(url);
+      if (!retorno || atendiendo) return;
+      atendiendo = true;
+      setPendiente(retorno);
+      setProcesando(true);
+      void confirmar(retorno).finally(() => { atendiendo = false; setProcesando(false); });
+    };
+    const suscripcion = Linking.addEventListener('url', ({ url }) => procesarUrl(url));
+    void Linking.getInitialURL().then((url) => { if (url) procesarUrl(url); });
+    return () => suscripcion.remove();
+  }, [visible, confirmar]);
 
-  async function confirmar(tokenWs: string) {
-    const r = await confirmarPago(cuenta, tokenWs);
-    if (r.ok) { setListo(true); setPendiente(null); }
-    else { setError(r.motivo); setPendiente(null); }
-  }
+  if (!plan) return null;
 
   async function pagar() {
     if (!plan || procesando) return;
@@ -45,10 +62,8 @@ export default function ContratarPlanModal({ visible, plan, cuenta, onClose }: P
     setProcesando(true);
     try {
       const { tokenWs, urlPago } = await iniciarPago(cuenta, plan);
-      setPendiente(tokenWs);
-      // Vuelve cuando la persona cierra el navegador (en Android, apenas se abre).
+      setPendiente({ token_ws: tokenWs });
       await WebBrowser.openBrowserAsync(urlPago);
-      if (Platform.OS === 'ios') await confirmar(tokenWs);
     } catch (e) {
       setError(e instanceof Error && e.message ? e.message : 'No pudimos iniciar el pago.');
     } finally {

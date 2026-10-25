@@ -45,7 +45,52 @@ export const FILAS_COMPARATIVA: FilaComparativa[] = [
 ];
 
 export type CuentaPlan = 'deportista' | 'club';
-export type ResultadoPlan = { ok: true } | { ok: false; motivo: string };
+export type ResultadoPlan = { ok: true } | { ok: false; motivo: string; reintentar: boolean };
+
+export type RetornoWebpay = {
+  token_ws?: string;
+  tbk_token?: string;
+  tbk_orden_compra?: string;
+  tbk_id_sesion?: string;
+};
+
+/** Extrae solo los parámetros admitidos en el retorno de la app. */
+export function leerRetornoWebpay(url: string): RetornoWebpay | null {
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol !== 'sportmatchapp:' || parsed.hostname !== 'pago') return null;
+    const retorno: RetornoWebpay = {};
+    for (const key of ['token_ws', 'tbk_token', 'tbk_orden_compra', 'tbk_id_sesion'] as const) {
+      const value = parsed.searchParams.get(key);
+      if (value) retorno[key] = value;
+    }
+    return Object.values(retorno).length ? retorno : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Clasifica el resultado y conserva la opción de reintento solo ante errores transitorios. */
+export function evaluarResultadoPago(
+  status: PagoConfirmadoApi['status'],
+  error?: { status: number; detail?: string; message?: string },
+): { ok: boolean; motivo?: string; reintentar: boolean } {
+  if (status === 'APPROVED') return { ok: true, reintentar: false };
+  if (status === 'REJECTED') return { ok: false, motivo: 'El pago fue rechazado por el banco simulado.', reintentar: false };
+  if (status === 'CANCELLED') return { ok: false, motivo: 'El pago fue cancelado. No se realizó ningún cobro.', reintentar: false };
+  if (error) {
+    const detail = error.detail ?? error.message ?? '';
+    if (/rechazad/i.test(detail)) return { ok: false, motivo: 'El pago fue rechazado por el banco simulado.', reintentar: false };
+    if (/cancelad|anulad/i.test(detail)) return { ok: false, motivo: 'El pago fue cancelado. No se realizó ningún cobro.', reintentar: false };
+    const reintentar = error.status === 0 || error.status >= 500;
+    return {
+      ok: false,
+      motivo: reintentar ? 'No pudimos confirmar el pago por un problema de conexión. Puedes reintentar sin volver a pagar.' : detail || 'No pudimos confirmar el pago.',
+      reintentar,
+    };
+  }
+  return { ok: false, motivo: 'El pago no se completó. No se realizó ningún cobro.', reintentar: false };
+}
 
 /** Pesos chilenos con punto de miles, sin depender del idioma del teléfono: 4990 → "$4.990". */
 export function formatearCLP(monto: number): string {
@@ -84,14 +129,26 @@ type PagoConfirmadoApi = { status: 'PENDING' | 'APPROVED' | 'REJECTED' | 'CANCEL
 const ID_POR_TIPO: Record<PlanApi['tipo'], PlanId> = { USUARIO: 'pro', CLUB: 'club' };
 const SIN_PLAN: Record<CuentaPlan, PlanId | null> = { deportista: 'gratuito', club: null };
 
-type EstadoPlanes = { planes: Plan[]; actual: Record<CuentaPlan, PlanId | null> };
-const INICIAL: EstadoPlanes = { planes: PLANES, actual: { ...SIN_PLAN } };
+type EstadoPlanes = { planes: Plan[]; actual: Record<CuentaPlan, PlanId | null>; fechaFin: Record<CuentaPlan, string | null> };
+const SIN_FECHA: Record<CuentaPlan, string | null> = { deportista: null, club: null };
+const INICIAL: EstadoPlanes = { planes: PLANES, actual: { ...SIN_PLAN }, fechaFin: { ...SIN_FECHA } };
 let estado: EstadoPlanes = INICIAL;
 const oyentes = new Set<() => void>();
 const emitir = () => oyentes.forEach((o) => o());
 const suscribir = (o: () => void) => { oyentes.add(o); return () => { oyentes.delete(o); }; };
 
 export const getPlanActual = (cuenta: CuentaPlan): PlanId | null => estado.actual[cuenta];
+
+/** Fecha de vencimiento informada por la suscripción activa del backend. */
+export function useFechaFinPlan(cuenta: CuentaPlan): string | null {
+  return useSyncExternalStore(suscribir, () => estado.fechaFin[cuenta], () => estado.fechaFin[cuenta]);
+}
+
+export function fechaVencimientoTexto(fecha: string): string {
+  const parsed = new Date(fecha);
+  if (Number.isNaN(parsed.getTime())) return fecha;
+  return new Intl.DateTimeFormat('es-CL', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' }).format(parsed);
+}
 
 /** Plan vigente de la cuenta (según Ms-club); se actualiza al cargar o al confirmar un pago. */
 export function usePlanActual(cuenta: CuentaPlan): PlanId | null {
@@ -107,9 +164,15 @@ function vigente(s: SuscripcionApi | null): PlanId | null {
   return s && s.estado === 'ACTIVE' ? ID_POR_TIPO[s.plan.tipo] ?? null : null;
 }
 
-function guardarActual(cuenta: CuentaPlan, id: PlanId | null) {
-  if (estado.actual[cuenta] === id) return;
-  estado = { ...estado, actual: { ...estado.actual, [cuenta]: id } };
+function guardarSuscripcion(cuenta: CuentaPlan, suscripcion: SuscripcionApi | null) {
+  const id = vigente(suscripcion) ?? SIN_PLAN[cuenta];
+  const fechaFin = suscripcion?.estado === 'ACTIVE' ? suscripcion.fecha_fin : null;
+  if (estado.actual[cuenta] === id && estado.fechaFin[cuenta] === fechaFin) return;
+  estado = {
+    ...estado,
+    actual: { ...estado.actual, [cuenta]: id },
+    fechaFin: { ...estado.fechaFin, [cuenta]: fechaFin },
+  };
   emitir();
 }
 
@@ -137,9 +200,9 @@ export async function cargarPlanes(cuenta: CuentaPlan): Promise<void> {
   };
   emitir();
   try {
-    guardarActual(cuenta, vigente(await apiRequest<SuscripcionApi>('/payments/subscription/me', { token: await token() })) ?? SIN_PLAN[cuenta]);
+    guardarSuscripcion(cuenta, await apiRequest<SuscripcionApi>('/payments/subscription/me', { token: await token() }));
   } catch (e) {
-    if (e instanceof ApiError && e.status === 404) guardarActual(cuenta, SIN_PLAN[cuenta]);
+    if (e instanceof ApiError && e.status === 404) guardarSuscripcion(cuenta, null);
     else throw e;
   }
 }
@@ -163,22 +226,30 @@ export async function iniciarPago(cuenta: CuentaPlan, plan: Plan): Promise<{ tok
 }
 
 /** Paso 2: al volver de Webpay, confirma el pago. Solo un pago APPROVED deja el plan activo. */
-export async function confirmarPago(cuenta: CuentaPlan, tokenWs: string): Promise<ResultadoPlan> {
+export async function confirmarPago(cuenta: CuentaPlan, retorno: string | RetornoWebpay): Promise<ResultadoPlan> {
   try {
+    const payload = typeof retorno === 'string' ? { token_ws: retorno } : retorno;
     const r = await apiRequest<PagoConfirmadoApi>('/payments/webpay/commit', {
-      method: 'POST', token: await token(), body: { token_ws: tokenWs },
+      method: 'POST', token: await token(), body: payload,
     });
-    if (r.status !== 'APPROVED') return { ok: false, motivo: 'El pago no se completó. No se realizó ningún cobro.' };
-    guardarActual(cuenta, vigente(r.suscripcion) ?? estado.actual[cuenta]);
+    const evaluacion = evaluarResultadoPago(r.status);
+    if (!evaluacion.ok) return { ok: false, motivo: evaluacion.motivo!, reintentar: false };
+    guardarSuscripcion(cuenta, r.suscripcion);
     return { ok: true };
   } catch (e) {
+    const detail = e instanceof ApiError ? e.detail : '';
+    if (/rechazad/i.test(detail)) return { ok: false, motivo: 'El pago fue rechazado por el banco simulado.', reintentar: false };
+    if (/cancelad|anulad/i.test(detail)) return { ok: false, motivo: 'El pago fue cancelado. No se realizó ningún cobro.', reintentar: false };
+    if (e instanceof ApiError && (e.status === 0 || e.status >= 500)) {
+      return { ok: false, motivo: 'No pudimos confirmar el pago por un problema de conexión. Puedes reintentar sin volver a pagar.', reintentar: true };
+    }
     // Webpay rechazó o se anuló la compra: el backend responde 400 con el detalle.
-    return { ok: false, motivo: e instanceof Error && e.message ? e.message : 'No pudimos confirmar el pago.' };
+    return { ok: false, motivo: e instanceof Error && e.message ? e.message : 'No pudimos confirmar el pago.', reintentar: false };
   }
 }
 
 /** Al cerrar sesión: el plan de otra cuenta no debe verse en la siguiente. */
 export function reiniciarPlanes() {
-  estado = { ...estado, actual: { ...SIN_PLAN } };
+  estado = { ...estado, actual: { ...SIN_PLAN }, fechaFin: { ...SIN_FECHA } };
   emitir();
 }

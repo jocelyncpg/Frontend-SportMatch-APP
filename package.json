@@ -17,7 +17,8 @@
     "test:sondeo": "node --test scripts/test-sondeo.cjs",
     "test:canales": "node --test scripts/test-canales.cjs",
     "test:postulaciones": "node --test scripts/test-postulaciones.cjs",
-    "test:postular": "node --test scripts/test-postular.cjs"
+    "test:postular": "node --test scripts/test-postular.cjs",
+    "test:planes-pago": "node --test scripts/test-planes-pago.cjs"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.3",
