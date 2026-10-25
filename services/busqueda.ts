@@ -50,14 +50,23 @@ export function disponibilidadDe(p: Persona): string | undefined {
   return DISPONIBILIDAD_DEMO[p.id];
 }
 
-/** La disponibilidad es texto libre, así que se busca por palabras ("mañana", "sábados"...), sin tildes. */
+/** Horas escritas como "18:30" dentro del texto de disponibilidad (formato del editor del perfil). */
+function horasEnTexto(t: string): number[] {
+  return [...t.matchAll(/\b([01]?\d|2[0-3]):[0-5]\d\b/g)].map((m) => Number(m[1]));
+}
+
+/**
+ * La disponibilidad es texto: puede ser libre ("mañana", "sábados"...) o con horas ("Sáb 10:00 · Mié 18:00").
+ * Se busca por palabras o por hora, sin tildes. Mañana: 05:00–11:59, tarde: 12:00–19:59, noche: desde las 20:00.
+ */
 export function coincideFranja(texto: string | undefined, franja: Franja): boolean {
   const t = normalizar(texto ?? '');
+  const horas = horasEnTexto(t);
   switch (franja) {
-    case 'manana': return /manana|temprano|madrugada/.test(t);
-    case 'tarde': return /tarde/.test(t);
-    case 'noche': return /noche/.test(t);
-    case 'finde': return /sabado|domingo|fin de semana|findes?|todos los dias/.test(t);
+    case 'manana': return /manana|temprano|madrugada/.test(t) || horas.some((h) => h >= 5 && h < 12);
+    case 'tarde': return /tarde/.test(t) || horas.some((h) => h >= 12 && h < 20);
+    case 'noche': return /noche/.test(t) || horas.some((h) => h >= 20);
+    case 'finde': return /sabado|domingo|fin de semana|findes?|todos los dias/.test(t) || /\b(sab|dom)\b/.test(t);
   }
 }
 

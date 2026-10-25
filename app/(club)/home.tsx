@@ -289,7 +289,23 @@ export default function ClubHomeScreen() {
           </View>
           <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
         </TouchableOpacity>
-
+        {/* HU-38: comunicados a los postulantes */}
+        <TouchableOpacity
+          style={styles.consultasCard}
+          activeOpacity={0.8}
+          onPress={() => router.push('/(club)/avisos' as never)}
+          accessibilityLabel="Enviar avisos a los postulantes"
+        >
+          <View style={styles.planesIcon}>
+            <Ionicons name="megaphone-outline" size={18} color={colors.accent} />
+          </View>
+          <View style={styles.planesInfo}>
+            <Text style={styles.planesTitle}>Avisos</Text>
+            <Text style={styles.planesSub}>Envía comunicados a tus postulantes</Text>
+          </View>
+          <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
+        </TouchableOpacity>
+        
         {/* HU-51: bandeja de consultas de los postulantes, compartida por los representantes del club */}
         <TouchableOpacity
           style={styles.consultasCard}

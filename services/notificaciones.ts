@@ -1,10 +1,11 @@
 import { useMemo, useSyncExternalStore } from 'react';
-import { getAvisos, useAvisos, type AvisoActividad } from './actividades';
+import { YO, getAvisos, useAvisos, type AvisoActividad } from './actividades';
+import { getAvisosClub, useAvisosRecibidos, type AvisoClub } from './avisosClub';
 import { marcarTodasLeidasEnChats, useConversaciones, type Conversacion } from './chat';
 import { useMatches, type Persona } from './matchStore';
 import type { CalificacionRecibida } from './reputacion';
 
-export type TipoNotificacion = 'solicitud' | 'match' | 'calificacion' | 'actividad' | 'mensaje';
+export type TipoNotificacion = 'solicitud' | 'match' | 'calificacion' | 'actividad' | 'mensaje' | 'club';
 
 export type Notificacion = {
   id: string;
@@ -21,6 +22,9 @@ export type Notificacion = {
   actividadId?: string;
   /** Solo en avisos de postulación: cómo respondió quien organiza (HU-38). */
   resultado?: 'aprobada' | 'rechazada';
+  /** Solo en avisos de un club: de qué club vienen (para abrir su perfil). */
+  clubId?: string;
+  clubNombre?: string;
 };
 
 type Fuente = {
@@ -29,6 +33,8 @@ type Fuente = {
   calificacionesRecibidas: CalificacionRecibida[];
   /** Cambios o cancelaciones de actividades en las que participas (HU-37). */
   avisos?: AvisoActividad[];
+  /** Comunicados que los clubes envían a quienes postularon (HU-38). */
+  avisosClub?: AvisoClub[];
   /** Conversaciones de chat; las que tienen mensajes sin leer generan un aviso (HU-60). */
   conversaciones?: Record<string, Conversacion>;
 };
@@ -62,6 +68,7 @@ export function hace(minutos: number): string {
 }
 
 export const idAviso = (a: AvisoActividad) => `act-${a.id}`;
+export const idAvisoClub = (a: AvisoClub) => `club-${a.id}`;
 
 /** Arma la bandeja a partir de lo que ya sabe la app. Lo más reciente va primero. */
 export function construirNotificaciones(e: Fuente, sinLeer: ReadonlySet<string>, ahora: number = Date.now()): Notificacion[] {
@@ -77,6 +84,10 @@ export function construirNotificaciones(e: Fuente, sinLeer: ReadonlySet<string>,
       const minutos = Math.max(0, (ahora - a.ts) / 60000);
       const resultado = a.cambio === 'aprobada' || a.cambio === 'rechazada' ? a.cambio : undefined;
       return { id: idAviso(a), tipo: 'actividad', titulo: a.titulo, detalle: a.detalle, cuando: hace(minutos), minutos, leida: !sinLeer.has(idAviso(a)), actividadId: a.actividadId, resultado };
+    }),
+    ...(e.avisosClub ?? []).map((a): Notificacion => {
+      const minutos = Math.max(0, (ahora - a.ts) / 60000);
+      return { id: idAvisoClub(a), tipo: 'club', titulo: `${a.clubNombre}: ${a.titulo}`, detalle: a.mensaje, cuando: hace(minutos), minutos, leida: !sinLeer.has(idAvisoClub(a)), clubId: a.clubId, clubNombre: a.clubNombre };
     }),
     // Un aviso por chat con mensajes sin leer. Desaparece solo cuando abres ese chat.
     ...e.confirmados.flatMap((p): Notificacion[] => {
@@ -113,7 +124,7 @@ const suscribir = (o: () => void) => { oyentes.add(o); return () => { oyentes.de
 const getEstado = () => estado;
 
 export function marcarLeida(id: string) {
-  if (id.startsWith('act-')) {
+  if (id.startsWith('act-') || id.startsWith('club-')) {
     if (estado.avisosLeidos.has(id)) return;
     estado = { ...estado, avisosLeidos: new Set(estado.avisosLeidos).add(id) };
   } else {
@@ -127,7 +138,7 @@ export function marcarLeida(id: string) {
 
 export function marcarTodasLeidas() {
   marcarTodasLeidasEnChats();
-  estado = { sinLeer: new Set(), avisosLeidos: new Set(getAvisos().map(idAviso)) };
+  estado = { sinLeer: new Set(), avisosLeidos: new Set([...getAvisos().map(idAviso), ...getAvisosClub().filter((a) => a.destinatarios.includes(YO)).map(idAvisoClub)]) };
   emitir();
 }
 
@@ -140,14 +151,16 @@ export function reiniciarNotificaciones() {
 export function useNotificaciones() {
   const matches = useMatches();
   const avisos = useAvisos();
+  const avisosClub = useAvisosRecibidos(YO);
   const conversaciones = useConversaciones();
   const leidos = useSyncExternalStore(suscribir, getEstado, getEstado);
   const lista = useMemo(() => {
     // Los avisos de actividades nacen sin leer: lo pendiente es todo lo que aún no se marcó.
     const pendientes = new Set(leidos.sinLeer);
     avisos.forEach((a) => { if (!leidos.avisosLeidos.has(idAviso(a))) pendientes.add(idAviso(a)); });
-    return construirNotificaciones({ ...matches, avisos, conversaciones }, pendientes);
-  }, [matches, avisos, conversaciones, leidos]);
+    avisosClub.forEach((a) => { if (!leidos.avisosLeidos.has(idAvisoClub(a))) pendientes.add(idAvisoClub(a)); });
+    return construirNotificaciones({ ...matches, avisos, avisosClub, conversaciones }, pendientes);
+  }, [matches, avisos, avisosClub, conversaciones, leidos]);
   const noLeidas = lista.filter((n) => !n.leida).length;
   return { lista, noLeidas };
 }

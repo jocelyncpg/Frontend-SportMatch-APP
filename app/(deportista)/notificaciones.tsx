@@ -10,6 +10,7 @@ import {
   simularCambioDelOrganizador,
   simularRespuestaDelOrganizador,
 } from '../../services/actividades';
+import { reiniciarAvisosClub } from '../../services/avisosClub';
 import { reiniciarChat, simularRespuesta as simularMensajeDeChat } from '../../services/chat';
 import {
   Notificacion,
@@ -27,6 +28,7 @@ const ICONO: Record<TipoNotificacion, keyof typeof Ionicons.glyphMap> = {
   calificacion: 'star',
   actividad: 'calendar-outline',
   mensaje: 'chatbubble-ellipses',
+  club: 'megaphone-outline',
 };
 
 export default function NotificacionesScreen() {
@@ -42,7 +44,7 @@ export default function NotificacionesScreen() {
   const colorDe = (n: Notificacion) =>
     n.resultado === 'aprobada' ? colors.success
       : n.resultado === 'rechazada' ? colors.danger
-      : n.tipo === 'match' ? '#DB2777' : n.tipo === 'calificacion' ? '#FACC15' : n.tipo === 'actividad' ? '#38BDF8' : n.tipo === 'mensaje' ? colors.primary : colors.accent;
+      : n.tipo === 'match' ? '#DB2777' : n.tipo === 'calificacion' ? '#FACC15' : n.tipo === 'actividad' ? '#38BDF8' : n.tipo === 'mensaje' ? colors.primary : n.tipo === 'club' ? colors.success : colors.accent;
 
   const iconoDe = (n: Notificacion): keyof typeof Ionicons.glyphMap =>
     n.resultado === 'aprobada' ? 'checkmark-circle' : n.resultado === 'rechazada' ? 'close-circle' : ICONO[n.tipo];
@@ -62,6 +64,7 @@ export default function NotificacionesScreen() {
   function restablecer() {
     reiniciarChat();
     reiniciarActividades();
+    reiniciarAvisosClub();
     reiniciarNotificaciones();
   }
 
@@ -85,6 +88,8 @@ export default function NotificacionesScreen() {
           fotoUri: p.fotoUri ?? '',
         },
       });
+    } else if (n.tipo === 'club' && n.clubId) {
+      router.push({ pathname: '/(deportista)/club/[id]', params: { id: n.clubId, name: n.clubNombre ?? '' } });
     } else if (n.tipo === 'actividad' && n.actividadId) {
       router.push({ pathname: '/(deportista)/activity/[id]', params: { id: n.actividadId } });
     } else if ((n.tipo === 'match' || n.tipo === 'mensaje') && p) {
@@ -150,7 +155,7 @@ export default function NotificacionesScreen() {
           <View style={styles.vacio}>
             <Ionicons name="notifications-off-outline" size={34} color={colors.textMuted} />
             <Text style={styles.vacioTitulo}>No tienes notificaciones</Text>
-            <Text style={styles.vacioTexto}>Aquí verás solicitudes, matches, mensajes, calificaciones y cambios en tus actividades.</Text>
+            <Text style={styles.vacioTexto}>Aquí verás solicitudes, matches, mensajes, calificaciones, cambios en tus actividades y avisos de los clubes.</Text>
           </View>
         ) : null}
 
