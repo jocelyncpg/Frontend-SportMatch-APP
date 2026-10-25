@@ -4,7 +4,7 @@ import { getConvocatoria, type Resultado } from './consultas';
 // Postulaciones a convocatorias de club (HU-33 / HU-34): el deportista postula y el club revisa,
 // acepta o rechaza. Con el backend, esto vendrá de la API; por ahora vive en memoria.
 
-export type EstadoPostulacion = 'pendiente' | 'aceptada' | 'rechazada' | 'retirada';
+export type EstadoPostulacion = 'pendiente' | 'preseleccionada' | 'aceptada' | 'rechazada' | 'retirada';
 
 /** Lo que el club necesita ver de quien postula. */
 export type PerfilPostulante = {
@@ -47,6 +47,7 @@ export function postular(clubId: string, perfil: PerfilPostulante, ahora: number
   const id = idPostulacion(clubId, perfil.id);
   const previa = postulaciones[id];
   if (previa?.estado === 'pendiente') return { ok: false, motivo: 'Ya postulaste a esta convocatoria. El club revisará tu perfil.' };
+  if (previa?.estado === 'preseleccionada') return { ok: false, motivo: 'El club ya te preseleccionó. Falta su respuesta final.' };
   if (previa?.estado === 'aceptada') return { ok: false, motivo: 'El club ya aceptó tu postulación.' };
   if (previa?.estado === 'rechazada') return { ok: false, motivo: 'El club ya respondió tu postulación y no la aceptó.' };
   // Si la había retirado, puede volver a postular.
@@ -58,22 +59,44 @@ export function postular(clubId: string, perfil: PerfilPostulante, ahora: number
   return { ok: true };
 }
 
-/** El deportista retira su postulación mientras el club no la responde. */
+/** El deportista retira su postulación mientras el club no da una respuesta final (pendiente o preseleccionada). */
 export function retirarPostulacion(id: string, ahora: number = Date.now()): Resultado {
   const p = postulaciones[id];
   if (!p) return { ok: false, motivo: 'No encontramos esta postulación.' };
-  if (p.estado !== 'pendiente') return { ok: false, motivo: 'Solo puedes retirar una postulación que el club aún no responde.' };
+  if (p.estado !== 'pendiente' && p.estado !== 'preseleccionada') {
+    return { ok: false, motivo: 'Solo puedes retirar una postulación que el club aún no responde.' };
+  }
   postulaciones = { ...postulaciones, [id]: { ...p, estado: 'retirada', resueltaEn: ahora } };
   emitir();
   return { ok: true };
 }
 
-/** El club acepta o rechaza. Puede hacerlo aunque la convocatoria ya esté cerrada. */
-export function resolverPostulacion(id: string, decision: 'aceptada' | 'rechazada', ahora: number = Date.now()): Resultado {
+/**
+ * El club preselecciona, acepta o rechaza. Puede hacerlo aunque la convocatoria ya esté cerrada.
+ * Una postulación pendiente puede pasar a cualquiera de las tres; una preseleccionada, a aceptada o rechazada.
+ * Preseleccionar no ocupa cupo: el cupo solo se descuenta al aceptar.
+ */
+export function resolverPostulacion(
+  id: string,
+  decision: 'preseleccionada' | 'aceptada' | 'rechazada',
+  ahora: number = Date.now(),
+): Resultado {
   const p = postulaciones[id];
   if (!p) return { ok: false, motivo: 'No encontramos esta postulación.' };
-  if (p.estado !== 'pendiente') {
-    return { ok: false, motivo: p.estado === 'retirada' ? 'La persona retiró su postulación.' : 'Esta postulación ya fue respondida.' };
+  if (p.estado === 'retirada') return { ok: false, motivo: 'La persona retiró su postulación.' };
+  if (p.estado !== 'pendiente' && p.estado !== 'preseleccionada') {
+    return { ok: false, motivo: 'Esta postulación ya fue respondida.' };
+  }
+  if (decision === 'preseleccionada' && p.estado === 'preseleccionada') {
+    return { ok: false, motivo: 'Esta persona ya está preseleccionada.' };
+  }
+  if (decision === 'aceptada') {
+    // El club no puede confirmar a más personas que los cupos de su convocatoria.
+    const cupos = getConvocatoria(p.clubId)?.cupos;
+    const confirmados = Object.values(postulaciones).filter((x) => x.clubId === p.clubId && x.estado === 'aceptada').length;
+    if (cupos !== undefined && confirmados >= cupos) {
+      return { ok: false, motivo: `Ya confirmaste ${cupos === 1 ? 'el único cupo' : `los ${cupos} cupos`} de la convocatoria. Rechaza a alguien o aumenta los cupos.` };
+    }
   }
   postulaciones = { ...postulaciones, [id]: { ...p, estado: decision, resueltaEn: ahora } };
   emitir();

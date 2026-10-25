@@ -132,13 +132,13 @@ export default function HomeScreen() {
         />
       </TouchableOpacity>
 
-      {/* Acceso al directorio de clubes */}
+      {/* Acceso a las convocatorias abiertas de los clubes */}
       <TouchableOpacity
         style={styles.clubBanner}
-        onPress={() => router.push('/(deportista)/clubs')}
+        onPress={() => router.push('/(deportista)/convocatorias')}
       >
-        <Ionicons name="shield-outline" size={18} color={colors.accent} />
-        <Text style={styles.clubBannerText}>Explorar clubes cerca de ti</Text>
+        <Ionicons name="megaphone-outline" size={18} color={colors.accent} />
+        <Text style={styles.clubBannerText}>Explorar convocatorias abiertas</Text>
         <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
       </TouchableOpacity>
 

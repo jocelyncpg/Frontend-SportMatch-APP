@@ -16,8 +16,50 @@ export type Convocatoria = {
   deporte?: string;
   comuna?: string;
   colorFrom: string;
+  /** Categoría o edad a la que apunta la prueba, ej. "Sub-18" o "Adultos". */
+  categoria?: string;
+  /** Fecha de la prueba, AAAA-MM-DD. */
+  fecha?: string;
+  requisitos?: string;
+  /** Cupos disponibles; el club no puede aceptar más postulantes que esto. */
+  cupos?: number;
 };
-export type DatosConvocatoria = { titulo: string; descripcion: string };
+export type DatosConvocatoria = {
+  titulo: string;
+  descripcion: string;
+  deporte: string;
+  categoria: string;
+  /** AAAA-MM-DD */
+  fecha: string;
+  requisitos: string;
+  cupos: number;
+};
+
+/** Deportes que un club puede elegir al publicar una convocatoria (los mismos de la web). */
+export const DEPORTES_CLUB = [
+  'Fútbol', 'Básquetbol', 'Vóleibol', 'Natación', 'Tenis', 'Running',
+  'Ciclismo', 'Escalada', 'Boxeo', 'Yoga', 'Pádel', 'Atletismo',
+];
+
+/** Hoy en AAAA-MM-DD (hora local, no UTC), para comparar con la fecha de la prueba. */
+export function hoyISO(ahora: Date = new Date()): string {
+  const p = (n: number) => String(n).padStart(2, '0');
+  return `${ahora.getFullYear()}-${p(ahora.getMonth() + 1)}-${p(ahora.getDate())}`;
+}
+
+/** Fecha válida y existente en formato AAAA-MM-DD ("2026-02-31" no vale). */
+export function fechaValida(texto: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(texto)) return false;
+  const [a, m, d] = texto.split('-').map(Number);
+  const f = new Date(a, m - 1, d);
+  return f.getFullYear() === a && f.getMonth() === m - 1 && f.getDate() === d;
+}
+
+/** "2026-11-14" → "14-11-2026". */
+export function fechaCorta(iso: string): string {
+  const [a, m, d] = iso.split('-');
+  return `${d}-${m}-${a}`;
+}
 
 export type MensajeConsulta = { id: string; de: 'postulante' | 'club'; texto: string; enviadoEn: number };
 /** Una conversación entre un postulante y un club. */
@@ -37,10 +79,16 @@ export type Hilo = {
 // ---------- datos de ejemplo ----------
 const COLOR_CLUB = '#7C3AED';
 // Los mismos clubes del directorio (clubs.tsx). Con el backend, las convocatorias vendrán de la API.
+/** Fecha de ejemplo a N días desde hoy (AAAA-MM-DD), para que los datos de demostración nunca queden vencidos. */
+const enDias = (n: number) => {
+  const d = new Date();
+  d.setDate(d.getDate() + n);
+  return hoyISO(d);
+};
 const CONVOCATORIAS_DEMO: Convocatoria[] = [
-  { clubId: '1', clubNombre: 'Club Atlético Ñuñoa', deporte: 'Atletismo', comuna: 'Ñuñoa', colorFrom: '#7C3AED', abierta: true, titulo: 'Buscamos velocistas nivel intermedio-avanzado', descripcion: 'Completar el equipo de pista para la temporada.' },
-  { clubId: '2', clubNombre: 'Fútbol Amateur Maipú', deporte: 'Fútbol', comuna: 'Maipú', colorFrom: '#1F2A5C', abierta: true, titulo: 'Pruebas para el plantel de la temporada', descripcion: 'Buscamos defensas y arqueros. Pruebas abiertas los sábados.' },
-  { clubId: '3', clubNombre: 'Ciclistas La Florida', deporte: 'Ciclismo', comuna: 'La Florida', colorFrom: '#22C55E', abierta: true, titulo: 'Nuevos integrantes para salidas de ruta', descripcion: 'Salidas de 60 km los domingos. Nivel medio.' },
+  { clubId: '1', clubNombre: 'Club Atlético Ñuñoa', deporte: 'Atletismo', comuna: 'Ñuñoa', colorFrom: '#7C3AED', abierta: true, titulo: 'Buscamos velocistas nivel intermedio-avanzado', descripcion: 'Completar el equipo de pista para la temporada.', categoria: 'Adultos', fecha: enDias(14), cupos: 8, requisitos: 'Zapatillas de clavos y ropa deportiva.' },
+  { clubId: '2', clubNombre: 'Fútbol Amateur Maipú', deporte: 'Fútbol', comuna: 'Maipú', colorFrom: '#1F2A5C', abierta: true, titulo: 'Pruebas para el plantel de la temporada', descripcion: 'Buscamos defensas y arqueros. Pruebas abiertas los sábados.', categoria: 'Sub-23', fecha: enDias(10), cupos: 6, requisitos: 'Canilleras y zapatos de fútbol.' },
+  { clubId: '3', clubNombre: 'Ciclistas La Florida', deporte: 'Ciclismo', comuna: 'La Florida', colorFrom: '#22C55E', abierta: true, titulo: 'Nuevos integrantes para salidas de ruta', descripcion: 'Salidas de 60 km los domingos. Nivel medio.', categoria: 'Mixto', fecha: enDias(7), cupos: 12, requisitos: 'Bicicleta de ruta y casco.' },
 ];
 
 // ---------- almacén en memoria ----------
@@ -65,6 +113,14 @@ export function getConvocatoria(clubId: string): Convocatoria | undefined {
 export function publicarConvocatoria(clubId: string, clubNombre: string, datos: DatosConvocatoria): Resultado {
   const titulo = datos.titulo.trim();
   if (titulo.length < 3) return { ok: false, motivo: 'Escribe un título de al menos 3 letras.' };
+  if (!DEPORTES_CLUB.includes(datos.deporte)) return { ok: false, motivo: 'Elige el deporte de la convocatoria.' };
+  const categoria = datos.categoria.trim();
+  if (!categoria) return { ok: false, motivo: 'Indica la categoría o edad (ej: Sub-18, Adultos).' };
+  if (!fechaValida(datos.fecha.trim())) return { ok: false, motivo: 'Escribe la fecha de la prueba como AAAA-MM-DD (ej: 2026-11-14).' };
+  if (datos.fecha.trim() < hoyISO()) return { ok: false, motivo: 'La fecha de la prueba no puede estar en el pasado.' };
+  const requisitos = datos.requisitos.trim();
+  if (!requisitos) return { ok: false, motivo: 'Escribe los requisitos para postular.' };
+  if (!Number.isInteger(datos.cupos) || datos.cupos < 1) return { ok: false, motivo: 'Los cupos deben ser un número entero mayor a 0.' };
   const previa = convocatorias[clubId];
   convocatorias = {
     ...convocatorias,
@@ -74,6 +130,11 @@ export function publicarConvocatoria(clubId: string, clubNombre: string, datos: 
       clubNombre,
       titulo,
       descripcion: datos.descripcion.trim(),
+      deporte: datos.deporte,
+      categoria,
+      fecha: datos.fecha.trim(),
+      requisitos,
+      cupos: datos.cupos,
       abierta: true,
       colorFrom: previa?.colorFrom ?? COLOR_CLUB,
     },
