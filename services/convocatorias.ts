@@ -70,6 +70,28 @@ export type Candidato = {
   fecha_postulacion: string;
   fecha_actualizacion: string;
 };
+export type Postulacion = {
+  id: string;
+  estado: EstadoPostulacion;
+  convocatoria: Convocatoria;
+  mensaje: string | null;
+  antecedentes: Antecedente[];
+  perfil_deportivo: PerfilDeportivo;
+  comentario_club: string | null;
+  fecha_creacion: string;
+  fecha_actualizacion: string;
+};
+export type PaginaMisPostulaciones = {
+  items: Postulacion[];
+  total: number;
+  page: number;
+  page_size: number;
+};
+export type PresentacionConvocatoria =
+  | { tipo: 'postular'; texto: 'Postular' }
+  | { tipo: 'estado'; texto: 'Postulación enviada' | 'Preseleccionado' | 'Aceptado' | 'Rechazado' }
+  | { tipo: 'cerrada'; texto: 'Convocatoria cerrada' };
+type TextoEstadoPostulacion = Extract<PresentacionConvocatoria, { tipo: 'estado' }>['texto'];
 export type PaginaCandidatos = {
   convocatoria: Convocatoria;
   items: Candidato[];
@@ -92,6 +114,32 @@ export async function listarConvocatorias(
 ) {
   const params = `club_id=${encodeURIComponent(clubId)}&estado=${estado}&page=${page}&page_size=20`;
   return apiRequest<PaginaConvocatorias>(`/clubs/announcements?${params}`);
+}
+
+export async function postularConvocatoria(convocatoriaId: string, datos?: { mensaje?: string | null }) {
+  return apiRequest<Postulacion>(`/clubs/announcements/${encodeURIComponent(convocatoriaId)}/applications`, {
+    method: 'POST',
+    token: await tokenActual(),
+    body: { mensaje: datos?.mensaje ?? null, antecedentes: [] },
+  });
+}
+
+export async function misPostulaciones() {
+  return apiRequest<PaginaMisPostulaciones>('/clubs/announcements/applications/me', { token: await tokenActual() });
+}
+
+export function presentacionConvocatoria(estado: Convocatoria['estado'], postulacion?: EstadoPostulacion): PresentacionConvocatoria {
+  if (postulacion) {
+    const textos: Record<EstadoPostulacion, TextoEstadoPostulacion> = {
+      PENDIENTE: 'Postulación enviada', PRESELECCIONADO: 'Preseleccionado', ACEPTADO: 'Aceptado', RECHAZADO: 'Rechazado',
+    };
+    return { tipo: 'estado', texto: textos[postulacion] };
+  }
+  return estado === 'ABIERTA' ? { tipo: 'postular', texto: 'Postular' } : { tipo: 'cerrada', texto: 'Convocatoria cerrada' };
+}
+
+export function mensajeErrorPostulacion(error: unknown) {
+  return error instanceof Error ? error.message : 'No se pudo enviar la postulación.';
 }
 
 /** Lista todas las convocatorias de un club en el estado elegido, acumulando páginas. */

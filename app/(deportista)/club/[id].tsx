@@ -1,11 +1,11 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { YO } from '../../../services/actividades';
 import { idHilo, puedeConsultarClub, useHilo } from '../../../services/consultas';
 import { cargarClub, useClub } from '../../../services/clubes';
-import { listarConvocatorias, type Convocatoria } from '../../../services/convocatorias';
+import { listarTodasConvocatoriasClub, mensajeErrorPostulacion, misPostulaciones, postularConvocatoria, presentacionConvocatoria, type Convocatoria, type Postulacion } from '../../../services/convocatorias';
 import { Colors, useAppTheme } from '../../../theme/ThemeContext';
 export default function ClubProfileScreen() {
   const { colors } = useAppTheme();
@@ -17,41 +17,57 @@ export default function ClubProfileScreen() {
   const club = useClub(clubId);
   const [error, setError] = useState('');
   const [convocatorias, setConvocatorias] = useState<Convocatoria[]>([]);
-  const [pagina, setPagina] = useState(1);
-  const [total, setTotal] = useState(0);
   const [errorConvocatorias, setErrorConvocatorias] = useState('');
+  const [errorPostulaciones, setErrorPostulaciones] = useState('');
+  const [postulaciones, setPostulaciones] = useState<Postulacion[]>([]);
+  const [cargandoConvocatorias, setCargandoConvocatorias] = useState(true);
+  const [postulandoId, setPostulandoId] = useState('');
   const [puedeEscribir, setPuedeEscribir] = useState(false);
   const cargarConvocatorias = useCallback(async () => {
+    setCargandoConvocatorias(true);
     try {
-      const data = await listarConvocatorias(clubId);
-      setConvocatorias(data.items);
-      setTotal(data.total);
-      setPagina(data.page);
+      const [lista, misDatos] = await Promise.all([listarTodasConvocatoriasClub(clubId), misPostulaciones()]);
+      setConvocatorias(lista);
       setErrorConvocatorias('');
+      setPostulaciones(misDatos.items);
+      setErrorPostulaciones('');
     } catch (e) {
-      setErrorConvocatorias(e instanceof Error ? e.message : 'No se pudieron cargar las convocatorias.');
+      const mensaje = e instanceof Error ? e.message : 'No se pudieron cargar las convocatorias.';
+      setErrorConvocatorias(mensaje);
+      setErrorPostulaciones(mensaje);
+    } finally {
+      setCargandoConvocatorias(false);
     }
   }, [clubId]);
 
   useEffect(() => {
     if (!clubId) return;
     setConvocatorias([]);
-    setTotal(0);
-    setPagina(1);
+    setPostulaciones([]);
     cargarClub(clubId).catch((e) => {
       setError(e instanceof Error ? e.message : 'No se pudo cargar el club.');
     });
     cargarConvocatorias();
     puedeConsultarClub(clubId).then(() => setPuedeEscribir(true)).catch(() => setPuedeEscribir(false));
   }, [clubId, cargarConvocatorias]);
-  async function cargarMas() {
+  function confirmarPostulacion(convocatoria: Convocatoria) {
+    const titulo = convocatoria.titulo || `${convocatoria.deporte.nombre} · ${convocatoria.categoria_edad}`;
+    Alert.alert('Confirmar postulación', `¿Quieres postular a «${titulo}»?`, [
+      { text: 'Cancelar', style: 'cancel' },
+      { text: 'Postular', onPress: () => { void enviarPostulacion(convocatoria); } },
+    ]);
+  }
+  async function enviarPostulacion(convocatoria: Convocatoria) {
+    setPostulandoId(convocatoria.id);
     try {
-      const data = await listarConvocatorias(clubId, 'ABIERTA', pagina + 1);
-      setConvocatorias((actuales) => [...actuales, ...data.items]);
-      setPagina(data.page);
-      setErrorConvocatorias('');
+      await postularConvocatoria(convocatoria.id);
+      const data = await misPostulaciones();
+      setPostulaciones(data.items);
+      setErrorPostulaciones('');
     } catch (e) {
-      setErrorConvocatorias(e instanceof Error ? e.message : 'No se pudieron cargar las convocatorias.');
+      Alert.alert('No se pudo postular', mensajeErrorPostulacion(e));
+    } finally {
+      setPostulandoId('');
     }
   }
   const hilo = useHilo(idHilo(clubId, YO));
@@ -82,14 +98,15 @@ export default function ClubProfileScreen() {
       </View>
       <View style={styles.convocatoria}>
         <Text style={styles.convocatoriaTitle}>Convocatorias</Text>
+        {cargandoConvocatorias ? <Text style={styles.convocatoriaText}>Cargando convocatorias…</Text> : null}
         {errorConvocatorias ? <Text style={styles.convocatoriaText}>{errorConvocatorias}</Text> : null}
         {errorConvocatorias ? (
           <TouchableOpacity onPress={cargarConvocatorias}>
             <Text style={styles.consultaTitulo}>Reintentar convocatorias</Text>
           </TouchableOpacity>
         ) : null}
-        {convocatorias.length === 0 && !errorConvocatorias ? (
-          <Text style={styles.convocatoriaText}>No hay convocatorias abiertas.</Text>
+        {convocatorias.length === 0 && !errorConvocatorias && !cargandoConvocatorias ? (
+          <Text style={styles.convocatoriaText}>No hay convocatorias en este momento.</Text>
         ) : null}
         {convocatorias.map((convocatoria) => (
           <View key={convocatoria.id} style={styles.convocatoriaItem}>
@@ -105,13 +122,18 @@ export default function ClubProfileScreen() {
             {convocatoria.comuna ? <Text style={styles.convocatoriaText}>{convocatoria.comuna}</Text> : null}
             {convocatoria.descripcion ? <Text style={styles.convocatoriaText}>{convocatoria.descripcion}</Text> : null}
             <Text style={styles.convocatoriaText}>Requisitos: {convocatoria.requisitos.join(', ')}</Text>
+            {(() => {
+              const mia = postulaciones.find((item) => item.convocatoria.id === convocatoria.id);
+              const vista = presentacionConvocatoria(convocatoria.estado, mia?.estado);
+              if (vista.tipo === 'estado') return <View style={styles.postuladoBadge}><Text style={styles.postuladoText}>{vista.texto}</Text></View>;
+              if (vista.tipo === 'cerrada') return <Text style={styles.convocatoriaText}>{vista.texto}</Text>;
+              if (errorPostulaciones) return <Text style={styles.convocatoriaText}>No se pudo comprobar tu postulación.</Text>;
+              return <TouchableOpacity style={styles.postularButton} disabled={postulandoId === convocatoria.id} onPress={() => confirmarPostulacion(convocatoria)}>
+                <Text style={styles.postularText}>{postulandoId === convocatoria.id ? 'Enviando…' : vista.texto}</Text>
+              </TouchableOpacity>;
+            })()}
           </View>
         ))}
-        {convocatorias.length < total ? (
-          <TouchableOpacity onPress={cargarMas}>
-            <Text style={styles.consultaTitulo}>Cargar más convocatorias</Text>
-          </TouchableOpacity>
-        ) : null}
       </View>
       {/* HU-51: canal de consultas con el club */}
       {hilo || puedeEscribir ? (
@@ -185,6 +207,10 @@ const makeStyles = (c: Colors) =>
     convocatoriaTitle: { color: c.text, fontSize: 13, fontWeight: '700' },
     convocatoriaNombre: { color: c.text, fontSize: 13.5, fontWeight: '700', marginBottom: 4 },
     convocatoriaText: { color: c.textMuted, fontSize: 12, lineHeight: 18, marginBottom: 14 },
+    postularButton: { alignSelf: 'flex-start', backgroundColor: c.primary, borderRadius: 10, paddingHorizontal: 16, paddingVertical: 10, marginTop: 4 },
+    postularText: { color: '#fff', fontSize: 13, fontWeight: '700' },
+    postuladoBadge: { alignSelf: 'flex-start', backgroundColor: c.chip, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8, marginTop: 4 },
+    postuladoText: { color: c.accent, fontSize: 12, fontWeight: '700' },
     consultaButton: {
       width: '100%',
       flexDirection: 'row',
