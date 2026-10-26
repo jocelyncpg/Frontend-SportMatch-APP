@@ -3,6 +3,7 @@ import { router } from 'expo-router';
 import { useMemo } from 'react';
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useConvocatoriasAbiertas } from '../../services/consultas';
+import { usePerfilesClub } from '../../services/perfilClub';
 import { Colors, useAppTheme } from '../../theme/ThemeContext';
 
 type ClubItem = { id: string; name: string; sport: string; comuna: string; miembros?: number; colorFrom: string };
@@ -17,14 +18,27 @@ export default function ClubsScreen() {
   const { colors } = useAppTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
-  // Clubes que publicaron su convocatoria desde su panel (HU-51): se suman a los de ejemplo.
+  // Clubes que publicaron su convocatoria desde su panel (HU-51) o que ya completaron "Mi club" (HU-31): se suman a los de ejemplo.
   const abiertas = useConvocatoriasAbiertas();
+  const perfiles = usePerfilesClub();
   const clubes = useMemo<ClubItem[]>(() => {
-    const extra = abiertas
-      .filter((c) => !CLUBES.some((x) => x.id === c.clubId))
-      .map((c) => ({ id: c.clubId, name: c.clubNombre, sport: c.deporte ?? 'Club deportivo', comuna: c.comuna ?? '', colorFrom: c.colorFrom }));
-    return [...CLUBES, ...extra];
-  }, [abiertas]);
+    const lista: ClubItem[] = [...CLUBES];
+    for (const c of abiertas) {
+      if (!lista.some((x) => x.id === c.clubId)) {
+        lista.push({ id: c.clubId, name: c.clubNombre, sport: c.deporte ?? 'Club deportivo', comuna: c.comuna ?? '', colorFrom: c.colorFrom });
+      }
+    }
+    for (const [id, p] of Object.entries(perfiles)) {
+      if (!lista.some((x) => x.id === id)) {
+        lista.push({ id, name: p.nombre, sport: p.deportes[0] ?? 'Club deportivo', comuna: p.zona, colorFrom: '#7C3AED' });
+      }
+    }
+    // Lo que el club edita en "Mi club" manda sobre el nombre y la comuna con que se registró.
+    return lista.map((x) => {
+      const p = perfiles[x.id];
+      return p ? { ...x, name: p.nombre || x.name, comuna: p.zona || x.comuna } : x;
+    });
+  }, [abiertas, perfiles]);
 
   return (
     <View style={styles.container}>

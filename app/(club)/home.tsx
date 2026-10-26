@@ -5,11 +5,13 @@ import { useEffect, useMemo, useState } from 'react';
 import { Alert, KeyboardAvoidingView, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Avatar from '../../components/Avatar';
+import CalendarioFecha from '../../components/CalendarioFecha';
 import { Usuario, cambiarPassword, getSession, logout } from '../../services/auth';
 import {
   DEPORTES_CLUB,
   cerrarConvocatoria as cerrarConvocatoriaEnAlmacen,
   fechaCorta,
+  hoyISO,
   publicarConvocatoria,
   sembrarDemoClub,
   useConsultasPendientes,
@@ -74,6 +76,8 @@ export default function ClubHomeScreen() {
   const [passEnviando, setPassEnviando] = useState(false);
 
   const [modalVisible, setModalVisible] = useState(false);
+  // Mini calendario de la fecha de la prueba (se despliega bajo el campo).
+  const [calendarioAbierto, setCalendarioAbierto] = useState(false);
   // Formulario de la convocatoria (HU-32). Los campos de texto se guardan como texto; los cupos se validan al publicar.
   const [form, setForm] = useState(FORM_VACIO);
   const [formError, setFormError] = useState('');
@@ -179,6 +183,7 @@ export default function ClubHomeScreen() {
         : FORM_VACIO,
     );
     setFormError('');
+    setCalendarioAbierto(false);
     setModalVisible(true);
   }
 
@@ -506,21 +511,21 @@ export default function ClubHomeScreen() {
               <View style={styles.dosColumnas}>
                 <View style={{ flex: 1.4 }}>
                   <Text style={styles.etiqueta}>Fecha de la prueba</Text>
-                  <View style={styles.inputBox}>
-                    <TextInput
-                      placeholder="AAAA-MM-DD"
-                      placeholderTextColor={colors.textMuted}
-                      style={styles.input}
-                      value={form.fecha}
-                      onChangeText={(v) => cambiar('fecha', v)}
-                      keyboardType="numbers-and-punctuation"
-                      maxLength={10}
-                    />
-                  </View>
+                  <TouchableOpacity
+                    style={[styles.inputBox, styles.campoAlto, { gap: 8 }]}
+                    onPress={() => setCalendarioAbierto((a) => !a)}
+                    accessibilityRole="button"
+                    accessibilityLabel={form.fecha ? `Fecha de la prueba: ${fechaCorta(form.fecha)}. Cambiar` : 'Elegir fecha de la prueba'}
+                  >
+                    <Ionicons name="calendar-outline" size={16} color={colors.textMuted} />
+                    <Text style={[styles.input, !form.fecha && { color: colors.textMuted }]} numberOfLines={1}>
+                      {form.fecha ? fechaCorta(form.fecha) : 'Elegir fecha'}
+                    </Text>
+                  </TouchableOpacity>
                 </View>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.etiqueta}>Cupos</Text>
-                  <View style={styles.inputBox}>
+                  <View style={[styles.inputBox, styles.campoAlto]}>
                     <TextInput
                       placeholder="Ej: 12"
                       placeholderTextColor={colors.textMuted}
@@ -533,6 +538,17 @@ export default function ClubHomeScreen() {
                   </View>
                 </View>
               </View>
+
+              {calendarioAbierto ? (
+                <CalendarioFecha
+                  valor={form.fecha}
+                  minimo={hoyISO()}
+                  onElegir={(iso) => {
+                    cambiar('fecha', iso);
+                    setCalendarioAbierto(false);
+                  }}
+                />
+              ) : null}
 
               <Text style={styles.etiqueta}>Requisitos</Text>
               <View style={[styles.inputBox, { height: 80, alignItems: 'flex-start' }]}>
@@ -756,5 +772,7 @@ const makeStyles = (c: Colors) =>
     chipActivo: { backgroundColor: c.primary, borderColor: c.primary },
     chipTexto: { color: c.textMuted, fontSize: 12, fontWeight: '700' },
     chipTextoActivo: { color: '#fff' },
+    // Fecha y Cupos comparten esta altura para que las dos casillas queden iguales.
+    campoAlto: { height: 46, paddingVertical: 0 },
     dosColumnas: { flexDirection: 'row', gap: 10 },
   });

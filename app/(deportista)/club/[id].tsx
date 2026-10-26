@@ -1,12 +1,23 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
-import { Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, Linking, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import MapaUbicacion from '../../../components/MapaUbicacion';
 import { NOMBRES_NIVEL, YO } from '../../../services/actividades';
 import { Usuario, getSession } from '../../../services/auth';
 import { fechaCorta, idHilo, useConvocatoria, useHilo } from '../../../services/consultas';
+import { usePerfilClub } from '../../../services/perfilClub';
 import { PerfilPostulante, idPostulacion, postular, retirarPostulacion, usePostulacion } from '../../../services/postulaciones';
 import { Colors, useAppTheme } from '../../../theme/ThemeContext';
+
+type Contacto = { icono: React.ComponentProps<typeof Ionicons>['name']; etiqueta: string; valor: string; url: string };
+
+// El sitio web puede venir sin esquema: se abre siempre como https.
+const conEsquema = (url: string) => (/^https?:\/\//i.test(url) ? url : `https://${url}`);
+
+function abrirEnlace(url: string) {
+  Linking.openURL(url).catch(() => Alert.alert('No se pudo abrir', 'No se pudo abrir el enlace en este dispositivo.'));
+}
 
 export default function ClubProfileScreen() {
   const { colors } = useAppTheme();
@@ -14,6 +25,10 @@ export default function ClubProfileScreen() {
 
   const { id, name, sport, comuna, colorFrom } = useLocalSearchParams<{ id: string; name: string; sport: string; comuna: string; colorFrom: string }>();
   const clubId = id ?? '';
+  // Lo que el club editó en "Mi club"; si aún no lo edita, se muestra lo que llegó al abrir la pantalla.
+  const perfil = usePerfilClub(clubId);
+  // Mientras el dedo mueve el mapa, la pantalla no debe hacer scroll.
+  const [scrollActivo, setScrollActivo] = useState(true);
 
   // Cuenta con la que se inició sesión: de ahí sale el nombre y el nivel con que el club ve tu postulación.
   const [sesion, setSesion] = useState<Usuario | null>(null);
@@ -70,6 +85,17 @@ export default function ClubProfileScreen() {
 
   function abrirConsultas() {
     router.push({ pathname: '/(deportista)/chat-club/[id]', params: { id: clubId } } as never);
+  }
+
+  const lugar = [perfil?.direccion, perfil?.zona].filter(Boolean).join(' · ');
+  const tieneMapa = perfil?.latitud != null && perfil?.longitud != null;
+  const contactos: Contacto[] = [];
+  if (perfil?.telefono) contactos.push({ icono: 'call-outline', etiqueta: 'Teléfono', valor: perfil.telefono, url: `tel:${perfil.telefono.replace(/[^\d+]/g, '')}` });
+  if (perfil?.email) contactos.push({ icono: 'mail-outline', etiqueta: 'Correo', valor: perfil.email, url: `mailto:${perfil.email}` });
+  if (perfil?.web && !/\s/.test(perfil.web)) contactos.push({ icono: 'globe-outline', etiqueta: 'Sitio web', valor: perfil.web, url: conEsquema(perfil.web) });
+  if (perfil?.instagram && !/\s/.test(perfil.instagram)) {
+    const usuario = perfil.instagram.replace(/^https?:\/\/(www\.)?instagram\.com\//i, '').replace(/^@/, '').replace(/\/+$/, '');
+    if (usuario) contactos.push({ icono: 'logo-instagram', etiqueta: 'Instagram', valor: `@${usuario}`, url: `https://instagram.com/${usuario}` });
   }
 
   // Detalle completo de la convocatoria: lo que necesitas saber antes y después de postular.
@@ -129,7 +155,7 @@ export default function ClubProfileScreen() {
     ) : null;
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+    <ScrollView style={styles.container} contentContainerStyle={styles.content} scrollEnabled={scrollActivo}>
       <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
         <Ionicons name="arrow-back" size={18} color={colors.text} />
       </TouchableOpacity>
@@ -137,13 +163,14 @@ export default function ClubProfileScreen() {
       <View style={[styles.avatar, { backgroundColor: colorFrom ?? '#7C3AED' }]}>
         <Ionicons name="shield" size={36} color="#fff" />
       </View>
-      <Text style={styles.name}>{name}</Text>
-      <Text style={styles.meta}>{[sport, comuna].filter(Boolean).join(' · ')}</Text>
+      <Text style={styles.name}>{perfil?.nombre || name}</Text>
+      <Text style={styles.meta}>{[sport, perfil?.zona || comuna].filter(Boolean).join(' · ')}</Text>
 
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Sobre el club</Text>
         <Text style={styles.sectionText}>
-          Club deportivo con entrenamientos regulares y espacio para nuevos integrantes que quieran competir y mejorar su nivel.
+          {perfil?.descripcion ||
+            'Club deportivo con entrenamientos regulares y espacio para nuevos integrantes que quieran competir y mejorar su nivel.'}
         </Text>
       </View>
 
@@ -185,6 +212,45 @@ export default function ClubProfileScreen() {
           </View>
         </>
       )}
+
+      {lugar || tieneMapa ? (
+        <View style={styles.tarjeta}>
+          <View style={styles.convocatoriaHeader}>
+            <Ionicons name="location-outline" size={16} color={colors.accent} />
+            <Text style={styles.convocatoriaTitle}>Ubicación</Text>
+          </View>
+          {lugar ? <Text style={styles.lugarTexto}>{lugar}</Text> : null}
+          {perfil && tieneMapa ? (
+            <View style={styles.mapaWrap}>
+              <MapaUbicacion
+                latitud={perfil.latitud as number}
+                longitud={perfil.longitud as number}
+                titulo={perfil.nombre || name}
+                onMoviendo={(moviendo) => setScrollActivo(!moviendo)}
+              />
+            </View>
+          ) : null}
+        </View>
+      ) : null}
+
+      {contactos.length > 0 ? (
+        <View style={styles.tarjeta}>
+          <View style={styles.convocatoriaHeader}>
+            <Ionicons name="call-outline" size={16} color={colors.accent} />
+            <Text style={styles.convocatoriaTitle}>Contacto</Text>
+          </View>
+          {contactos.map((c) => (
+            <TouchableOpacity key={c.etiqueta} style={styles.contactoFila} onPress={() => abrirEnlace(c.url)} accessibilityLabel={`${c.etiqueta}: ${c.valor}`}>
+              <Ionicons name={c.icono} size={18} color={colors.textMuted} />
+              <View style={styles.consultaTextos}>
+                <Text style={styles.detalleEtiqueta}>{c.etiqueta}</Text>
+                <Text style={styles.detalleValor}>{c.valor}</Text>
+              </View>
+              <Ionicons name="open-outline" size={15} color={colors.textMuted} />
+            </TouchableOpacity>
+          ))}
+        </View>
+      ) : null}
 
       {/* HU-51: canal de consultas con el club */}
       {abierta || hilo ? (
@@ -243,6 +309,10 @@ const makeStyles = (c: Colors) =>
     rechazadoText: { color: c.danger, fontSize: 13, fontWeight: '700' },
     retirarButton: { alignItems: 'center', paddingTop: 12 },
     retirarText: { color: c.danger, fontSize: 12, fontWeight: '700' },
+    tarjeta: { width: '100%', backgroundColor: c.card, borderWidth: 1, borderColor: c.border, borderRadius: 16, padding: 16, marginBottom: 14 },
+    lugarTexto: { color: c.text, fontSize: 13, lineHeight: 18 },
+    mapaWrap: { borderRadius: 12, overflow: 'hidden', marginTop: 10 },
+    contactoFila: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 10, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: c.border },
     consultaButton: { width: '100%', flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: c.card, borderWidth: 1, borderColor: c.border, borderRadius: 14, padding: 12 },
     consultaIcono: { width: 36, height: 36, borderRadius: 11, backgroundColor: c.chip, alignItems: 'center', justifyContent: 'center' },
     consultaTextos: { flex: 1 },
