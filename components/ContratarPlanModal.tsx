@@ -1,8 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
 import * as WebBrowser from 'expo-web-browser';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Linking, Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { beneficiosDe, confirmarPago, iniciarPago, leerRetornoWebpay, precioTexto, type CuentaPlan, type Plan, type RetornoWebpay } from '../services/planes';
+import { ActivityIndicator, Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { beneficiosDe, confirmarPago, iniciarPago, precioTexto, type CuentaPlan, type Plan, type RetornoWebpay } from '../services/planes';
 import { Colors, useAppTheme } from '../theme/ThemeContext';
 
 type Props = {
@@ -38,21 +38,7 @@ export default function ContratarPlanModal({ visible, plan, cuenta, onClose }: P
     if (visible) { setListo(false); setError(null); setPendiente(null); setProcesando(false); }
   }, [visible]);
 
-  useEffect(() => {
-    if (!visible) return;
-    let atendiendo = false;
-    const procesarUrl = (url: string) => {
-      const retorno = leerRetornoWebpay(url);
-      if (!retorno || atendiendo) return;
-      atendiendo = true;
-      setPendiente(retorno);
-      setProcesando(true);
-      void confirmar(retorno).finally(() => { atendiendo = false; setProcesando(false); });
-    };
-    const suscripcion = Linking.addEventListener('url', ({ url }) => procesarUrl(url));
-    void Linking.getInitialURL().then((url) => { if (url) procesarUrl(url); });
-    return () => suscripcion.remove();
-  }, [visible, confirmar]);
+  // El regreso de Webpay lo atiende la pantalla app/pago.tsx (evita confirmar dos veces).
 
   if (!plan) return null;
 
