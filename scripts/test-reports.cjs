@@ -28,22 +28,24 @@ const plano = (valor) => JSON.parse(JSON.stringify(valor));
 
 test('un reporte válido viaja a Ms_Users con el token', async () => {
   const { api, calls } = load();
-  assert.deepEqual(plano(await api.reportar('usuario', 'u-2', 'Beto T.', 'Spam o publicidad', '  insiste  ')), { ok: true });
+  assert.deepEqual(plano(await api.reportar('usuario', 'u-2', 'Beto T.', 'Spam o publicidad', '  insiste mucho  ')), { ok: true });
   const [ruta, opciones] = calls[0];
   assert.equal(ruta, '/users/reports');
   assert.equal(opciones.method, 'POST');
   assert.equal(opciones.token, 'token-a');
   assert.deepEqual(plano(opciones.body), {
-    tipo: 'usuario', objetivo_id: 'u-2', objetivo_nombre: 'Beto T.', motivo: 'Spam o publicidad', detalle: 'insiste',
+    tipo: 'usuario', objetivo_id: 'u-2', objetivo_nombre: 'Beto T.', motivo: 'Spam o publicidad', detalle: 'insiste mucho',
   });
 });
 
 test('las reglas se revisan antes de enviar y los errores del servidor se muestran', async () => {
   const { api, calls } = load(async () => { throw new ApiError('Ya enviaste este reporte. Lo estamos revisando.', 409); });
   assert.equal((await api.reportar('usuario', 'u-2', 'Beto', 'Lugar inseguro', '')).ok, false);
+  assert.equal((await api.reportar('usuario', 'u-2', 'Beto', 'Spam o publicidad', '')).ok, false);
+  assert.equal((await api.reportar('usuario', 'u-2', 'Beto', 'Spam o publicidad', 'corto')).ok, false);
   assert.equal((await api.reportar('mensaje', 'm:1', 'Hola', 'Otro', 'corto')).ok, false);
   assert.equal(calls.length, 0);
-  assert.deepEqual(plano(await api.reportar('actividad', 'a-1', 'Trote', 'Lugar inseguro', '')),
+  assert.deepEqual(plano(await api.reportar('actividad', 'a-1', 'Trote', 'Lugar inseguro', 'Hay un tramo sin luz')),
     { ok: false, motivo: 'Ya enviaste este reporte. Lo estamos revisando.' });
 });
 

@@ -53,7 +53,7 @@ export default function MatchModal({
         Animated.spring(corazon, { toValue: 1, friction: 4, useNativeDriver: true }),
       ]),
     ]).start();
-  }, [visible]);
+  }, [visible, corazon, derecha, fade, izquierda]);
 
   const primerNombre = nombre.split(' ')[0];
 

@@ -88,7 +88,7 @@ export default function HomeScreen() {
 
           <TouchableOpacity
             onPress={() =>
-              router.push('/(deportista)/(tabs)/profile')
+              router.navigate('/(deportista)/(tabs)/profile')
             }
             style={styles.miniAvatar}
           >
@@ -137,13 +137,13 @@ export default function HomeScreen() {
         />
       </TouchableOpacity>
 
-      {/* Acceso al directorio de clubes */}
+      {/* Acceso a las convocatorias abiertas de los clubes */}
       <TouchableOpacity
         style={styles.clubBanner}
-        onPress={() => router.push('/(deportista)/clubs')}
+        onPress={() => router.push('/(deportista)/convocatorias' as never)}
       >
-        <Ionicons name="shield-outline" size={18} color={colors.accent} />
-        <Text style={styles.clubBannerText}>Explorar clubes cerca de ti</Text>
+        <Ionicons name="megaphone-outline" size={18} color={colors.accent} />
+        <Text style={styles.clubBannerText}>Explorar convocatorias abiertas</Text>
         <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
       </TouchableOpacity>
 
@@ -155,7 +155,7 @@ export default function HomeScreen() {
           Deportistas recomendados
         </Text>
 
-        <TouchableOpacity onPress={() => router.push('/(deportista)/(tabs)/discover')}>
+        <TouchableOpacity onPress={() => router.navigate('/(deportista)/(tabs)/discover')}>
           <Text style={styles.sectionLink}>
             Ver todos
           </Text>

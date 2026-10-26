@@ -180,3 +180,21 @@ test('los destinos de push aceptan solo rutas conocidas e identificadores UUID',
   assert.equal(calls[4].params.clubId, valid);
   assert.deepEqual(calls.slice(5), Array(4).fill('/(deportista)/notificaciones'));
 });
+
+test('los avisos de club y canales abren su pantalla real con el id correcto', () => {
+  const calls = [];
+  const api = load('notificationNavigation.ts', {
+    'expo-router': { router: { push: (dest) => calls.push(dest) } },
+  });
+  const valid = '10000000-0000-4000-8000-000000000001';
+  api.abrirDestino({ screen: 'comunicado', clubId: valid, comunicadoId: valid });
+  api.abrirDestino({ screen: 'canal', clubId: valid, canalId: valid });
+  api.abrirDestino({ screen: 'canal_inactivo', clubId: valid, canalId: valid });
+  api.abrirDestino({ screen: 'comunicado', clubId: '../../admin' });
+  api.abrirDestino({ screen: 'canal', canalId: '../../admin' });
+  const plano = (value) => JSON.parse(JSON.stringify(value)); // objetos creados en otro contexto de vm
+  assert.deepEqual(plano(calls[0]), { pathname: '/(deportista)/club/[id]', params: { id: valid } });
+  assert.deepEqual(plano(calls[1]), { pathname: '/(deportista)/canal/[id]', params: { id: valid } });
+  assert.deepEqual(plano(calls[2]), { pathname: '/(club)/canal/[id]', params: { id: valid, clubId: valid } });
+  assert.deepEqual(plano(calls.slice(3)), Array(2).fill('/(deportista)/notificaciones'));
+});

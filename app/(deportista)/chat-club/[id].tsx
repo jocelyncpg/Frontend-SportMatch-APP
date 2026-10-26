@@ -26,6 +26,7 @@ import {
   useHilo,
 } from '../../../services/consultas';
 import { cargarClub, useClub } from '../../../services/clubes';
+import { chatPostulantesHabilitado, misPostulaciones } from '../../../services/convocatorias';
 import { Colors, useAppTheme } from '../../../theme/ThemeContext';
 export default function ChatClubScreen() {
   const { colors } = useAppTheme();
@@ -45,10 +46,16 @@ export default function ChatClubScreen() {
   const scroll = useRef<ScrollView>(null);
   // Nombre con el que el club verá esta consulta: el de la cuenta con la que se inició sesión.
   const [miNombre, setMiNombre] = useState('');
+  // Si el club deshabilitó el chat en todas las convocatorias donde el deportista está postulado, solo puede leer.
+  const [soloLectura, setSoloLectura] = useState(false);
   useFocusEffect(useCallback(() => {
     if (!clubId) return;
     cargarClub(clubId).catch(() => { });
     abrirConsultaDeportista(clubId);
+    misPostulaciones().then(({ items }) => {
+      const activas = items.filter((p) => p.convocatoria.club.id === clubId && p.estado !== 'RECHAZADO');
+      setSoloLectura(activas.length > 0 && activas.every((p) => !chatPostulantesHabilitado(p.convocatoria)));
+    }).catch(() => setSoloLectura(false));
     getSession().then((s) => {
       if (s?.nombre) setMiNombre(s.nombre);
     });
@@ -104,7 +111,14 @@ export default function ChatClubScreen() {
           );
         })}
       </ScrollView>
-      {!sinPermiso ? (
+      {soloLectura ? (
+        <View style={[styles.inputBar, { paddingBottom: insets.bottom + 10 }]}>
+          <Ionicons name="lock-closed-outline" size={16} color={colors.textMuted} />
+          <Text style={styles.cerradaTexto}>
+            Solo puedes leer: el club deshabilitó el chat para postulantes en esta convocatoria.
+          </Text>
+        </View>
+      ) : !sinPermiso ? (
         <View style={[styles.inputBar, { paddingBottom: insets.bottom + 10 }]}>
           <TextInput
             style={styles.input}

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ScrollView, StyleSheet, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { HORARIOS, formatearDia, formatearHora, opcionesDias } from '../services/actividades';
 import {
   agregarDeporteClub,
@@ -8,7 +8,9 @@ import {
   type DeporteClub,
 } from '../services/clubes';
 import {
+  cambiarChatPostulantes,
   cerrarConvocatoria,
+  chatPostulantesHabilitado,
   listarConvocatorias,
   publicarConvocatoria,
   type Convocatoria,
@@ -181,6 +183,22 @@ export function ConvocatoriasClub({ club }: {
       setOcupado(false);
     }
   }
+  /** El club decide si los postulantes pueden escribir en el chat de esta convocatoria. */
+  async function cambiarChat(convocatoria: Convocatoria, habilitado: boolean) {
+    if (ocupado) return;
+    setOcupado(true);
+    setError('');
+    setErrorLista(false);
+    try {
+      await cambiarChatPostulantes(club.id, convocatoria.id, habilitado);
+      setLista((actuales) => actuales.map((c) => c.id === convocatoria.id
+        ? { ...c, chat_postulantes_habilitado: habilitado } : c));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'No se pudo cambiar el chat de postulantes.');
+    } finally {
+      setOcupado(false);
+    }
+  }
   async function cerrar(id: string) {
     if (ocupado) return;
     setOcupado(true);
@@ -247,6 +265,23 @@ export function ConvocatoriasClub({ club }: {
             {convocatoria.estado} · {new Date(convocatoria.fecha_prueba).toLocaleString('es-CL')}
           </Text>
           <Text style={styles.info}>{convocatoria.cupos_disponibles} cupos disponibles</Text>
+          <View style={styles.filaSwitch}>
+            <View style={styles.expandir}>
+              <Text style={styles.nombre}>Chat con postulantes</Text>
+              <Text style={styles.info}>
+                {chatPostulantesHabilitado(convocatoria)
+                  ? 'Los postulantes pueden escribir y responder.'
+                  : 'Los postulantes solo pueden leer los mensajes del club.'}
+              </Text>
+            </View>
+            <Switch
+              value={chatPostulantesHabilitado(convocatoria)}
+              disabled={ocupado}
+              onValueChange={(valor) => { void cambiarChat(convocatoria, valor); }}
+              trackColor={{ false: colors.border, true: colors.primary }}
+              accessibilityLabel={`Chat con postulantes de ${convocatoria.titulo || convocatoria.deporte.nombre}`}
+            />
+          </View>
           {convocatoria.estado === 'ABIERTA' ? (
             <TouchableOpacity disabled={ocupado} onPress={() => cerrar(convocatoria.id)}>
               <Text style={styles.enlace}>Cerrar convocatoria</Text>
@@ -383,6 +418,7 @@ const makeStyles = (c: Colors) => StyleSheet.create({
   fila: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   expandir: { flex: 1 },
   tarjeta: { borderTopColor: c.border, borderTopWidth: 1, paddingTop: 8, gap: 4 },
+  filaSwitch: { flexDirection: 'row', alignItems: 'center', gap: 12, marginVertical: 6 },
   chip: { backgroundColor: c.chip, borderRadius: 10, padding: 10, marginRight: 8 },
   chipActivo: { borderColor: c.primary, borderWidth: 2 },
   boton: { backgroundColor: c.primary, borderRadius: 10, padding: 12, alignItems: 'center' },

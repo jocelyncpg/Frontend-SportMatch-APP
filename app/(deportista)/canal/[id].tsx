@@ -14,7 +14,7 @@ export default function CanalDeportistaScreen() {
   useFocusEffect(useCallback(() => { if (!canalId) return; abrirCanalDeportista(canalId); return () => cerrarCanal(canalId); }, [canalId]));
   async function enviar() { const r = await enviarMensajeCanal(canalId, null, texto); if (r.ok) setTexto(''); else Alert.alert('No se pudo enviar', r.motivo); }
   function opciones() { Alert.alert(canal?.nombre ?? 'Canal', undefined, [
-    { text: canal?.silenciado ? 'Activar avisos' : 'Silenciar', onPress: () => canal && silenciarCanal(canalId, !canal.silenciado).catch((e) => Alert.alert('Error', e.message)) },
+    { text: canal?.silenciado ? 'Activar avisos' : 'Silenciar', onPress: () => canal && silenciarCanal(canalId, !canal.silenciado).catch((e) => Alert.alert('No se pudo cambiar el aviso', e.message)) },
     { text: 'Cancelar', style: 'cancel' },
   ]); }
   function render({ item }: { item: MensajeCanal }) { return <View style={[styles.message, item.propio ? styles.own : null]}>

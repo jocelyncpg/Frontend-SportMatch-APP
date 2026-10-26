@@ -1,6 +1,7 @@
 import { useSyncExternalStore } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ApiError, apiRequest } from './api';
-import { getToken } from './auth';
+import { getSession, getToken } from './auth';
 
 export type PlanId = 'gratuito' | 'pro' | 'club';
 
@@ -45,7 +46,35 @@ export const FILAS_COMPARATIVA: FilaComparativa[] = [
 ];
 
 export type CuentaPlan = 'deportista' | 'club';
-export type ResultadoPlan = { ok: true } | { ok: false; motivo: string };
+export type ResultadoPlan = { ok: true } | { ok: false; motivo: string; reintentable: boolean };
+export type RetornoPago = { token_ws?: string; tbk_token?: string; tbk_orden_compra?: string; tbk_id_sesion?: string };
+type PagoPendiente = { tokenWs: string; urlPago: string; creadoEn: number };
+
+async function clavePendiente(): Promise<string | null> {
+  const session = await getSession();
+  return session ? `sportmatch_pago:${session.id}` : null;
+}
+
+export async function leerPagoPendiente(): Promise<PagoPendiente | null> {
+  const key = await clavePendiente();
+  if (!key) return null;
+  try {
+    const pago = JSON.parse(await AsyncStorage.getItem(key) || 'null') as PagoPendiente | null;
+    if (!pago) return null;
+    // El puente firmado vence en 15 minutos. Un intento antiguo no debe
+    // impedir contratar de nuevo; su retorno aún se procesa en /pago.
+    if (typeof pago.creadoEn !== 'number' || Date.now() - pago.creadoEn >= 15 * 60 * 1000) {
+      await AsyncStorage.removeItem(key);
+      return null;
+    }
+    return pago;
+  } catch { return null; }
+}
+
+export async function olvidarPagoPendiente(): Promise<void> {
+  const key = await clavePendiente();
+  if (key) await AsyncStorage.removeItem(key);
+}
 
 /** Pesos chilenos con punto de miles, sin depender del idioma del teléfono: 4990 → "$4.990". */
 export function formatearCLP(monto: number): string {
@@ -78,7 +107,7 @@ export function beneficiosDe(id: PlanId): string[] {
 /** Plan de /payments/plans. USUARIO es el plan de pago del deportista (Pro); CLUB, el del club. */
 type PlanApi = { id: number; nombre: string; tipo: 'USUARIO' | 'CLUB'; descripcion: string | null; precio: number; duracion_dias: number };
 type SuscripcionApi = { estado: 'ACTIVE' | 'EXPIRED'; plan: PlanApi; fecha_fin: string };
-type PagoIniciadoApi = { token_ws: string; url: string };
+type PagoIniciadoApi = { token_ws: string; checkout_url: string };
 type PagoConfirmadoApi = { status: 'PENDING' | 'APPROVED' | 'REJECTED' | 'CANCELLED'; suscripcion: SuscripcionApi | null };
 
 const ID_POR_TIPO: Record<PlanApi['tipo'], PlanId> = { USUARIO: 'pro', CLUB: 'club' };
@@ -146,7 +175,7 @@ export async function cargarPlanes(cuenta: CuentaPlan): Promise<void> {
 
 /**
  * Paso 1 del pago (HU-42/43): crea la transacción en Webpay Plus y devuelve la página de pago.
- * Webpay acepta el token_ws en la URL, así que basta con abrirla en el navegador.
+ * Abre el puente del backend que envía token_ws mediante un formulario POST.
  */
 export async function iniciarPago(cuenta: CuentaPlan, plan: Plan): Promise<{ tokenWs: string; urlPago: string }> {
   if (plan.paraCuenta !== cuenta) {
@@ -157,23 +186,37 @@ export async function iniciarPago(cuenta: CuentaPlan, plan: Plan): Promise<{ tok
   if (!plan.backendId) throw new Error('Este plan aún no está disponible para contratar. Intenta más tarde.');
   const r = await apiRequest<PagoIniciadoApi>('/payments/webpay/initiate', {
     method: 'POST', token: await token(), body: { plan_id: plan.backendId },
+    timeoutMs: 40000,
   });
-  const separador = r.url.includes('?') ? '&' : '?';
-  return { tokenWs: r.token_ws, urlPago: `${r.url}${separador}token_ws=${encodeURIComponent(r.token_ws)}` };
+  const pendiente = { tokenWs: r.token_ws, urlPago: r.checkout_url, creadoEn: Date.now() };
+  const key = await clavePendiente();
+  if (key) await AsyncStorage.setItem(key, JSON.stringify(pendiente));
+  return pendiente;
 }
 
 /** Paso 2: al volver de Webpay, confirma el pago. Solo un pago APPROVED deja el plan activo. */
-export async function confirmarPago(cuenta: CuentaPlan, tokenWs: string): Promise<ResultadoPlan> {
+export async function confirmarPago(cuenta: CuentaPlan, retorno: string | RetornoPago): Promise<ResultadoPlan> {
+  let key: string | null = null;
   try {
+    key = await clavePendiente();
     const r = await apiRequest<PagoConfirmadoApi>('/payments/webpay/commit', {
-      method: 'POST', token: await token(), body: { token_ws: tokenWs },
+      method: 'POST', token: await token(), body: typeof retorno === 'string' ? { token_ws: retorno } : retorno,
+      timeoutMs: 40000,
     });
-    if (r.status !== 'APPROVED') return { ok: false, motivo: 'El pago no se completó. No se realizó ningún cobro.' };
-    guardarActual(cuenta, vigente(r.suscripcion) ?? estado.actual[cuenta]);
+    if (r.status !== 'APPROVED') return { ok: false, motivo: 'El pago aún no está confirmado.', reintentable: r.status === 'PENDING' };
+    const planVigente = vigente(r.suscripcion);
+    guardarActual(cuenta, planVigente ?? SIN_PLAN[cuenta]);
+    if (key) await AsyncStorage.removeItem(key).catch(() => undefined);
+    if (!planVigente) return {
+      ok: false, reintentable: false,
+      motivo: 'Este pago corresponde a una suscripción que ya no está activa. Puedes contratar un plan nuevamente.',
+    };
     return { ok: true };
   } catch (e) {
     // Webpay rechazó o se anuló la compra: el backend responde 400 con el detalle.
-    return { ok: false, motivo: e instanceof Error && e.message ? e.message : 'No pudimos confirmar el pago.' };
+    if (key && e instanceof ApiError && [400, 404].includes(e.status)) await AsyncStorage.removeItem(key).catch(() => undefined);
+    return { ok: false, motivo: e instanceof Error && e.message ? e.message : 'No pudimos confirmar el pago.',
+      reintentable: !(e instanceof ApiError) || e.status === 0 || e.status === 401 || e.status >= 500 };
   }
 }
 
