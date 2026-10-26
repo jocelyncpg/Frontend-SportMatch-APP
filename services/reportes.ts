@@ -29,6 +29,8 @@ export const MOTIVOS: Record<TipoReporte, string[]> = {
 };
 export const MOTIVO_OTRO = 'Otro';
 export const MAX_DETALLE = 300;
+/** La justificación es obligatoria para todos los motivos (mismo mínimo que valida Ms_Users). */
+export const MIN_DETALLE = 10;
 
 export const TITULO_TIPO: Record<TipoReporte, string> = {
   usuario: 'Reportar usuario',
@@ -55,7 +57,7 @@ export function validarReporte(tipo: TipoReporte, motivo: string, detalle: strin
   if (!MOTIVOS[tipo].includes(motivo)) return { ok: false, motivo: 'Elige un motivo para el reporte.' };
   const texto = detalle.trim();
   if (texto.length > MAX_DETALLE) return { ok: false, motivo: `El detalle admite hasta ${MAX_DETALLE} caracteres.` };
-  if (motivo === MOTIVO_OTRO && texto.length < 10) return { ok: false, motivo: 'Cuéntanos qué pasó (al menos 10 caracteres).' };
+  if (texto.length < MIN_DETALLE) return { ok: false, motivo: `Cuéntanos qué pasó (al menos ${MIN_DETALLE} caracteres).` };
   return { ok: true };
 }
 

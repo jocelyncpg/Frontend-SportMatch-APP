@@ -7,12 +7,11 @@ import { idHilo, puedeConsultarClub, useHilo } from '../../../services/consultas
 import { cargarClub, useClub } from '../../../services/clubes';
 import { listarTodasConvocatoriasClub, mensajeErrorPostulacion, misPostulaciones, postularConvocatoria, presentacionConvocatoria, type Convocatoria, type Postulacion } from '../../../services/convocatorias';
 import { Colors, useAppTheme } from '../../../theme/ThemeContext';
+
 export default function ClubProfileScreen() {
   const { colors } = useAppTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
-  const { id } = useLocalSearchParams<{
-    id: string
-  }>();
+  const { id, colorFrom } = useLocalSearchParams<{ id: string; colorFrom?: string }>();
   const clubId = id ?? '';
   const club = useClub(clubId);
   const [error, setError] = useState('');
@@ -75,12 +74,14 @@ export default function ClubProfileScreen() {
   function abrirConsultas() {
     router.push({ pathname: '/(deportista)/chat-club/[id]', params: { id: clubId } } as never);
   }
+
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
         <Ionicons name="arrow-back" size={18} color={colors.text} />
       </TouchableOpacity>
-      <View style={[styles.avatar, { backgroundColor: colors.primary }]}>
+
+      <View style={[styles.avatar, { backgroundColor: colorFrom ?? '#7C3AED' }]}>
         <Ionicons name="shield" size={36} color="#fff" />
       </View>
       <Text style={styles.name}>{club?.nombre ?? (error || 'Cargando club...')}</Text>
@@ -92,12 +93,23 @@ export default function ClubProfileScreen() {
         </TouchableOpacity>
       ) : null}
       {club?.rut ? <Text style={styles.meta}>RUT {club.rut}</Text> : null}
+
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Sobre el club</Text>
         <Text style={styles.sectionText}>{club?.descripcion || 'Sin descripción.'}</Text>
       </View>
+
       <View style={styles.convocatoria}>
-        <Text style={styles.convocatoriaTitle}>Convocatorias</Text>
+        <View style={styles.convocatoriaHeader}>
+          <Ionicons
+            name={convocatorias.length > 0 ? 'megaphone-outline' : 'lock-closed-outline'}
+            size={16}
+            color={convocatorias.length > 0 ? colors.success : colors.textMuted}
+          />
+          <Text style={styles.convocatoriaTitle}>
+            {convocatorias.length > 0 ? 'Convocatorias' : 'Sin convocatoria abierta'}
+          </Text>
+        </View>
         {cargandoConvocatorias ? <Text style={styles.convocatoriaText}>Cargando convocatorias…</Text> : null}
         {errorConvocatorias ? <Text style={styles.convocatoriaText}>{errorConvocatorias}</Text> : null}
         {errorConvocatorias ? (
@@ -106,50 +118,66 @@ export default function ClubProfileScreen() {
           </TouchableOpacity>
         ) : null}
         {convocatorias.length === 0 && !errorConvocatorias && !cargandoConvocatorias ? (
-          <Text style={styles.convocatoriaText}>No hay convocatorias en este momento.</Text>
+          <Text style={styles.convocatoriaText}>Este club no tiene una convocatoria abierta por ahora.</Text>
         ) : null}
-        {convocatorias.map((convocatoria) => (
-          <View key={convocatoria.id} style={styles.convocatoriaItem}>
-            <Text style={styles.convocatoriaNombre}>
-              {convocatoria.titulo || `${convocatoria.deporte.nombre} · ${convocatoria.categoria_edad}`}
-            </Text>
-            <Text style={styles.convocatoriaText}>
-              {convocatoria.deporte.nombre} · {convocatoria.categoria_edad} · {convocatoria.cupos_disponibles} cupos
-            </Text>
-            <Text style={styles.convocatoriaText}>
-              {new Date(convocatoria.fecha_prueba).toLocaleString('es-CL')} · {convocatoria.direccion}
-            </Text>
-            {convocatoria.comuna ? <Text style={styles.convocatoriaText}>{convocatoria.comuna}</Text> : null}
-            {convocatoria.descripcion ? <Text style={styles.convocatoriaText}>{convocatoria.descripcion}</Text> : null}
-            <Text style={styles.convocatoriaText}>Requisitos: {convocatoria.requisitos.join(', ')}</Text>
-            {(() => {
-              const mia = postulaciones.find((item) => item.convocatoria.id === convocatoria.id);
-              const vista = presentacionConvocatoria(convocatoria.estado, mia?.estado);
-              if (vista.tipo === 'estado') return <View style={styles.postuladoBadge}><Text style={styles.postuladoText}>{vista.texto}</Text></View>;
-              if (vista.tipo === 'cerrada') return <Text style={styles.convocatoriaText}>{vista.texto}</Text>;
-              if (errorPostulaciones) return <Text style={styles.convocatoriaText}>No se pudo comprobar tu postulación.</Text>;
-              return <TouchableOpacity style={styles.postularButton} disabled={postulandoId === convocatoria.id} onPress={() => confirmarPostulacion(convocatoria)}>
-                <Text style={styles.postularText}>{postulandoId === convocatoria.id ? 'Enviando…' : vista.texto}</Text>
-              </TouchableOpacity>;
-            })()}
-          </View>
-        ))}
+
+        {convocatorias.map((convocatoria) => {
+          const titulo = convocatoria.titulo || `${convocatoria.deporte.nombre} · ${convocatoria.categoria_edad}`;
+          const filas = [
+            { etiqueta: 'Deporte', valor: convocatoria.deporte.nombre },
+            { etiqueta: 'Categoría / edad', valor: convocatoria.categoria_edad },
+            { etiqueta: 'Fecha de la prueba', valor: new Date(convocatoria.fecha_prueba).toLocaleString('es-CL') },
+            { etiqueta: 'Cupos', valor: String(convocatoria.cupos_disponibles) },
+            { etiqueta: 'Lugar', valor: [convocatoria.direccion, convocatoria.comuna].filter(Boolean).join(' · ') },
+            { etiqueta: 'Requisitos', valor: convocatoria.requisitos.join(', ') },
+          ].filter((f) => f.valor !== '');
+          const mia = postulaciones.find((item) => item.convocatoria.id === convocatoria.id);
+          const vista = presentacionConvocatoria(convocatoria.estado, mia?.estado);
+          return (
+            <View key={convocatoria.id} style={styles.convocatoriaItem}>
+              <Text style={styles.convocatoriaNombre}>{titulo}</Text>
+              {convocatoria.descripcion ? <Text style={styles.convocatoriaText}>{convocatoria.descripcion}</Text> : null}
+              <View style={styles.detalle}>
+                {filas.map((f) => (
+                  <View key={f.etiqueta} style={styles.detalleFila}>
+                    <Text style={styles.detalleEtiqueta}>{f.etiqueta}</Text>
+                    <Text style={styles.detalleValor}>{f.valor}</Text>
+                  </View>
+                ))}
+              </View>
+              {(() => {
+                if (vista.tipo === 'estado') {
+                  return (
+                    <View style={styles.pendienteBadge}>
+                      <Ionicons name="time-outline" size={16} color={colors.textMuted} />
+                      <Text style={styles.pendienteText}>{vista.texto}</Text>
+                    </View>
+                  );
+                }
+                if (vista.tipo === 'cerrada') return <Text style={styles.convocatoriaText}>{vista.texto}</Text>;
+                if (errorPostulaciones) return <Text style={styles.convocatoriaText}>No se pudo comprobar tu postulación.</Text>;
+                return (
+                  <TouchableOpacity style={styles.postularButton} disabled={postulandoId === convocatoria.id}
+                    onPress={() => confirmarPostulacion(convocatoria)}>
+                    <Text style={styles.postularButtonText}>{postulandoId === convocatoria.id ? 'Enviando…' : vista.texto}</Text>
+                  </TouchableOpacity>
+                );
+              })()}
+            </View>
+          );
+        })}
       </View>
+
       {/* HU-51: canal de consultas con el club */}
       {hilo || puedeEscribir ? (
-        <TouchableOpacity
-          style={styles.consultaButton}
-          onPress={abrirConsultas}
-          activeOpacity={0.8}
-          accessibilityLabel="Abrir consultas con el club"
-        >
+        <TouchableOpacity style={styles.consultaButton} onPress={abrirConsultas} activeOpacity={0.8} accessibilityLabel="Abrir consultas con el club">
           <View style={styles.consultaIcono}>
             <Ionicons name="chatbubbles-outline" size={18} color={colors.accent} />
           </View>
           <View style={styles.consultaTextos}>
-            <Text style={styles.consultaTitulo}>{hilo ? 'Mis consultas al club' : 'Escribir al club'}</Text>
+            <Text style={styles.consultaTitulo}>{hilo ? 'Mis consultas al club' : 'Hacer una consulta'}</Text>
             <Text style={styles.consultaSub}>
-              {hilo ? 'Revisa las respuestas o escribe de nuevo' : 'Escribe al club'}
+              {hilo ? 'Revisa las respuestas o escribe de nuevo' : 'Resuelve tus dudas sobre pruebas y convocatoria'}
             </Text>
           </View>
           {noLeidos > 0 ? (
@@ -163,84 +191,37 @@ export default function ClubProfileScreen() {
     </ScrollView>
   );
 }
+
 const makeStyles = (c: Colors) =>
   StyleSheet.create({
     container: { flex: 1, backgroundColor: c.bg },
     content: { padding: 20, paddingTop: 60, alignItems: 'center' },
-    backButton: {
-      position: 'absolute',
-      top: 60,
-      left: 20,
-      width: 34,
-      height: 34,
-      borderRadius: 17,
-      backgroundColor: c.card,
-      borderWidth: 1,
-      borderColor: c.border,
-      alignItems: 'center',
-      justifyContent: 'center',
-      zIndex: 1
-    },
-    avatar: {
-      width: 84,
-      height: 84,
-      borderRadius: 20,
-      alignItems: 'center',
-      justifyContent: 'center',
-      marginBottom: 14,
-    },
+    backButton: { position: 'absolute', top: 60, left: 20, width: 34, height: 34, borderRadius: 17, backgroundColor: c.card, borderWidth: 1, borderColor: c.border, alignItems: 'center', justifyContent: 'center', zIndex: 1 },
+    avatar: { width: 84, height: 84, borderRadius: 20, alignItems: 'center', justifyContent: 'center', marginBottom: 14 },
     name: { color: c.text, fontSize: 19, fontWeight: '700' },
     meta: { color: c.textMuted, fontSize: 12, marginTop: 2, marginBottom: 20 },
     section: { width: '100%', marginBottom: 20 },
     sectionTitle: { color: c.text, fontSize: 13, fontWeight: '700', marginBottom: 6 },
     sectionText: { color: c.textMuted, fontSize: 12, lineHeight: 18 },
-    convocatoria: {
-      width: '100%',
-      backgroundColor: c.card,
-      borderWidth: 1,
-      borderColor: c.border,
-      borderRadius: 16,
-      padding: 16,
-      marginBottom: 14
-    },
-    convocatoriaItem: { borderTopWidth: 1, borderTopColor: c.border, paddingTop: 12, marginTop: 12 },
+    convocatoria: { width: '100%', backgroundColor: c.card, borderWidth: 1, borderColor: c.border, borderRadius: 16, padding: 16, marginBottom: 14 },
+    convocatoriaHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 },
     convocatoriaTitle: { color: c.text, fontSize: 13, fontWeight: '700' },
+    convocatoriaItem: { borderTopWidth: 1, borderTopColor: c.border, paddingTop: 12, marginTop: 12 },
     convocatoriaNombre: { color: c.text, fontSize: 13.5, fontWeight: '700', marginBottom: 4 },
     convocatoriaText: { color: c.textMuted, fontSize: 12, lineHeight: 18, marginBottom: 14 },
-    postularButton: { alignSelf: 'flex-start', backgroundColor: c.primary, borderRadius: 10, paddingHorizontal: 16, paddingVertical: 10, marginTop: 4 },
-    postularText: { color: '#fff', fontSize: 13, fontWeight: '700' },
-    postuladoBadge: { alignSelf: 'flex-start', backgroundColor: c.chip, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8, marginTop: 4 },
-    postuladoText: { color: c.accent, fontSize: 12, fontWeight: '700' },
-    consultaButton: {
-      width: '100%',
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 12,
-      backgroundColor: c.card,
-      borderWidth: 1,
-      borderColor: c.border,
-      borderRadius: 14,
-      padding: 12
-    },
-    consultaIcono: {
-      width: 36,
-      height: 36,
-      borderRadius: 11,
-      backgroundColor: c.chip,
-      alignItems: 'center',
-      justifyContent: 'center'
-    },
+    detalle: { backgroundColor: c.bg, borderWidth: 1, borderColor: c.border, borderRadius: 12, paddingHorizontal: 12, marginBottom: 14 },
+    detalleFila: { paddingVertical: 10, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: c.border },
+    detalleEtiqueta: { color: c.textMuted, fontSize: 10.5, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.3 },
+    detalleValor: { color: c.text, fontSize: 13, lineHeight: 18, marginTop: 2 },
+    postularButton: { backgroundColor: c.primary, borderRadius: 12, paddingVertical: 13, alignItems: 'center' },
+    postularButtonText: { color: '#fff', fontSize: 13, fontWeight: '700' },
+    pendienteBadge: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: c.chip, borderRadius: 12, paddingVertical: 12, justifyContent: 'center' },
+    pendienteText: { color: c.textMuted, fontSize: 13, fontWeight: '700', flexShrink: 1, textAlign: 'center' },
+    consultaButton: { width: '100%', flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: c.card, borderWidth: 1, borderColor: c.border, borderRadius: 14, padding: 12 },
+    consultaIcono: { width: 36, height: 36, borderRadius: 11, backgroundColor: c.chip, alignItems: 'center', justifyContent: 'center' },
     consultaTextos: { flex: 1 },
     consultaTitulo: { color: c.text, fontSize: 13, fontWeight: '700' },
     consultaSub: { color: c.textMuted, fontSize: 11, marginTop: 2 },
-    consultaBadge: {
-      minWidth: 18,
-      height: 18,
-      borderRadius: 9,
-      paddingHorizontal: 5,
-      backgroundColor: c.primary,
-      alignItems: 'center',
-      justifyContent: 'center'
-    },
+    consultaBadge: { minWidth: 18, height: 18, borderRadius: 9, paddingHorizontal: 5, backgroundColor: c.primary, alignItems: 'center', justifyContent: 'center' },
     consultaBadgeTexto: { color: '#fff', fontSize: 10, fontWeight: '700' },
   });

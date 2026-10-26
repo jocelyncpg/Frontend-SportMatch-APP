@@ -77,7 +77,7 @@ export default function SuggestionFilters({ compact = false }: { compact?: boole
             {chip('Todos', draft.deporte === 'todos', () => setDraft({ ...draft, deporte: 'todos', nivelSimilar: false }))}
             {sports.map((sport) => chip(nombreDeporte(sport), draft.deporte === sport, () => setDraft({ ...draft, deporte: sport, nivelSimilar: false })))}
           </View>
-          {!misDeportes.length && <TouchableOpacity onPress={() => { setVisible(false); router.push('/(deportista)/(tabs)/profile'); }}><Text style={styles.location}>Agrega tus deportes y niveles en el perfil</Text></TouchableOpacity>}
+          {!misDeportes.length && <TouchableOpacity onPress={() => { setVisible(false); router.navigate('/(deportista)/(tabs)/profile'); }}><Text style={styles.location}>Agrega tus deportes y niveles en el perfil</Text></TouchableOpacity>}
           <Text style={styles.title}>Nivel del otro deportista</Text>
           <Text style={styles.help}>1 principiante · 2 básico · 3 intermedio · 4 avanzado · 5 experto. El rango se aplica al deporte seleccionado.</Text>
           <Text style={styles.help}>Desde {draft.nivelMin}</Text>

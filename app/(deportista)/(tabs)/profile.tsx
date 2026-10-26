@@ -9,6 +9,20 @@ import { ApiError } from '../../../services/api';
 import { DeporteConNivel, Usuario, getSession, logout, refrescarPreferencias, updateFotoPerfil, updatePerfilExtra, updateUbicacion } from '../../../services/auth';
 import { codigoDeporte } from '../../../services/deportes';
 import { OBJETIVOS_DISPONIBLES } from '../../../services/disponibilidad';
+import {
+  DIAS_HORARIO,
+  HORAS_SUGERIDAS,
+  MAX_HORAS_DIA,
+  NOMBRE_DIA,
+  agregarHora,
+  diasSinHoras,
+  parsearHorarios,
+  quitarDia,
+  quitarHora,
+  serializarHorarios,
+  type DiaHorario,
+  type Horarios,
+} from '../../../services/horarios';
 import { solicitarUbicacion } from '../../../services/location';
 import { YO, cargarHistorial, formatearCuando, getActividades, useHistorial, visualDeporte } from '../../../services/actividades';
 import { cargarCalificaciones, useMatches } from '../../../services/matchStore';
@@ -58,7 +72,13 @@ export default function ProfileScreen() {
   const [guardandoDeportes, setGuardandoDeportes] = useState(false);
   const [nuevoDeporteTexto, setNuevoDeporteTexto] = useState('');
   const [modalDispVisible, setModalDispVisible] = useState(false);
-  const [dispTemp, setDispTemp] = useState('');
+  // Disponibilidad: días elegidos con sus horas, más el día que se está editando.
+  const [horariosTemp, setHorariosTemp] = useState<Horarios>({});
+  const [diaActivo, setDiaActivo] = useState<DiaHorario | null>(null);
+  const [horaTexto, setHoraTexto] = useState('');
+  const [dispError, setDispError] = useState('');
+  // Texto libre de la versión anterior, si lo hay: no se puede convertir a horas, así que solo se avisa.
+  const [dispAnterior, setDispAnterior] = useState('');
   const [modalObjVisible, setModalObjVisible] = useState(false);
   const [objTemp, setObjTemp] = useState<string[]>([]);
   const [verTodasResenas, setVerTodasResenas] = useState(false);
@@ -263,18 +283,76 @@ export default function ProfileScreen() {
     setModalDeportesVisible(false);
   }
 
-  // ---------- Disponibilidad (texto libre) ----------
-  // Si la sesión guardada viene de la versión anterior (una grilla), se ignora y se muestra "Sin definir".
+  // ---------- Disponibilidad: días de la semana + horas ----------
+  // Se guarda como texto ("Lun 07:00, 18:00 · Sáb 10:00"). Si la sesión guardada viene de la versión anterior
+  // (una grilla), se ignora y se muestra "Sin definir".
   const dispActual = typeof usuario?.disponibilidad === 'string' ? usuario.disponibilidad : '';
 
   function abrirEditorDisponibilidad() {
-    setDispTemp(dispActual);
+    const leido = parsearHorarios(dispActual);
+    const base = leido ?? {};
+    setHorariosTemp(base);
+    setDiaActivo(DIAS_HORARIO.find((d) => base[d]) ?? null);
+    setHoraTexto('');
+    setDispError('');
+    setDispAnterior(leido ? '' : dispActual);
     setModalDispVisible(true);
+  }
+
+  /** Tocar un día lo selecciona (aparece el reloj) y deja abierto su selector de horas. */
+  function tocarDia(d: DiaHorario) {
+    setDispError('');
+    if (horariosTemp[d] === undefined) setHorariosTemp((prev) => ({ ...prev, [d]: [] }));
+    setDiaActivo(d);
+  }
+
+  function quitarDiaElegido(d: DiaHorario) {
+    const restantes = quitarDia(horariosTemp, d);
+    setHorariosTemp(restantes);
+    setDispError('');
+    if (diaActivo === d) setDiaActivo(DIAS_HORARIO.find((x) => restantes[x]) ?? null);
+  }
+
+  /** Devuelve true si la hora se agregó. */
+  function agregarHoraAlDia(hora: string): boolean {
+    if (!diaActivo) return false;
+    const r = agregarHora(horariosTemp, diaActivo, hora);
+    if (!r.ok) {
+      setDispError(r.motivo);
+      return false;
+    }
+    setDispError('');
+    setHorariosTemp(r.horarios);
+    return true;
+  }
+
+  function tocarHora(hora: string) {
+    if (!diaActivo) return;
+    if ((horariosTemp[diaActivo] ?? []).includes(hora)) {
+      setDispError('');
+      setHorariosTemp(quitarHora(horariosTemp, diaActivo, hora));
+    } else {
+      agregarHoraAlDia(hora);
+    }
+  }
+
+  function agregarHoraEscrita() {
+    if (agregarHoraAlDia(horaTexto)) setHoraTexto('');
   }
 
   async function guardarDisponibilidad() {
     if (!usuario) return;
-    const texto = dispTemp.trim();
+    const sinHoras = diasSinHoras(horariosTemp);
+    if (sinHoras.length > 0) {
+      setDispError(`Agrega al menos una hora a: ${sinHoras.join(', ')}, o quita el día.`);
+      return;
+    }
+    // Si solo había texto libre antiguo y no se eligió nada, se deja como estaba.
+    if (dispAnterior && Object.keys(horariosTemp).length === 0) {
+      setModalDispVisible(false);
+      return;
+    }
+    const texto = serializarHorarios(horariosTemp);
     try {
       await updatePerfilExtra(usuario.id, { disponibilidad: texto });
     } catch (e) {
@@ -414,7 +492,7 @@ export default function ProfileScreen() {
                 </View>
                 <View style={styles.infoTextos}>
                   <Text style={styles.infoTitulo}>{f.titulo}</Text>
-                  <Text numberOfLines={1} style={[styles.infoValor, !f.valor && styles.infoValorVacio]}>
+                  <Text numberOfLines={f.key === 'disponibilidad' ? 2 : 1} style={[styles.infoValor, !f.valor && styles.infoValorVacio]}>
                     {f.valor || 'Sin definir'}
                   </Text>
                 </View>
@@ -694,22 +772,103 @@ export default function ProfileScreen() {
         </View>
       </Modal>
 
-      {/* Modal: editar disponibilidad */}
+      {/* Modal: editar disponibilidad (mismo formato que los deportes: se elige el día y luego sus horas) */}
       <Modal visible={modalDispVisible} transparent animationType="fade" onRequestClose={() => setModalDispVisible(false)}>
         <View style={styles.modalOverlay}>
           <View style={styles.modalBox}>
             <Text style={styles.modalTitle}>¿Cuándo puedes entrenar?</Text>
-            <Text style={styles.modalHint}>Escribe los días y horarios que te acomodan.</Text>
-            <TextInput
-              style={[styles.bioInput, { height: 72 }]}
-              placeholder="Ej: Lunes y miércoles en la tarde, sábados en la mañana"
-              placeholderTextColor={colors.textMuted}
-              multiline
-              maxLength={120}
-              value={dispTemp}
-              onChangeText={setDispTemp}
-            />
-            <Text style={styles.charCount}>{dispTemp.length}/120</Text>
+
+            <ScrollView style={styles.modalScroll} keyboardShouldPersistTaps="handled">
+              <Text style={styles.modalHint}>Toca un día y elige las horas que te acomodan.</Text>
+
+              {dispAnterior ? (
+                <Text style={styles.dispAnterior}>
+                  Antes escribiste: “{dispAnterior}”. Si eliges días y horas, se reemplaza al guardar.
+                </Text>
+              ) : null}
+
+              <View style={styles.chipsWrap}>
+                {DIAS_HORARIO.map((d) => {
+                  const elegido = horariosTemp[d] !== undefined;
+                  const esActivo = d === diaActivo;
+                  if (!elegido) {
+                    return (
+                      <TouchableOpacity key={d} style={styles.selectChip} onPress={() => tocarDia(d)} accessibilityLabel={`Elegir ${NOMBRE_DIA[d]}`}>
+                        <Text style={styles.selectChipText}>{d}</Text>
+                      </TouchableOpacity>
+                    );
+                  }
+                  const cantidad = horariosTemp[d]?.length ?? 0;
+                  return (
+                    <TouchableOpacity
+                      key={d}
+                      style={[styles.miDeporte, esActivo && styles.miDeporteActivo]}
+                      onPress={() => tocarDia(d)}
+                      accessibilityLabel={`Editar las horas del ${NOMBRE_DIA[d]}`}
+                    >
+                      <Ionicons name="time-outline" size={14} color={esActivo ? '#fff' : colors.accent} />
+                      <Text style={[styles.miDeporteTexto, esActivo && styles.miDeporteTextoActivo]}>
+                        {d}{cantidad > 0 ? ` · ${cantidad}` : ''}
+                      </Text>
+                      <TouchableOpacity
+                        onPress={() => quitarDiaElegido(d)}
+                        accessibilityLabel={`Quitar ${NOMBRE_DIA[d]}`}
+                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                      >
+                        <Ionicons name="close" size={13} color={esActivo ? '#fff' : colors.textMuted} />
+                      </TouchableOpacity>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+
+              {diaActivo ? (
+                <View style={styles.nivelPanel}>
+                  <Text style={styles.nivelPanelTitulo}>
+                    Horas del {NOMBRE_DIA[diaActivo]} ({horariosTemp[diaActivo]?.length ?? 0} de {MAX_HORAS_DIA})
+                  </Text>
+                  <View style={styles.chipsWrap}>
+                    {[...new Set([...HORAS_SUGERIDAS, ...(horariosTemp[diaActivo] ?? [])])].sort().map((h) => {
+                      const marcada = (horariosTemp[diaActivo] ?? []).includes(h);
+                      return (
+                        <TouchableOpacity
+                          key={h}
+                          style={[styles.selectChip, marcada && styles.selectChipActive]}
+                          onPress={() => tocarHora(h)}
+                          accessibilityState={{ selected: marcada }}
+                        >
+                          <Text style={[styles.selectChipText, marcada && styles.selectChipTextActive]}>{h}</Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+
+                  <View style={styles.agregarRow}>
+                    <View style={[styles.inputBoxSmall, { flex: 1, marginTop: 0, marginBottom: 0 }]}>
+                      <TextInput
+                        placeholder="Otra hora: 18:30"
+                        placeholderTextColor={colors.textMuted}
+                        style={styles.input}
+                        value={horaTexto}
+                        onChangeText={setHoraTexto}
+                        onSubmitEditing={agregarHoraEscrita}
+                        keyboardType="numbers-and-punctuation"
+                        maxLength={5}
+                        returnKeyType="done"
+                      />
+                    </View>
+                    <TouchableOpacity style={styles.agregarBoton} onPress={agregarHoraEscrita} accessibilityLabel="Agregar hora">
+                      <Ionicons name="add" size={20} color="#fff" />
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              ) : (
+                <Text style={styles.modalHint}>Aún no elegiste ningún día.</Text>
+              )}
+
+              {dispError ? <Text accessibilityRole="alert" style={styles.dispError}>{dispError}</Text> : null}
+            </ScrollView>
+
             <View style={styles.modalActions}>
               <TouchableOpacity style={styles.modalCancel} onPress={() => setModalDispVisible(false)}>
                 <Text style={styles.modalCancelText}>Cancelar</Text>
@@ -851,6 +1010,8 @@ const makeStyles = (c: Colors) =>
       backgroundColor: c.bg, borderWidth: 1, borderColor: c.border, borderRadius: 12,
       padding: 12, color: c.text, fontSize: 13, height: 90, textAlignVertical: 'top',
     },
+    dispAnterior: { color: c.textMuted, fontSize: 11.5, lineHeight: 16, marginBottom: 12 },
+    dispError: { color: c.danger, fontSize: 12, marginTop: 8 },
     charCount: { color: c.textMuted, fontSize: 10, textAlign: 'right', marginTop: 4, marginBottom: 10 },
     otroLabel: { color: c.textMuted, fontSize: 11, fontWeight: '600', marginTop: 4, marginBottom: 8 },
     loginButtonText: { color: '#fff', fontSize: 13, fontWeight: '700' },

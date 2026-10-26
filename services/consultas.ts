@@ -4,6 +4,12 @@ import { ApiError, apiRequest } from './api';
 import { getSession, getToken } from './auth';
 import { alCambiar, crearSondeo } from './sondeo';
 
+/** "2026-11-14" -> "14-11-2026" (formato corto para mostrar fechas de convocatorias). */
+export function fechaCorta(iso: string): string {
+  const [a, m, d] = iso.split('-');
+  return `${d}-${m}-${a}`;
+}
+
 export const MAX_CONSULTA = 1000;
 export type Resultado = {
   ok: true;
@@ -192,7 +198,7 @@ export async function cargarHilosClub(clubId: string, clubNombre: string): Promi
 }
 
 /** El club inicia el hilo al contactar a un postulante activo. */
-export async function iniciarConsultaClub(clubId: string, postulanteId: string, texto: string) {
+export async function iniciarConsultaClub(clubId: string, postulanteId: string, texto: string, postulanteNombre = '') {
   const limpio = texto.trim();
   if (!limpio || limpio.length > MAX_CONSULTA) return { ok: false as const, motivo: 'Escribe entre 1 y 1000 caracteres.' };
   const clave = `inicio:${clubId}:${postulanteId}:${limpio}`;
@@ -204,7 +210,7 @@ export async function iniciarConsultaClub(clubId: string, postulanteId: string, 
       { method: 'POST', token, body: { texto: limpio, client_message_id: intentos.get(clave) } });
     intentos.delete(clave);
     const mensajeNuevo = convertir(respuesta.mensaje);
-    guardar({ id: respuesta.hilo_id, clubId, clubNombre: '', postulanteId, postulanteNombre: '',
+    guardar({ id: respuesta.hilo_id, clubId, clubNombre: '', postulanteId, postulanteNombre,
       mensajes: [mensajeNuevo], noLeidosClub: 0, noLeidosPostulante: 0 });
     return { ok: true as const, hiloId: respuesta.hilo_id };
   } catch (e) {

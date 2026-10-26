@@ -15,7 +15,7 @@ function cargar(archivo, responder) {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
   }).outputText;
   vm.runInNewContext(codigo, {
-    module: modulo, exports: modulo.exports, Date, Error, Number, Math, JSON, Object, Promise, Set, Map,
+    module: modulo, exports: modulo.exports, Date, Error, Number, Math, JSON, Object, Promise, Set, Map, URLSearchParams,
     setInterval: () => 1, clearInterval: () => {},
     require(nombre) {
       if (nombre === 'react') return { useSyncExternalStore: (_, leer) => leer(), useMemo: (fn) => fn() };
@@ -245,4 +245,17 @@ test('convocatorias usa el contrato público y publica y cierra con token', asyn
   await api.cerrarConvocatoria(clubId, anuncioId);
   assert.equal(llamadas[2][1].method, 'POST');
   assert.equal(llamadas[2][1].token, 'token');
+});
+
+test('chat de postulantes usa PATCH .../announcements/{id}/chat y "en espera" se envía como PENDIENTE', async () => {
+  const clubId = '10000000-0000-4000-8000-000000000001';
+  const anuncioId = '10000000-0000-4000-8000-000000000002';
+  const { api, llamadas } = cargar('convocatorias.ts', async () => ({ id: anuncioId }));
+  await api.cambiarChatPostulantes(clubId, anuncioId, false);
+  assert.equal(llamadas[0][0], `/clubs/${clubId}/announcements/${anuncioId}/chat`);
+  assert.equal(llamadas[0][1].method, 'PATCH');
+  assert.equal(llamadas[0][1].body.chat_postulantes_habilitado, false);
+  await api.cambiarEstadoPostulacion('postulacion-1', 'PENDIENTE');
+  assert.equal(llamadas[1][1].method, 'PATCH');
+  assert.equal(llamadas[1][1].body.estado, 'PENDIENTE');
 });

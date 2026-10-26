@@ -42,3 +42,6 @@ app-example
 # generated native folders
 /ios
 /android
+
+# Local development instructions
+/AGENTS.md

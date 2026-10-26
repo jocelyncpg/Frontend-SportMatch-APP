@@ -4,6 +4,7 @@ import { useCallback, useMemo, useState } from 'react';
 import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Avatar from '../../components/Avatar';
+import ReportarModal from '../../components/ReportarModal';
 import { ApiError } from '../../services/api';
 import { getSession } from '../../services/auth';
 import {
@@ -19,9 +20,13 @@ import {
 import { iniciarConsultaClub } from '../../services/consultas';
 import { Colors, useAppTheme } from '../../theme/ThemeContext';
 
+// "En espera" es el estado PENDIENTE del backend (no existe un EN_ESPERA).
 const FILTROS: (EstadoPostulacion | 'TODOS')[] = ['TODOS', 'PENDIENTE', 'PRESELECCIONADO', 'ACEPTADO', 'RECHAZADO'];
 const etiquetaEstado: Record<EstadoPostulacion, string> = {
-  PENDIENTE: 'Pendiente', PRESELECCIONADO: 'Preseleccionado', ACEPTADO: 'Aceptado', RECHAZADO: 'Rechazado',
+  PENDIENTE: 'En espera', PRESELECCIONADO: 'Preseleccionado', ACEPTADO: 'Aceptado', RECHAZADO: 'Rechazado',
+};
+const accionEstado: Record<EstadoRevision, string> = {
+  PENDIENTE: 'Dejar en espera', PRESELECCIONADO: 'Preseleccionar', ACEPTADO: 'Aceptar', RECHAZADO: 'Rechazar',
 };
 
 export default function PostulacionesClubScreen() {
@@ -39,6 +44,7 @@ export default function PostulacionesClubScreen() {
   const [error, setError] = useState('');
   const [contacto, setContacto] = useState<Candidato | null>(null);
   const [mensaje, setMensaje] = useState('');
+  const [reportando, setReportando] = useState<Candidato | null>(null);
 
   const cargarConvocatorias = useCallback(async () => {
     setCargando(true);
@@ -117,7 +123,7 @@ export default function PostulacionesClubScreen() {
       ]);
       return;
     }
-    const accion = nuevo === 'ACEPTADO' ? 'Aceptar' : 'Preseleccionar';
+    const accion = accionEstado[nuevo];
     Alert.alert(accion + ' postulante', `¿${accion} a ${nombreCandidato(candidato)}?`, [
       { text: 'Cancelar', style: 'cancel' },
       { text: accion, onPress: () => { void actualizar(candidato, nuevo); } },
@@ -128,7 +134,7 @@ export default function PostulacionesClubScreen() {
     if (!contacto || !clubId) return;
     setOcupado(true);
     setError('');
-    const resultado = await iniciarConsultaClub(clubId, contacto.usuario_id, mensaje);
+    const resultado = await iniciarConsultaClub(clubId, contacto.usuario_id, mensaje, nombreCandidato(contacto));
     setOcupado(false);
     if (!resultado.ok) {
       setError(resultado.motivo);
@@ -214,6 +220,7 @@ export default function PostulacionesClubScreen() {
               </Text>)}
               <View style={styles.acciones}>
                 {candidato.estado !== 'PRESELECCIONADO' ? botonEstado('Preseleccionar', candidato, 'PRESELECCIONADO') : null}
+                {candidato.estado !== 'PENDIENTE' ? botonEstado('En espera', candidato, 'PENDIENTE') : null}
                 {candidato.estado !== 'ACEPTADO' ? botonEstado('Aceptar', candidato, 'ACEPTADO') : null}
                 {candidato.estado !== 'RECHAZADO' ? botonEstado('Rechazar', candidato, 'RECHAZADO', true) : null}
               </View>
@@ -221,6 +228,10 @@ export default function PostulacionesClubScreen() {
                 onPress={() => { setContacto(candidato); setMensaje(''); }}>
                 <Text style={styles.botonPrimarioTexto}>Escribir al postulante</Text>
               </TouchableOpacity> : null}
+              <TouchableOpacity style={styles.reportar} onPress={() => setReportando(candidato)}
+                accessibilityLabel={`Reportar a ${nombreCandidato(candidato)}`}>
+                <Text style={styles.reportarTexto}>Reportar al deportista</Text>
+              </TouchableOpacity>
             </View>;
           })}
           {pagina && pagina.page * pagina.page_size < pagina.total ? (
@@ -231,6 +242,14 @@ export default function PostulacionesClubScreen() {
           ) : null}
         </> : null}
       </ScrollView>
+      <ReportarModal
+        visible={reportando !== null}
+        onClose={() => setReportando(null)}
+        tipo="usuario"
+        objetivoId={reportando?.usuario_id ?? ''}
+        objetivoNombre={reportando ? nombreCandidato(reportando) : ''}
+        permitirBloqueo={false}
+      />
       {contacto ? <View style={styles.modalFondo}>
         <View style={styles.modal}>
           <Text style={styles.subtitulo}>Escribir a {nombreCandidato(contacto)}</Text>
@@ -287,6 +306,8 @@ const makeStyles = (c: Colors) => StyleSheet.create({
   botonPrimarioTexto: { color: '#fff', fontSize: 12, fontWeight: '700' },
   botonSecundario: { backgroundColor: c.inputBg, borderColor: c.border, borderWidth: 1, paddingHorizontal: 10, paddingVertical: 9, borderRadius: 9, alignItems: 'center' },
   botonSecundarioTexto: { color: c.text, fontSize: 11, fontWeight: '700' },
+  reportar: { alignSelf: 'flex-start', paddingVertical: 4 },
+  reportarTexto: { color: c.danger, fontSize: 12, fontWeight: '600' },
   botonPeligro: { borderColor: c.danger },
   textoPeligro: { color: c.danger },
   deshabilitado: { opacity: 0.5 },

@@ -2,7 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useEffect, useMemo, useState } from 'react';
 import { Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { descartar } from '../services/matchStore';
-import { MAX_DETALLE, MOTIVOS, TITULO_TIPO, bloquear, reportar, useBloqueados, type TipoReporte } from '../services/reportes';
+import { MAX_DETALLE, MIN_DETALLE, MOTIVOS, TITULO_TIPO, bloquear, reportar, useBloqueados, type TipoReporte } from '../services/reportes';
 import { Colors, useAppTheme } from '../theme/ThemeContext';
 
 type Props = {
@@ -13,9 +13,11 @@ type Props = {
   objetivoId: string;
   /** Nombre que se muestra en el formulario. */
   objetivoNombre: string;
+  /** Ofrecer bloquear a la persona tras reportar (solo tiene sentido para deportistas). */
+  permitirBloqueo?: boolean;
 };
 
-export default function ReportarModal({ visible, onClose, tipo, objetivoId, objetivoNombre }: Props) {
+export default function ReportarModal({ visible, onClose, tipo, objetivoId, objetivoNombre, permitirBloqueo = true }: Props) {
   const { colors } = useAppTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const [motivo, setMotivo] = useState<string | null>(null);
@@ -37,9 +39,15 @@ export default function ReportarModal({ visible, onClose, tipo, objetivoId, obje
     }
   }, [visible]);
 
+  const detalleValido = detalle.trim().length >= MIN_DETALLE;
+
   async function enviar() {
     if (!motivo) {
       setError('Elige un motivo para el reporte.');
+      return;
+    }
+    if (!detalleValido) {
+      setError(`Cuéntanos qué pasó (al menos ${MIN_DETALLE} caracteres).`);
       return;
     }
     if (enviando) return;
@@ -73,7 +81,7 @@ export default function ReportarModal({ visible, onClose, tipo, objetivoId, obje
               <Text style={styles.hint}>
                 Recibimos tu reporte sobre {objetivoNombre}. Nuestro equipo lo revisará y tomará las medidas que correspondan.
               </Text>
-              {tipo === 'usuario' ? (
+              {tipo === 'usuario' && permitirBloqueo ? (
                 yaBloqueado ? (
                   <Text style={styles.hint}>Bloqueaste a esta persona: ya no se verán en Descubrir.</Text>
                 ) : (
@@ -115,7 +123,7 @@ export default function ReportarModal({ visible, onClose, tipo, objetivoId, obje
                   </TouchableOpacity>
                 ))}
 
-                <Text style={[styles.label, { marginTop: 14 }]}>Cuéntanos más (opcional)</Text>
+                <Text style={[styles.label, { marginTop: 14 }]}>Justificación (obligatoria, mínimo {MIN_DETALLE} caracteres)</Text>
                 <TextInput
                   style={styles.input}
                   placeholder="Describe lo que ocurrió"
@@ -128,7 +136,7 @@ export default function ReportarModal({ visible, onClose, tipo, objetivoId, obje
                     if (error) setError(null);
                   }}
                 />
-                <Text style={styles.contador}>{detalle.length}/{MAX_DETALLE}</Text>
+                <Text style={styles.contador}>{detalle.trim().length}/{MIN_DETALLE} mínimo · {detalle.length}/{MAX_DETALLE}</Text>
               </ScrollView>
 
               {error ? <Text style={styles.error}>{error}</Text> : null}
@@ -137,7 +145,7 @@ export default function ReportarModal({ visible, onClose, tipo, objetivoId, obje
                 <TouchableOpacity style={styles.btnCancelar} onPress={onClose}>
                   <Text style={styles.btnCancelarTexto}>Cancelar</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={[styles.btnPrimario, styles.btnFlex, (!motivo || enviando) && styles.btnOff]} onPress={enviar} disabled={enviando}>
+                <TouchableOpacity style={[styles.btnPrimario, styles.btnFlex, (!motivo || !detalleValido || enviando) && styles.btnOff]} onPress={enviar} disabled={enviando}>
                   <Text style={styles.btnPrimarioTexto}>{enviando ? 'Enviando…' : 'Enviar reporte'}</Text>
                 </TouchableOpacity>
               </View>

@@ -106,7 +106,7 @@ export default function MatchesScreen() {
         <BrandLogo width={200} />
 
         <TouchableOpacity
-          onPress={() => router.push('/(deportista)/(tabs)/profile')}
+          onPress={() => router.navigate('/(deportista)/(tabs)/profile')}
           style={styles.miniAvatar}
         >
           {usuario?.fotoPerfil ? (

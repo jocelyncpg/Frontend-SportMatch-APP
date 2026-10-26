@@ -221,7 +221,7 @@ export default function DiscoverScreen() {
 
         <TouchableOpacity
           onPress={() =>
-            router.push('/(deportista)/(tabs)/profile')
+            router.navigate('/(deportista)/(tabs)/profile')
           }
           style={styles.miniAvatar}
         >

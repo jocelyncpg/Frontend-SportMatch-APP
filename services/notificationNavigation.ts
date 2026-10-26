@@ -21,6 +21,10 @@ export function abrirDestino(data: DestinoNotificacion) {
   } else if (data.screen === 'canal_inactivo' && data.clubId && uuid.test(data.clubId)
     && data.canalId && uuid.test(data.canalId)) {
     router.push({ pathname: '/(club)/canal/[id]', params: { id: data.canalId, clubId: data.clubId } } as never);
+  } else if (data.screen === 'canal' && data.canalId && uuid.test(data.canalId)) {
+    router.push({ pathname: '/(deportista)/canal/[id]', params: { id: data.canalId } });
+  } else if (data.screen === 'comunicado' && data.clubId && uuid.test(data.clubId)) {
+    router.push({ pathname: '/(deportista)/club/[id]', params: { id: data.clubId } });
   } else if (data.screen === 'chat' && data.matchId && uuid.test(data.matchId)) {
     router.push({ pathname: '/(deportista)/chat/[id]', params: { id: data.matchId } });
   } else if (data.screen === 'matches') {

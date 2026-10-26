@@ -19,7 +19,13 @@ export type Convocatoria = {
   comuna: string | null;
   estado: 'ABIERTA' | 'CERRADA' | 'FINALIZADA';
   fecha_creacion: string | null;
+  /** El club decide si los postulantes pueden escribir en el chat. Ausente = habilitado. */
+  chat_postulantes_habilitado?: boolean;
 };
+
+/** Ausente en la respuesta se trata como habilitado. */
+export const chatPostulantesHabilitado = (convocatoria: Pick<Convocatoria, 'chat_postulantes_habilitado'>) =>
+  convocatoria.chat_postulantes_habilitado !== false;
 
 export type CrearConvocatoria = {
   deporte_id: number;
@@ -42,8 +48,10 @@ export type PaginaConvocatorias = {
   page_size: number;
 };
 
+/** Estados de la postulación según el backend. No existe un estado EN_ESPERA: "en espera" es PENDIENTE. */
 export type EstadoPostulacion = 'PENDIENTE' | 'PRESELECCIONADO' | 'ACEPTADO' | 'RECHAZADO';
-export type EstadoRevision = Exclude<EstadoPostulacion, 'PENDIENTE'>;
+/** Estados que el club asigna (PENDIENTE = volver a "en espera"). */
+export type EstadoRevision = EstadoPostulacion;
 export type PerfilDeportivo = {
   nombre: string;
   apellido_inicial: string;
@@ -108,12 +116,16 @@ async function tokenActual() {
 }
 
 export async function listarConvocatorias(
-  clubId: string,
+  clubId: string | undefined,
   estado: Convocatoria['estado'] = 'ABIERTA',
   page = 1,
 ) {
-  const params = `club_id=${encodeURIComponent(clubId)}&estado=${estado}&page=${page}&page_size=20`;
-  return apiRequest<PaginaConvocatorias>(`/clubs/announcements?${params}`);
+  const params = new URLSearchParams();
+  if (clubId) params.set('club_id', clubId);
+  params.set('estado', estado);
+  params.set('page', String(page));
+  params.set('page_size', '20');
+  return apiRequest<PaginaConvocatorias>(`/clubs/announcements?${params.toString()}`);
 }
 
 export async function postularConvocatoria(convocatoriaId: string, datos?: { mensaje?: string | null }) {
@@ -138,12 +150,19 @@ export function presentacionConvocatoria(estado: Convocatoria['estado'], postula
   return estado === 'ABIERTA' ? { tipo: 'postular', texto: 'Postular' } : { tipo: 'cerrada', texto: 'Convocatoria cerrada' };
 }
 
+/** Día (AAAA-MM-DD) de la prueba en la hora local. La API entrega UTC (…Z): cortar el texto daría otro día después de las 21:00 en Chile. */
+export function diaPrueba(iso: string) {
+  const d = new Date(iso);
+  const dos = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${dos(d.getMonth() + 1)}-${dos(d.getDate())}`;
+}
+
 export function mensajeErrorPostulacion(error: unknown) {
   return error instanceof Error ? error.message : 'No se pudo enviar la postulación.';
 }
 
-/** Lista todas las convocatorias de un club en el estado elegido, acumulando páginas. */
-export async function listarConvocatoriasClub(clubId: string, estado: Convocatoria['estado'] = 'ABIERTA') {
+/** Acumula todas las páginas de convocatorias con el filtro dado (club opcional). */
+async function listarConvocatoriasFiltradas(clubId: string | undefined, estado: Convocatoria['estado']) {
   const primera = await listarConvocatorias(clubId, estado, 1);
   const paginas = Math.ceil(primera.total / primera.page_size);
   if (paginas <= 1) return primera.items;
@@ -151,6 +170,16 @@ export async function listarConvocatoriasClub(clubId: string, estado: Convocator
     Array.from({ length: paginas - 1 }, (_, i) => listarConvocatorias(clubId, estado, i + 2)),
   );
   return [ ...primera.items, ...siguientes.flatMap((pagina) => pagina.items) ];
+}
+
+/** Lista todas las convocatorias de un club en el estado elegido, acumulando páginas. */
+export async function listarConvocatoriasClub(clubId: string, estado: Convocatoria['estado'] = 'ABIERTA') {
+  return listarConvocatoriasFiltradas(clubId, estado);
+}
+
+/** Convocatorias abiertas de todos los clubes (sección pública para deportistas). */
+export async function listarConvocatoriasAbiertas() {
+  return listarConvocatoriasFiltradas(undefined, 'ABIERTA');
 }
 
 export async function listarTodasConvocatoriasClub(clubId: string) {
@@ -182,6 +211,16 @@ export async function cambiarEstadoPostulacion(
     method: 'PATCH',
     token: await tokenActual(),
     body: { estado, ...(comentario === undefined ? {} : { comentario }) },
+  });
+}
+
+/** El club habilita o deshabilita el chat de postulantes de una convocatoria (PATCH .../announcements/{id}/chat). */
+export async function cambiarChatPostulantes(clubId: string, id: string, habilitado: boolean) {
+  const ruta = `/clubs/${encodeURIComponent(clubId)}/announcements/${encodeURIComponent(id)}/chat`;
+  return apiRequest<Convocatoria>(ruta, {
+    method: 'PATCH',
+    token: await tokenActual(),
+    body: { chat_postulantes_habilitado: habilitado },
   });
 }
 
