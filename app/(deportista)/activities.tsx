@@ -3,6 +3,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { ReactNode, useEffect, useMemo, useState } from 'react';
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import InsigniaDeporte from '../../components/InsigniaDeporte';
 import {
   Actividad,
   FILTROS_ACTIVIDADES_VACIOS,
@@ -15,7 +16,6 @@ import {
   pendientesDe,
   relacionConActividad,
   useActividades,
-  visualDeporte,
 } from '../../services/actividades';
 import { Usuario, getSession } from '../../services/auth';
 import { normalizar } from '../../services/comunas';
@@ -99,13 +99,10 @@ export default function ActivitiesScreen() {
   );
 
   const fila = (a: Actividad) => {
-    const visual = visualDeporte(a.deporte);
     const insignia = insigniaDe(a, ahora);
     return (
       <TouchableOpacity key={a.id} style={styles.fila} onPress={() => abrir(a)} activeOpacity={0.7}>
-        <View style={[styles.iconBox, { backgroundColor: visual.colorBg }]}>
-          <Text style={styles.icon}>{visual.icon}</Text>
-        </View>
+        <InsigniaDeporte deporte={a.deporte} tamano={40} />
         <View style={styles.info}>
           <Text style={styles.filaTitulo} numberOfLines={1}>{a.titulo}</Text>
           <Text style={styles.filaMeta} numberOfLines={1}>{formatearCuando(a.fecha, ahora)} · {a.comuna}</Text>
@@ -279,8 +276,6 @@ const makeStyles = (c: Colors) =>
       backgroundColor: c.card, borderWidth: 1, borderColor: c.border,
       borderRadius: 13, padding: 12, marginBottom: 9,
     },
-    iconBox: { width: 40, height: 40, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
-    icon: { fontSize: 18 },
     info: { flex: 1 },
     filaTitulo: { color: c.text, fontSize: 12.5, fontWeight: '700' },
     filaMeta: { color: c.textMuted, fontSize: 10.5, marginTop: 2 },

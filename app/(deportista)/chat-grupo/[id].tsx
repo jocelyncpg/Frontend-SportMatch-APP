@@ -2,31 +2,32 @@ import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
-    Alert,
-    FlatList,
-    KeyboardAvoidingView,
-    Platform,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  Alert,
+  FlatList,
+  KeyboardAvoidingView,
+  Platform,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import InsigniaDeporte from '../../../components/InsigniaDeporte';
 import ReportarModal from '../../../components/ReportarModal';
-import { useActividades, visualDeporte } from '../../../services/actividades';
+import { useActividades } from '../../../services/actividades';
 import { horaCorta } from '../../../services/chat';
 import {
-    MAX_MENSAJE_GRUPAL,
-    abrirSala,
-    accesoGrupal,
-    cerrarSala,
-    enviarMensajeGrupal,
-    miembrosDe,
-    silenciarSala,
-    simularRespuestaGrupal,
-    useSalaGrupal,
-    type MensajeGrupal,
+  MAX_MENSAJE_GRUPAL,
+  abrirSala,
+  accesoGrupal,
+  cerrarSala,
+  enviarMensajeGrupal,
+  miembrosDe,
+  silenciarSala,
+  simularRespuestaGrupal,
+  useSalaGrupal,
+  type MensajeGrupal,
 } from '../../../services/chatGrupal';
 import { Colors, useAppTheme } from '../../../theme/ThemeContext';
 
@@ -85,7 +86,6 @@ export default function ChatGrupoScreen() {
     );
   }
 
-  const visual = visualDeporte(actividad.deporte);
   const participantes = miembrosDe(actividad).length;
   const soloLectura = acceso === 'leer';
 
@@ -162,9 +162,7 @@ export default function ChatGrupoScreen() {
           <Ionicons name="arrow-back" size={18} color={colors.text} />
         </TouchableOpacity>
         <TouchableOpacity style={styles.topbarCentro} onPress={verActividad} activeOpacity={0.7}>
-          <View style={[styles.iconBox, { backgroundColor: visual.colorBg }]}>
-            <Text style={styles.icon}>{visual.icon}</Text>
-          </View>
+          <InsigniaDeporte deporte={actividad.deporte} tamano={36} />
           <View style={styles.topbarTextos}>
             <Text style={styles.name} numberOfLines={1}>{actividad.titulo}</Text>
             <View style={styles.subtitulo}>
@@ -246,8 +244,6 @@ const makeStyles = (c: Colors) =>
     backButton: { width: 34, height: 34, borderRadius: 17, backgroundColor: c.card, borderWidth: 1, borderColor: c.border, alignItems: 'center', justifyContent: 'center' },
     topbarCentro: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10 },
     topbarTextos: { flex: 1 },
-    iconBox: { width: 36, height: 36, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
-    icon: { fontSize: 17 },
     name: { color: c.text, fontSize: 14, fontWeight: '700' },
     subtitulo: { flexDirection: 'row', alignItems: 'center', gap: 8 },
     sport: { color: c.textMuted, fontSize: 11 },

@@ -3,6 +3,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 import { Alert, Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import InsigniaDeporte from '../../../components/InsigniaDeporte';
 import ReportarModal from '../../../components/ReportarModal';
 import {
   NOMBRES_NIVEL,
@@ -18,7 +19,6 @@ import {
   responderPostulacion,
   retirarse,
   useActividades,
-  visualDeporte,
 } from '../../../services/actividades';
 import { Usuario, getSession } from '../../../services/auth';
 import { accesoGrupal, miembrosDe, useSalaGrupal } from '../../../services/chatGrupal';
@@ -64,7 +64,6 @@ export default function ActividadDetalleScreen() {
   const estado = estadoActividad(a, ahora);
   const relacion = relacionConActividad(a);
   const verificacion = puedePostular(a, usuario?.deportes, ahora);
-  const visual = visualDeporte(a.deporte);
   const tomados = cuposTomados(a);
   const activa = estado === 'abierta' || estado === 'llena';
   const miMensaje = a.mensajes[YO];
@@ -214,8 +213,8 @@ export default function ActividadDetalleScreen() {
 
       <ScrollView contentContainerStyle={styles.content}>
         <View style={styles.hero}>
-          <View style={[styles.heroIcono, { backgroundColor: visual.colorBg }]}>
-            <Text style={styles.heroEmoji}>{visual.icon}</Text>
+          <View style={styles.heroIcono}>
+            <InsigniaDeporte deporte={a.deporte} tamano={72} />
           </View>
           <Text style={styles.titulo}>{a.titulo}</Text>
           <Text style={styles.organiza}>Organiza {a.organizadorId === YO ? 'tú' : a.organizadorNombre}</Text>
@@ -386,8 +385,7 @@ const makeStyles = (c: Colors) =>
 
     content: { padding: 20, paddingTop: 52, paddingBottom: 30 },
     hero: { alignItems: 'center', marginBottom: 18 },
-    heroIcono: { width: 72, height: 72, borderRadius: 20, alignItems: 'center', justifyContent: 'center', marginBottom: 12 },
-    heroEmoji: { fontSize: 34 },
+    heroIcono: { marginBottom: 12 },
     titulo: { color: c.text, fontSize: 19, fontWeight: '700', textAlign: 'center' },
     organiza: { color: c.textMuted, fontSize: 12, marginTop: 4 },
 

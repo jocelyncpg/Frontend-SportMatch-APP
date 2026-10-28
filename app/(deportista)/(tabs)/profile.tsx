@@ -5,8 +5,9 @@ import { Fragment, useEffect, useMemo, useState } from 'react';
 import { Alert, Image, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import MapView, { Marker, UrlTile } from 'react-native-maps';
 import ComunaPicker from '../../../components/ComunaPicker';
+import FotosPerfil from '../../../components/FotosPerfil';
 import { ApiError } from '../../../services/api';
-import { DeporteConNivel, Usuario, getSession, logout, updateFotoPerfil, updatePerfilExtra, updateUbicacion } from '../../../services/auth';
+import { DeporteConNivel, Usuario, fotosDe, getSession, logout, updateFotoPerfil, updatePerfilExtra, updateUbicacion } from '../../../services/auth';
 import { OBJETIVOS_DISPONIBLES } from '../../../services/disponibilidad';
 import {
   DIAS_HORARIO,
@@ -128,7 +129,8 @@ export default function ProfileScreen() {
     if (!resultado.canceled && usuario) {
       const uri = resultado.assets[0].uri;
       await updateFotoPerfil(usuario.id, uri);
-      setUsuario({ ...usuario, fotoPerfil: uri });
+      // La foto del avatar es la principal: reemplaza a la primera de la galería y deja las demás.
+      setUsuario({ ...usuario, fotoPerfil: uri, fotos: [uri, ...fotosDe(usuario).slice(1)] });
     }
   }
 
@@ -416,6 +418,17 @@ export default function ProfileScreen() {
           <Text style={styles.statLabel}>Valoración</Text>
         </View>
       </View>
+
+      {/* Fotos (hasta 5, como en las apps de citas): la primera es la que ven primero los demás */}
+      <FotosPerfil
+        usuario={usuario}
+        subtitulo={
+          usuario?.deportes?.[0]
+            ? `${usuario.deportes[0].nombre} · ${NOMBRES_NIVEL[usuario.deportes[0].nivel] ?? usuario.deportes[0].nivel}`
+            : undefined
+        }
+        onCambio={(fotos) => setUsuario((u) => (u ? { ...u, fotos, fotoPerfil: fotos[0] } : u))}
+      />
 
       {/* Deportes */}
       <View style={styles.section}>

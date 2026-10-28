@@ -1,3 +1,5 @@
+import type { MaterialCommunityIcons } from '@expo/vector-icons';
+import type { ComponentProps } from 'react';
 import { useSyncExternalStore } from 'react';
 import type { DeporteConNivel } from './auth';
 import { normalizar } from './comunas';
@@ -57,15 +59,24 @@ export type Postulante = { id: string; nombre: string; estado: EstadoPostulacion
 
 export const NOMBRES_NIVEL: Record<number, string> = { 1: 'Principiante', 2: 'Básico', 3: 'Intermedio', 4: 'Avanzado', 5: 'Experto' };
 
-const DEPORTE_VISUAL: Record<string, { icon: string; colorBg: string }> = {
-  Running: { icon: '🏃', colorBg: '#1B3324' },
-  Fútbol: { icon: '⚽', colorBg: '#1B2144' },
-  Yoga: { icon: '🧘', colorBg: '#2B1B44' },
-  Ciclismo: { icon: '🚴', colorBg: '#1B2A2E' },
-  Natación: { icon: '🏊', colorBg: '#1B2440' },
-  Tenis: { icon: '🎾', colorBg: '#2E2A1B' },
-  Trekking: { icon: '🥾', colorBg: '#2A2A1B' },
-  Box: { icon: '🥊', colorBg: '#2A1B1E' },
+type VisualDeporte = {
+  /** Nombre del ícono en MaterialCommunityIcons (viene con @expo/vector-icons). */
+  icon: ComponentProps<typeof MaterialCommunityIcons>['name'];
+  /** Color del ícono. */
+  color: string;
+  /** Fondo oscuro de la cajita donde va el ícono. */
+  colorBg: string;
+};
+
+const DEPORTE_VISUAL: Record<string, VisualDeporte> = {
+  Running: { icon: 'run', color: '#4ADE80', colorBg: '#1B3324' },
+  Fútbol: { icon: 'soccer', color: '#818CF8', colorBg: '#1B2144' },
+  Yoga: { icon: 'yoga', color: '#C084FC', colorBg: '#2B1B44' },
+  Ciclismo: { icon: 'bike', color: '#2DD4BF', colorBg: '#1B2A2E' },
+  Natación: { icon: 'swim', color: '#60A5FA', colorBg: '#1B2440' },
+  Tenis: { icon: 'tennis', color: '#FACC15', colorBg: '#2E2A1B' },
+  Trekking: { icon: 'hiking', color: '#BEBE6A', colorBg: '#2A2A1B' },
+  Box: { icon: 'boxing-glove', color: '#F87171', colorBg: '#2A1B1E' },
 };
 export const DEPORTES_ACTIVIDAD: string[] = Object.keys(DEPORTE_VISUAL);
 
@@ -77,8 +88,8 @@ export function nombreDePersona(id: string): string {
   return PERSONAS_DEMO[id] ?? 'Deportista';
 }
 
-export function visualDeporte(deporte: string) {
-  return DEPORTE_VISUAL[deporte] ?? { icon: '🏅', colorBg: '#1B2A2A' };
+export function visualDeporte(deporte: string): VisualDeporte {
+  return DEPORTE_VISUAL[deporte] ?? { icon: 'medal-outline', color: '#5EEAD4', colorBg: '#1B2A2A' };
 }
 
 // ---------- fechas ----------

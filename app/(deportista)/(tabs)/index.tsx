@@ -19,7 +19,6 @@ import {
   filtrarActividades,
   formatearCuando,
   useActividades,
-  visualDeporte,
 } from '../../../services/actividades';
 import { Usuario, getSession } from '../../../services/auth';
 import { cargarSugerencias, sugerencias, useMatches } from '../../../services/matchStore';
@@ -102,7 +101,7 @@ export default function HomeScreen() {
       </View>
 
       <Text style={styles.greeting}>
-        ¡Hola, {usuario?.nombre ?? '...'}! 👋
+        ¡Hola, {usuario?.nombre ?? '...'}!
       </Text>
 
       <Text style={styles.subtitle}>
@@ -230,7 +229,6 @@ export default function HomeScreen() {
 
       {abiertas.length > 0 ? (
         visibles.map((a) => {
-          const visual = visualDeporte(a.deporte);
           return (
             <TouchableOpacity
               key={a.id}
@@ -238,11 +236,10 @@ export default function HomeScreen() {
               onPress={() => router.push({ pathname: '/(deportista)/activity/[id]', params: { id: a.id } })}
             >
               <TrainingRow
-                icon={visual.icon}
+                deporte={a.deporte}
                 title={a.titulo}
                 time={formatearCuando(a.fecha)}
                 distance={a.comuna}
-                colorBg={visual.colorBg}
               />
             </TouchableOpacity>
           );

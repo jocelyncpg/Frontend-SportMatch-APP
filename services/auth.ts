@@ -7,6 +7,9 @@ const CLUBS_KEY = 'sportmatch_mock_clubs';
 
 export type DeporteConNivel = { nombre: string; nivel: number };
 
+/** Cantidad máxima de fotos en el perfil de un deportista. */
+export const MAX_FOTOS = 5;
+
 /** Tipo de cuenta. Una misma pantalla de ingreso sirve para los dos; el rol decide la vista. */
 export type Rol = 'deportista' | 'club';
 
@@ -23,7 +26,10 @@ export type Usuario = {
   /** Solo representantes de club. */
   clubId?: string;
   clubNombre?: string;
+  /** Foto principal. Siempre es la primera de `fotos`, así el resto de la app puede seguir usando solo esta. */
   fotoPerfil?: string;
+  /** Hasta MAX_FOTOS fotos del perfil, en orden: la primera es la que ven primero los demás. */
+  fotos?: string[];
   comuna?: string;
   latitud?: number;
   longitud?: number;
@@ -252,8 +258,25 @@ async function actualizarSesionYUsuario(userId: string, datos: Partial<Usuario>)
   }
 }
 
+/** Fotos del perfil en orden. Las cuentas anteriores a la galería solo tienen `fotoPerfil`, y cuenta como la única foto. */
+export function fotosDe(usuario: Pick<Usuario, 'fotos' | 'fotoPerfil'> | null | undefined): string[] {
+  if (!usuario) return [];
+  if (usuario.fotos && usuario.fotos.length > 0) return usuario.fotos.slice(0, MAX_FOTOS);
+  return usuario.fotoPerfil ? [usuario.fotoPerfil] : [];
+}
+
+/** Cambia la foto principal (la primera); las demás quedan como estaban. */
 export async function updateFotoPerfil(userId: string, fotoUri: string): Promise<void> {
-  await actualizarSesionYUsuario(userId, { fotoPerfil: fotoUri });
+  const session = await getSession();
+  const actuales = session && session.id === userId ? fotosDe(session) : [];
+  await actualizarSesionYUsuario(userId, { fotoPerfil: fotoUri, fotos: [fotoUri, ...actuales.slice(1)] });
+}
+
+/** Guarda la galería completa (máximo MAX_FOTOS) y deja la primera como foto principal. Devuelve lo que quedó guardado. */
+export async function updateFotos(userId: string, fotos: string[]): Promise<string[]> {
+  const lista = fotos.slice(0, MAX_FOTOS);
+  await actualizarSesionYUsuario(userId, { fotos: lista, fotoPerfil: lista[0] });
+  return lista;
 }
 
 export async function updateUbicacion(
