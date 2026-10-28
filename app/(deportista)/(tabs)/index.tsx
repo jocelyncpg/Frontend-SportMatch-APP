@@ -121,7 +121,7 @@ export default function HomeScreen() {
         />
 
         <Text style={styles.searchPlaceholder} numberOfLines={1}>
-          Buscar deportistas por nombre, deporte o nivel...
+          Buscar deportistas
         </Text>
 
         <Ionicons

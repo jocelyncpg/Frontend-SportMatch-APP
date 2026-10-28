@@ -2,18 +2,30 @@ import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 import { Alert, Linking, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import MapaUbicacion from '../../../components/MapaUbicacion';
 import { NOMBRES_NIVEL, YO } from '../../../services/actividades';
 import { Usuario, getSession } from '../../../services/auth';
-import { fechaCorta, idHilo, useConvocatoria, useHilo } from '../../../services/consultas';
+import { idHilo, useConvocatoria, useHilo } from '../../../services/consultas';
 import { usePerfilClub } from '../../../services/perfilClub';
 import { PerfilPostulante, idPostulacion, postular, retirarPostulacion, usePostulacion } from '../../../services/postulaciones';
-import { Colors, useAppTheme } from '../../../theme/ThemeContext';
+import { Colors, espacio, radio, tipo, useAppTheme } from '../../../theme/ThemeContext';
 
 type Contacto = { icono: React.ComponentProps<typeof Ionicons>['name']; etiqueta: string; valor: string; url: string };
 
 // El sitio web puede venir sin esquema: se abre siempre como https.
 const conEsquema = (url: string) => (/^https?:\/\//i.test(url) ? url : `https://${url}`);
+
+const DIAS_CORTOS = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
+const MESES_CORTOS = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+
+/** "2026-11-10" → "Mar 10 nov 2026", el mismo estilo de fechas que usa Actividades. */
+function fechaCorta(iso: string): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso);
+  if (!m) return iso;
+  const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+  return `${DIAS_CORTOS[d.getDay()]} ${d.getDate()} ${MESES_CORTOS[d.getMonth()]} ${d.getFullYear()}`;
+}
 
 function abrirEnlace(url: string) {
   Linking.openURL(url).catch(() => Alert.alert('No se pudo abrir', 'No se pudo abrir el enlace en este dispositivo.'));
@@ -22,6 +34,7 @@ function abrirEnlace(url: string) {
 export default function ClubProfileScreen() {
   const { colors } = useAppTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
+  const insets = useSafeAreaInsets();
 
   const { id, name, sport, comuna, colorFrom } = useLocalSearchParams<{ id: string; name: string; sport: string; comuna: string; colorFrom: string }>();
   const clubId = id ?? '';
@@ -155,16 +168,20 @@ export default function ClubProfileScreen() {
     ) : null;
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content} scrollEnabled={scrollActivo}>
-      <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+    <ScrollView
+      style={styles.container}
+      contentContainerStyle={[styles.content, { paddingTop: insets.top + 60 }]}
+      scrollEnabled={scrollActivo}
+    >
+      <TouchableOpacity onPress={() => router.back()} style={[styles.backButton, { top: insets.top + 12 }]} accessibilityLabel="Volver">
         <Ionicons name="arrow-back" size={18} color={colors.text} />
       </TouchableOpacity>
 
-      <View style={[styles.avatar, { backgroundColor: colorFrom ?? '#7C3AED' }]}>
-        <Ionicons name="shield" size={36} color="#fff" />
+      <View style={styles.avatar}>
+        <Ionicons name="shield-outline" size={38} color={colors.accent} />
       </View>
       <Text style={styles.name}>{perfil?.nombre || name}</Text>
-      <Text style={styles.meta}>{[sport, perfil?.zona || comuna].filter(Boolean).join(' · ')}</Text>
+      <Text style={styles.meta}>{[sport, perfil?.zona || comuna].map((x) => x?.trim()).filter(Boolean).join(' · ')}</Text>
 
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Sobre el club</Text>
@@ -279,45 +296,71 @@ export default function ClubProfileScreen() {
 const makeStyles = (c: Colors) =>
   StyleSheet.create({
     container: { flex: 1, backgroundColor: c.bg },
-    content: { padding: 20, paddingTop: 60, alignItems: 'center' },
-    backButton: { position: 'absolute', top: 60, left: 20, width: 34, height: 34, borderRadius: 17, backgroundColor: c.card, borderWidth: 1, borderColor: c.border, alignItems: 'center', justifyContent: 'center', zIndex: 1 },
-    avatar: { width: 84, height: 84, borderRadius: 20, alignItems: 'center', justifyContent: 'center', marginBottom: 14 },
-    name: { color: c.text, fontSize: 19, fontWeight: '700' },
-    meta: { color: c.textMuted, fontSize: 12, marginTop: 2, marginBottom: 20 },
-    section: { width: '100%', marginBottom: 20 },
-    sectionTitle: { color: c.text, fontSize: 13, fontWeight: '700', marginBottom: 6 },
-    sectionText: { color: c.textMuted, fontSize: 12, lineHeight: 18 },
-    convocatoria: { width: '100%', backgroundColor: c.card, borderWidth: 1, borderColor: c.border, borderRadius: 16, padding: 16, marginBottom: 14 },
-    convocatoriaHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 },
-    convocatoriaTitle: { color: c.text, fontSize: 13, fontWeight: '700' },
-    convocatoriaNombre: { color: c.text, fontSize: 13.5, fontWeight: '700', marginBottom: 4 },
-    convocatoriaText: { color: c.textMuted, fontSize: 12, lineHeight: 18, marginBottom: 14 },
+    content: { padding: espacio.xl, paddingBottom: 40, alignItems: 'center' },
+    backButton: {
+      position: 'absolute', left: espacio.xl, width: 36, height: 36, borderRadius: 18,
+      backgroundColor: c.card, borderWidth: 1, borderColor: c.border,
+      alignItems: 'center', justifyContent: 'center', zIndex: 1,
+    },
+    avatar: {
+      width: 84, height: 84, borderRadius: 22, backgroundColor: c.chip,
+      alignItems: 'center', justifyContent: 'center', marginBottom: espacio.m + 2,
+    },
+    name: { color: c.text, ...tipo.titulo },
+    meta: { color: c.textMuted, ...tipo.dato, marginTop: 2, marginBottom: espacio.xl },
+
+    section: { width: '100%', marginBottom: espacio.xl },
+    sectionTitle: { color: c.text, ...tipo.cuerpoFuerte, marginBottom: espacio.s - 2 },
+    sectionText: { color: c.textMuted, ...tipo.cuerpo, lineHeight: 19 },
+
+    convocatoria: {
+      width: '100%', backgroundColor: c.card, borderWidth: 1, borderColor: c.border,
+      borderRadius: radio.tarjeta, padding: espacio.l, marginBottom: espacio.m + 2,
+    },
+    convocatoriaHeader: { flexDirection: 'row', alignItems: 'center', gap: espacio.s, marginBottom: espacio.s },
+    convocatoriaTitle: { color: c.text, ...tipo.cuerpoFuerte },
+    convocatoriaNombre: { color: c.text, ...tipo.seccion, marginBottom: espacio.xs },
+    convocatoriaText: { color: c.textMuted, ...tipo.cuerpo, lineHeight: 19, marginBottom: espacio.m + 2 },
     sinMargen: { marginBottom: 0 },
-    detalle: { backgroundColor: c.bg, borderWidth: 1, borderColor: c.border, borderRadius: 12, paddingHorizontal: 12, marginBottom: 14 },
-    detalleFila: { paddingVertical: 10, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: c.border },
-    detalleEtiqueta: { color: c.textMuted, fontSize: 10.5, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.3 },
-    detalleValor: { color: c.text, fontSize: 13, lineHeight: 18, marginTop: 2 },
-    postularButton: { backgroundColor: c.primary, borderRadius: 12, paddingVertical: 13, alignItems: 'center' },
-    postularButtonText: { color: '#fff', fontSize: 13, fontWeight: '700' },
-    postuladoBadge: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: c.successBg, borderRadius: 12, paddingVertical: 12, justifyContent: 'center' },
-    postuladoText: { color: c.success, fontSize: 13, fontWeight: '700' },
-    preseleccionBadge: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: c.chip, borderRadius: 12, paddingVertical: 12, paddingHorizontal: 10, justifyContent: 'center' },
-    preseleccionText: { color: c.accent, fontSize: 13, fontWeight: '700', flexShrink: 1, textAlign: 'center' },
-    pendienteBadge: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: c.chip, borderRadius: 12, paddingVertical: 12, justifyContent: 'center' },
-    pendienteText: { color: c.textMuted, fontSize: 13, fontWeight: '700' },
-    rechazadoBadge: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: c.dangerBg, borderRadius: 12, paddingVertical: 12, justifyContent: 'center' },
-    rechazadoText: { color: c.danger, fontSize: 13, fontWeight: '700' },
-    retirarButton: { alignItems: 'center', paddingTop: 12 },
+
+    detalle: { marginBottom: espacio.m + 2 },
+    detalleFila: { paddingVertical: espacio.m - 2, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: c.border },
+    detalleEtiqueta: { color: c.textMuted, ...tipo.etiqueta, textTransform: 'uppercase', letterSpacing: 0.3 },
+    detalleValor: { color: c.text, ...tipo.cuerpo, lineHeight: 19, marginTop: 2 },
+
+    postularButton: { backgroundColor: c.primary, borderRadius: radio.control, paddingVertical: 13, alignItems: 'center' },
+    postularButtonText: { color: '#fff', ...tipo.cuerpoFuerte },
+
+    postuladoBadge: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: c.successBg, borderRadius: radio.control, paddingVertical: espacio.m, justifyContent: 'center' },
+    postuladoText: { color: c.success, ...tipo.cuerpoFuerte },
+    preseleccionBadge: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: c.chip, borderRadius: radio.control, paddingVertical: espacio.m, paddingHorizontal: espacio.m - 2, justifyContent: 'center' },
+    preseleccionText: { color: c.accent, ...tipo.cuerpoFuerte, flexShrink: 1, textAlign: 'center' },
+    pendienteBadge: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: c.chip, borderRadius: radio.control, paddingVertical: espacio.m, justifyContent: 'center' },
+    pendienteText: { color: c.textMuted, ...tipo.cuerpoFuerte },
+    rechazadoBadge: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: c.dangerBg, borderRadius: radio.control, paddingVertical: espacio.m, justifyContent: 'center' },
+    rechazadoText: { color: c.danger, ...tipo.cuerpoFuerte },
+    retirarButton: { alignItems: 'center', paddingTop: espacio.m },
     retirarText: { color: c.danger, fontSize: 12, fontWeight: '700' },
-    tarjeta: { width: '100%', backgroundColor: c.card, borderWidth: 1, borderColor: c.border, borderRadius: 16, padding: 16, marginBottom: 14 },
-    lugarTexto: { color: c.text, fontSize: 13, lineHeight: 18 },
-    mapaWrap: { borderRadius: 12, overflow: 'hidden', marginTop: 10 },
-    contactoFila: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 10, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: c.border },
-    consultaButton: { width: '100%', flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: c.card, borderWidth: 1, borderColor: c.border, borderRadius: 14, padding: 12 },
+
+    tarjeta: {
+      width: '100%', backgroundColor: c.card, borderWidth: 1, borderColor: c.border,
+      borderRadius: radio.tarjeta, padding: espacio.l, marginBottom: espacio.m + 2,
+    },
+    lugarTexto: { color: c.text, ...tipo.cuerpo, lineHeight: 19 },
+    mapaWrap: { borderRadius: radio.control, overflow: 'hidden', marginTop: espacio.m - 2 },
+    contactoFila: {
+      flexDirection: 'row', alignItems: 'center', gap: espacio.m - 2, paddingVertical: espacio.m - 2,
+      borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: c.border,
+    },
+
+    consultaButton: {
+      width: '100%', flexDirection: 'row', alignItems: 'center', gap: espacio.m,
+      backgroundColor: c.card, borderWidth: 1, borderColor: c.border, borderRadius: radio.tarjeta, padding: espacio.m,
+    },
     consultaIcono: { width: 36, height: 36, borderRadius: 11, backgroundColor: c.chip, alignItems: 'center', justifyContent: 'center' },
     consultaTextos: { flex: 1 },
-    consultaTitulo: { color: c.text, fontSize: 13, fontWeight: '700' },
-    consultaSub: { color: c.textMuted, fontSize: 11, marginTop: 2 },
+    consultaTitulo: { color: c.text, ...tipo.cuerpoFuerte },
+    consultaSub: { color: c.textMuted, fontSize: 11, fontWeight: '400', marginTop: 2 },
     consultaBadge: { minWidth: 18, height: 18, borderRadius: 9, paddingHorizontal: 5, backgroundColor: c.primary, alignItems: 'center', justifyContent: 'center' },
     consultaBadgeTexto: { color: '#fff', fontSize: 10, fontWeight: '700' },
   });

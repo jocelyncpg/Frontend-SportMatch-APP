@@ -4,10 +4,11 @@ import { useMemo } from 'react';
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Avatar from '../../../components/Avatar';
-import { YO, visualDeporte } from '../../../services/actividades';
+import InsigniaDeporte from '../../../components/InsigniaDeporte';
+import { YO } from '../../../services/actividades';
 import { getConversacion, horaCorta, ultimoMensaje, useConversaciones } from '../../../services/chat';
 import { ChatGrupal, ultimoMensajeGrupal, useChatsGrupales } from '../../../services/chatGrupal';
-import { Hilo, getConvocatoria, useHilosDePostulante } from '../../../services/consultas';
+import { Hilo, useHilosDePostulante } from '../../../services/consultas';
 import { Persona, useMatches } from '../../../services/matchStore';
 import { Colors, useAppTheme } from '../../../theme/ThemeContext';
 
@@ -92,7 +93,7 @@ export default function ChatListScreen() {
             >
               {ultimo
                 ? `${ultimo.propio ? 'Tú: ' : ''}${ultimo.texto}`
-                : `¡Nuevo match! Saluda a ${persona.name.split(' ')[0]} 👋`}
+                : `¡Nuevo match! Saluda a ${persona.name.split(' ')[0]}`}
             </Text>
           )}
         </View>
@@ -124,18 +125,15 @@ export default function ChatListScreen() {
 
   function tarjetaGrupo(g: ChatGrupal) {
     const { actividad, sala, acceso, participantes } = g;
-    const visual = visualDeporte(actividad.deporte);
     const ultimo = ultimoMensajeGrupal(sala);
     const ultimoCualquiera = sala.mensajes[sala.mensajes.length - 1];
     const { noLeidos, silenciado } = sala;
     const vista = ultimo
       ? `${ultimo.propio ? 'Tú' : ultimo.autorNombre.split(' ')[0]}: ${ultimo.texto}`
-      : 'Aún no hay mensajes. ¡Saluda al grupo! 👋';
+      : 'Aún no hay mensajes. ¡Saluda al grupo!';
     return (
       <TouchableOpacity key={`g-${actividad.id}`} style={styles.card} onPress={() => abrirGrupo(g)}>
-        <View style={[styles.grupoIcono, { backgroundColor: visual.colorBg }]}>
-          <Text style={styles.grupoEmoji}>{visual.icon}</Text>
-        </View>
+        <InsigniaDeporte deporte={actividad.deporte} tamano={46} />
         <View style={styles.cardInfo}>
           <View style={styles.nombreFila}>
             <Text style={[styles.cardName, styles.cardNameGrupo]} numberOfLines={1}>{actividad.titulo}</Text>
@@ -171,11 +169,10 @@ export default function ChatListScreen() {
   function tarjetaClub(h: Hilo) {
     const ultimo = h.mensajes[h.mensajes.length - 1];
     const noLeidos = h.noLeidosPostulante;
-    const color = getConvocatoria(h.clubId)?.colorFrom ?? '#7C3AED';
     return (
       <TouchableOpacity key={`c-${h.id}`} style={styles.card} onPress={() => abrirClub(h)}>
-        <View style={[styles.grupoIcono, { backgroundColor: color }]}>
-          <Ionicons name="shield" size={21} color="#fff" />
+        <View style={styles.clubIcono}>
+          <Ionicons name="shield-outline" size={22} color={colors.accent} />
         </View>
         <View style={styles.cardInfo}>
           <View style={styles.nombreFila}>
@@ -235,21 +232,20 @@ const makeStyles = (c: Colors) =>
       borderRadius: 14, padding: 12, marginBottom: 10,
     },
     avatar: { width: 46, height: 46, borderRadius: 23 },
-    grupoIcono: { width: 46, height: 46, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
-    grupoEmoji: { fontSize: 21 },
+    clubIcono: { width: 46, height: 46, borderRadius: 13, backgroundColor: c.chip, alignItems: 'center', justifyContent: 'center' },
     cardInfo: { flex: 1 },
     nombreFila: { flexDirection: 'row', alignItems: 'center', gap: 6 },
     cardName: { color: c.text, fontSize: 13, fontWeight: '700' },
     cardNameGrupo: { flexShrink: 1 },
     grupoTag: { flexDirection: 'row', alignItems: 'center', gap: 3, backgroundColor: c.chip, borderRadius: 9, paddingHorizontal: 6, paddingVertical: 2 },
     grupoTagTexto: { color: c.accent, fontSize: 10, fontWeight: '700' },
-    cardMessage: { color: c.textMuted, fontSize: 11.5, marginTop: 2 },
+    cardMessage: { color: c.textMuted, fontSize: 11.5, fontWeight: '400', marginTop: 2 },
     cardMessageSinLeer: { color: c.text, fontWeight: '700' },
     cardMessageNuevo: { color: c.accent, fontSize: 11.5, marginTop: 2, fontWeight: '600' },
     cardBloqueado: { color: c.danger, fontSize: 11.5, marginTop: 2, fontWeight: '600' },
     cardDerecha: { alignItems: 'flex-end', gap: 5 },
     horaFila: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-    cardHora: { color: c.textMuted, fontSize: 10 },
+    cardHora: { color: c.textMuted, fontSize: 10, fontWeight: '400' },
     cardHoraSinLeer: { color: c.primary, fontWeight: '700' },
     contador: {
       minWidth: 18, height: 18, borderRadius: 9, paddingHorizontal: 5,
@@ -261,5 +257,5 @@ const makeStyles = (c: Colors) =>
     nuevoText: { color: '#fff', fontSize: 9.5, fontWeight: '700' },
     emptyState: { alignItems: 'center', paddingHorizontal: 30, marginTop: 60, gap: 8 },
     emptyTitle: { color: c.text, fontSize: 14, fontWeight: '700', marginTop: 6 },
-    emptyText: { color: c.textMuted, fontSize: 12, textAlign: 'center', lineHeight: 18 },
+    emptyText: { color: c.textMuted, fontSize: 12, fontWeight: '400', textAlign: 'center', lineHeight: 18 },
   });

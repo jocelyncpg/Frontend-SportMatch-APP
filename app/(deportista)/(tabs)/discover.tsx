@@ -485,6 +485,7 @@ const makeStyles = (c: Colors) =>
     subtitle: {
       color: c.textMuted,
       fontSize: 11,
+      fontWeight: '400',
       marginTop: 4,
       marginLeft: 2,
     },
@@ -560,6 +561,7 @@ const makeStyles = (c: Colors) =>
     emptyText: {
       color: c.textMuted,
       fontSize: 13,
+      fontWeight: '400',
       textAlign: 'center',
     },
 
@@ -640,11 +642,13 @@ const makeStyles = (c: Colors) =>
     distance: {
       color: 'rgba(255,255,255,0.8)',
       fontSize: 12.5,
+      fontWeight: '400',
     },
 
     bio: {
       color: 'rgba(255,255,255,0.85)',
       fontSize: 13,
+      fontWeight: '400',
       lineHeight: 18,
       marginTop: 10,
     },

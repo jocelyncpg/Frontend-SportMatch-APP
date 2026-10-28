@@ -107,16 +107,16 @@ export default function ActivitiesScreen() {
           <Text style={styles.filaTitulo} numberOfLines={1}>{a.titulo}</Text>
           <Text style={styles.filaMeta} numberOfLines={1}>{formatearCuando(a.fecha, ahora)} · {a.comuna}</Text>
           <Text style={styles.filaMeta} numberOfLines={1}>{a.lugar}</Text>
-        </View>
-        <View style={styles.derecha}>
-          {insignia ? (
-            <View style={[styles.insignia, insignia.tipo === 'ok' && styles.insigniaOk, insignia.tipo === 'mal' && styles.insigniaMal]}>
-              <Text style={[styles.insigniaTexto, insignia.tipo === 'ok' && styles.insigniaTextoOk, insignia.tipo === 'info' && styles.insigniaTextoInfo, insignia.tipo === 'mal' && styles.insigniaTextoMal]}>
-                {insignia.texto}
-              </Text>
-            </View>
-          ) : null}
-          <Text style={styles.cupos}>{cuposTomados(a)}/{a.cupos} cupos</Text>
+          <View style={styles.pie}>
+            <Text style={styles.cupos}>{cuposTomados(a)}/{a.cupos} cupos</Text>
+            {insignia ? (
+              <View style={[styles.insignia, insignia.tipo === 'ok' && styles.insigniaOk, insignia.tipo === 'mal' && styles.insigniaMal]}>
+                <Text style={[styles.insigniaTexto, insignia.tipo === 'ok' && styles.insigniaTextoOk, insignia.tipo === 'info' && styles.insigniaTextoInfo, insignia.tipo === 'mal' && styles.insigniaTextoMal]}>
+                  {insignia.texto}
+                </Text>
+              </View>
+            ) : null}
+          </View>
         </View>
       </TouchableOpacity>
     );
@@ -272,15 +272,15 @@ const makeStyles = (c: Colors) =>
     list: { paddingHorizontal: 20, paddingBottom: 30 },
     seccion: { color: c.textMuted, fontSize: 11, fontWeight: '700', marginBottom: 8 },
     fila: {
-      flexDirection: 'row', alignItems: 'center', gap: 12,
+      flexDirection: 'row', alignItems: 'flex-start', gap: 12,
       backgroundColor: c.card, borderWidth: 1, borderColor: c.border,
       borderRadius: 13, padding: 12, marginBottom: 9,
     },
     info: { flex: 1 },
     filaTitulo: { color: c.text, fontSize: 12.5, fontWeight: '700' },
     filaMeta: { color: c.textMuted, fontSize: 10.5, marginTop: 2 },
-    derecha: { alignItems: 'flex-end', gap: 5 },
-    cupos: { color: c.textMuted, fontSize: 10 },
+    pie: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginTop: 6 },
+    cupos: { color: c.textMuted, fontSize: 11, fontWeight: '600' },
     insignia: { backgroundColor: c.chip, borderRadius: 9, paddingHorizontal: 8, paddingVertical: 3 },
     insigniaOk: { backgroundColor: c.badgeBg },
     insigniaMal: { backgroundColor: c.chip },
