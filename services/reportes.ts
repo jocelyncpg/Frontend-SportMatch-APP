@@ -5,7 +5,8 @@ import { getToken } from './auth';
 export type TipoReporte = 'usuario' | 'actividad' | 'mensaje';
 export type ResultadoReporte = { ok: true } | { ok: false; motivo: string };
 
-export type EstadoReporte = 'pendiente' | 'revisado' | 'descartado';
+/** 'escalado' deja el reporte listo para una sanción (HU-45); no la aplica. */
+export type EstadoReporte = 'pendiente' | 'revisado' | 'descartado' | 'escalado';
 
 /** Un reporte tal como lo ve un administrador (HU-43). */
 export type Reporte = {
@@ -17,6 +18,8 @@ export type Reporte = {
   detalle: string;
   /** Nombre de quien reportó; null si su cuenta ya no existe. */
   reportante: string | null;
+  /** Nombre real de la cuenta reportada (solo reportes de personas); null en otros casos. */
+  reportado: string | null;
   estado: EstadoReporte;
   fecha: string;
 };
@@ -38,10 +41,10 @@ export const TITULO_TIPO: Record<TipoReporte, string> = {
   mensaje: 'Reportar mensaje',
 };
 
-type PersonaApi = { user_id: string; nombre: string; apellido_inicial: string; foto_perfil: string | null };
+type PersonaApi = { user_id: string; nombre: string; apellido_inicial: string; foto_perfil?: string | null };
 type ReporteApi = {
   id: string; tipo: TipoReporte; objetivo_id: string; objetivo_nombre: string; motivo: string; detalle: string;
-  reportante: PersonaApi | null; estado: EstadoReporte; fecha_creacion: string;
+  reportante: PersonaApi | null; reportado?: PersonaApi | null; estado: EstadoReporte; fecha_creacion: string;
 };
 
 async function sesion(): Promise<string> {
@@ -130,6 +133,7 @@ const aReporte = (r: ReporteApi): Reporte => ({
   id: r.id, tipo: r.tipo, objetivoId: r.objetivo_id, objetivoNombre: r.objetivo_nombre, motivo: r.motivo,
   detalle: r.detalle, estado: r.estado, fecha: r.fecha_creacion,
   reportante: r.reportante ? `${r.reportante.nombre} ${r.reportante.apellido_inicial}` : null,
+  reportado: r.reportado ? `${r.reportado.nombre} ${r.reportado.apellido_inicial}` : null,
 });
 
 /** Reportes más recientes primero; sin estado trae todos. */
@@ -139,9 +143,12 @@ export async function listarReportes(estado?: EstadoReporte): Promise<Reporte[]>
   return lista.map(aReporte);
 }
 
-export async function revisarReporte(id: string, estado: Exclude<EstadoReporte, 'pendiente'>): Promise<Reporte> {
+/** Marca el reporte como revisado, descartado o escalado. `motivo` es opcional; sin él se usa el del reporte. */
+export async function revisarReporte(
+  id: string, estado: Exclude<EstadoReporte, 'pendiente'>, motivo?: string
+): Promise<Reporte> {
   const r = await apiRequest<ReporteApi>(`/users/admin/reports/${encodeURIComponent(id)}`, {
-    method: 'PATCH', token: await sesion(), body: { estado },
+    method: 'PATCH', token: await sesion(), body: motivo ? { estado, motivo } : { estado },
   });
   return aReporte(r);
 }

@@ -18,6 +18,9 @@ export type Plan = {
   paraCuenta: 'deportista' | 'club';
   /** Id del plan en Ms-club (/payments/plans). Sin él, el plan aún no se puede contratar. */
   backendId?: number;
+  /** Lo siguiente viene de Ms-club cuando el plan ya se cargó; el diseño no lo trae. */
+  duracionDias?: number | null;
+  beneficios?: string[];
 };
 
 /** Una fila de la tabla comparativa: true/false se muestran como ✓ / —, el texto se muestra tal cual. */
@@ -87,7 +90,7 @@ export function precioTexto(plan: Plan): string {
 
 export function nombreDelPlan(id: PlanId | null): string {
   if (id === null) return 'Sin plan';
-  return PLANES.find((p) => p.id === id)?.nombre ?? 'Gratuito';
+  return estado.planes.find((p) => p.id === id)?.nombre ?? PLANES.find((p) => p.id === id)?.nombre ?? 'Gratuito';
 }
 
 /** Planes de pago que esta cuenta puede contratar (el Gratuito ya viene incluido). */
@@ -95,8 +98,10 @@ export function planesParaContratar(cuenta: CuentaPlan, planes: Plan[] = PLANES)
   return planes.filter((p) => p.paraCuenta === cuenta && p.precioMensual > 0);
 }
 
-/** Lo que incluye un plan, tomado de la tabla comparativa: lo que no es "—". */
+/** Lo que incluye un plan: lo que escribió el administrador si ya se cargó; si no, lo de la tabla comparativa (lo que no es "—"). */
 export function beneficiosDe(id: PlanId): string[] {
+  const real = estado.planes.find((p) => p.id === id)?.beneficios;
+  if (real && real.length > 0) return real;
   return FILAS_COMPARATIVA
     .filter((f) => f[id] !== false)
     .map((f) => (f[id] === true ? f.etiqueta : `${f.etiqueta}: ${f[id]}`));
@@ -105,16 +110,50 @@ export function beneficiosDe(id: PlanId): string[] {
 // ---------- catálogo y plan vigente desde Ms-club (/payments) ----------
 
 /** Plan de /payments/plans. USUARIO es el plan de pago del deportista (Pro); CLUB, el del club. */
-type PlanApi = { id: number; nombre: string; tipo: 'USUARIO' | 'CLUB'; descripcion: string | null; precio: number; duracion_dias: number };
-type SuscripcionApi = { estado: 'ACTIVE' | 'EXPIRED'; plan: PlanApi; fecha_fin: string };
+export type PlanApi = {
+  id: number; nombre: string; tipo: 'USUARIO' | 'CLUB'; categoria?: 'PLAN' | 'CONVENIO'; descripcion: string | null; precio: number;
+  duracion_dias: number; beneficios?: string[];
+};
+type SuscripcionApi = { estado: 'ACTIVE' | 'EXPIRED'; plan: Pick<PlanApi, 'tipo'> & Partial<PlanApi>; fecha_fin: string };
 type PagoIniciadoApi = { token_ws: string; checkout_url: string };
 type PagoConfirmadoApi = { status: 'PENDING' | 'APPROVED' | 'REJECTED' | 'CANCELLED'; suscripcion: SuscripcionApi | null };
 
 const ID_POR_TIPO: Record<PlanApi['tipo'], PlanId> = { USUARIO: 'pro', CLUB: 'club' };
 const SIN_PLAN: Record<CuentaPlan, PlanId | null> = { deportista: 'gratuito', club: null };
+const TIPO_DE: Record<CuentaPlan, PlanApi['tipo']> = { deportista: 'USUARIO', club: 'CLUB' };
 
-type EstadoPlanes = { planes: Plan[]; actual: Record<CuentaPlan, PlanId | null> };
-const INICIAL: EstadoPlanes = { planes: PLANES, actual: { ...SIN_PLAN } };
+type EstadoPlanes = { planes: Plan[]; api: Record<CuentaPlan, PlanApi[]>; actual: Record<CuentaPlan, PlanId | null> };
+const INICIAL: EstadoPlanes = { planes: PLANES, api: { deportista: [], club: [] }, actual: { ...SIN_PLAN } };
+
+/**
+ * Los tres planes del diseño con los datos reales de Ms-club por debajo (precio, duración, descripción, beneficios):
+ * Gratuito toma el plan gratuito más barato del deportista, Pro el de pago más barato del deportista y Club el más
+ * barato del club. Los nombres y la tabla comparativa son los del diseño. El backend ya deja fuera los planes desactivados.
+ */
+export function construirPlanes(api: Record<CuentaPlan, PlanApi[]>): Plan[] {
+  const usados = new Set<number>();
+  const elegir = (cuenta: CuentaPlan, gratis: boolean): PlanApi | undefined => {
+    const candidato = [...api[cuenta]]
+      .filter((p) => p.categoria !== 'CONVENIO' && (p.precio === 0) === gratis)
+      .sort((a, b) => a.precio - b.precio || a.id - b.id)[0];
+    if (candidato) usados.add(candidato.id);
+    return candidato;
+  };
+  const real: Record<string, PlanApi | undefined> = {
+    gratuito: elegir('deportista', true), pro: elegir('deportista', false), club: elegir('club', false),
+  };
+  const base = PLANES.map((p) => {
+    const r = real[p.id];
+    return r
+      ? {
+          ...p, backendId: r.id, precioMensual: r.precio, duracionDias: r.duracion_dias,
+          resumen: r.descripcion && r.descripcion.trim() ? r.descripcion : p.resumen,
+          beneficios: Array.isArray(r.beneficios) ? r.beneficios.filter((b): b is string => typeof b === 'string') : undefined,
+        }
+      : p;
+  });
+  return base;
+}
 let estado: EstadoPlanes = INICIAL;
 const oyentes = new Set<() => void>();
 const emitir = () => oyentes.forEach((o) => o());
@@ -132,8 +171,11 @@ export function usePlanes(): Plan[] {
   return useSyncExternalStore(suscribir, () => estado.planes, () => estado.planes);
 }
 
+/** El plan de la suscripción: el del catálogo que tiene ese id real; si ya no está, el que corresponde a su tipo. */
 function vigente(s: SuscripcionApi | null): PlanId | null {
-  return s && s.estado === 'ACTIVE' ? ID_POR_TIPO[s.plan.tipo] ?? null : null;
+  if (!s || s.estado !== 'ACTIVE') return null;
+  const porId = s.plan.id === undefined ? undefined : estado.planes.find((p) => p.backendId === s.plan.id);
+  return porId?.id ?? ID_POR_TIPO[s.plan.tipo] ?? null;
 }
 
 function guardarActual(cuenta: CuentaPlan, id: PlanId | null) {
@@ -150,20 +192,9 @@ async function token(): Promise<string> {
 
 /** Trae el catálogo (público) y la suscripción de la cuenta. Un 404 de la suscripción = nunca contrató. */
 export async function cargarPlanes(cuenta: CuentaPlan): Promise<void> {
-  const lista = await apiRequest<PlanApi[]>(`/payments/plans?tipo=${cuenta === 'club' ? 'CLUB' : 'USUARIO'}`);
-  // Si hubiera varios del mismo tipo, se usa el más barato (el catálogo de la app tiene uno por tipo).
-  const porId = new Map<PlanId, PlanApi>();
-  for (const p of [...lista].sort((a, b) => a.precio - b.precio)) {
-    const id = ID_POR_TIPO[p.tipo];
-    if (id && !porId.has(id)) porId.set(id, p);
-  }
-  estado = {
-    ...estado,
-    planes: estado.planes.map((p) => {
-      const api = porId.get(p.id);
-      return api ? { ...p, backendId: api.id, precioMensual: api.precio } : p;
-    }),
-  };
+  const lista = await apiRequest<PlanApi[]>(`/payments/plans?tipo=${TIPO_DE[cuenta]}`);
+  const api = { ...estado.api, [cuenta]: lista.filter((p) => p.tipo === TIPO_DE[cuenta]) };
+  estado = { ...estado, api, planes: construirPlanes(api) };
   emitir();
   try {
     guardarActual(cuenta, vigente(await apiRequest<SuscripcionApi>('/payments/subscription/me', { token: await token() })) ?? SIN_PLAN[cuenta]);
