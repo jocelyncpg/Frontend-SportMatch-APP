@@ -1,4 +1,5 @@
 import { API_BASE_URL } from './config';
+import { leerSuspension, type Suspension } from './suspension';
 
 type RequestOptions = {
   method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
@@ -13,9 +14,24 @@ export class ApiError extends Error {
     message: string,
     public status: number,
     public detail: string,
+    /** Código estable del backend, p. ej. 'account_suspended'. */
+    public code?: string,
+    /** Con 'account_suspended': lo que la persona puede ver de su sanción. */
+    public suspension?: Suspension,
   ) {
     super(message);
   }
+}
+
+export type { Suspension };
+
+export const CUENTA_SUSPENDIDA = 'account_suspended';
+
+// Quien quiera enterarse de que la sesión actual fue suspendida (p. ej. el layout, que cierra la sesión).
+const oyentesSuspension = new Set<(e: ApiError) => void>();
+export function alSuspenderse(oyente: (e: ApiError) => void): () => void {
+  oyentesSuspension.add(oyente);
+  return () => { oyentesSuspension.delete(oyente); };
 }
 
 // Mensajes del backend (en inglés) traducidos para mostrarlos en la app.
@@ -71,12 +87,21 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
 
   if (!res.ok) {
     let detail = '';
+    let data: any = null;
     try {
-      detail = leerDetail(await res.json());
+      data = await res.json();
+      detail = leerDetail(data);
     } catch {
       // el backend no devolvió JSON, se usa el mensaje genérico
     }
     const mensaje = MENSAJES[detail] ?? (detail || 'Ocurrió un error al conectar con el servidor.');
+    if (res.status === 403 && data?.code === CUENTA_SUSPENDIDA) {
+      // El mensaje es el que ya manda el backend (con el motivo y la duración), igual que antes.
+      const error = new ApiError(mensaje, res.status, detail, CUENTA_SUSPENDIDA, leerSuspension(data));
+      // Con sesión abierta (había token) la app avisa y cierra la sesión; en el login solo se muestra el mensaje.
+      if (token) oyentesSuspension.forEach((oyente) => oyente(error));
+      throw error;
+    }
     throw new ApiError(mensaje, res.status, detail);
   }
 

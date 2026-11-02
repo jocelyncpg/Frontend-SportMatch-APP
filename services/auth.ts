@@ -288,7 +288,13 @@ export async function loginConHuella(): Promise<Usuario> {
 
 export async function logout(): Promise<void> {
   const { desactivarPush } = await import('./push');
-  await desactivarPush();
+  // Revocar las alertas en el servidor es lo mejor posible: si falla (sin conexión, o 403 de una cuenta suspendida)
+  // la sesión local se cierra igual, para que nadie quede dentro con una sesión que ya no sirve.
+  try {
+    await desactivarPush();
+  } catch {
+    // se sigue con el cierre local
+  }
   await AsyncStorage.multiRemove([SESSION_KEY, TOKEN_KEY]);
   const { reiniciarNotificaciones } = await import('./notificaciones');
   reiniciarNotificaciones();

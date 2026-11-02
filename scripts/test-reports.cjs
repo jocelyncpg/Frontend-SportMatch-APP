@@ -80,4 +80,19 @@ test('el panel de moderación lista y resuelve reportes', async () => {
   assert.equal(calls[1][0], '/users/admin/reports/r-1');
   assert.equal(revisado.estado, 'descartado');
   assert.equal(revisado.reportante, null);
+  // HU-47: escalar deja el reporte listo para sanción; el motivo es opcional y solo viaja si se da.
+  const escalado = await api.revisarReporte('r-1', 'escalado');
+  assert.deepEqual(plano(calls.at(-1)[1].body), { estado: 'escalado' });
+  assert.equal(escalado.estado, 'escalado');
+  await api.revisarReporte('r-1', 'escalado', 'Reincidente');
+  assert.deepEqual(plano(calls.at(-1)[1].body), { estado: 'escalado', motivo: 'Reincidente' });
+});
+
+test('el panel muestra a quién se reportó con el nombre de la cuenta', async () => {
+  const base = { id: 'r-2', tipo: 'usuario', objetivo_id: 'u-3', objetivo_nombre: 'Lo que escribió quien reporta',
+    motivo: 'Lenguaje ofensivo', detalle: 'x', estado: 'pendiente', fecha_creacion: '2026-10-10T20:00:00Z', reportante: null };
+  const { api } = load(async () => [{ ...base, reportado: { user_id: 'u-3', nombre: 'Beto', apellido_inicial: 'T.' } }, base]);
+  const [con, sin] = await api.listarReportes('pendiente');
+  assert.equal(con.reportado, 'Beto T.');
+  assert.equal(sin.reportado, null);
 });
