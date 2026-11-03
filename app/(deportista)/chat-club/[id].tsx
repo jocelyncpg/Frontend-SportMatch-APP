@@ -7,15 +7,21 @@ import { YO } from '../../../services/actividades';
 import { getSession } from '../../../services/auth';
 import { horaCorta } from '../../../services/chat';
 import {
-    MAX_CONSULTA,
-    enviarConsulta,
-    idHilo,
-    marcarLeidoPostulante,
-    simularRespuestaClub,
-    useConvocatoria,
-    useHilo,
+  MAX_CONSULTA,
+  enviarConsulta,
+  idHilo,
+  marcarLeidoPostulante,
+  simularRespuestaClub,
+  useConvocatoria,
+  useHilo,
 } from '../../../services/consultas';
-import { Colors, useAppTheme } from '../../../theme/ThemeContext';
+import { Colors, espacio, radio, tipo, useAppTheme } from '../../../theme/ThemeContext';
+
+// Texto e íconos sobre fondos de color fuerte (ícono del club, burbuja propia, botón enviar) y la hora dentro de esa burbuja.
+const SOBRE_COLOR = '#FFFFFF';
+const SOBRE_COLOR_SUAVE = 'rgba(255,255,255,0.75)';
+// Color del ícono del club cuando la convocatoria no trae uno propio.
+const COLOR_CLUB_BASE = '#7C3AED';
 
 export default function ChatClubScreen() {
   const { colors } = useAppTheme();
@@ -63,24 +69,26 @@ export default function ChatClubScreen() {
     setTimeout(() => simularRespuestaClub(hiloId), 2500);
   }
 
+  const sinTexto = !texto.trim();
+
   return (
     <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <View style={[styles.topbar, { paddingTop: insets.top + 12 }]}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton} accessibilityLabel="Volver">
+      <View style={[styles.topbar, { paddingTop: insets.top + espacio.m }]}>
+        <TouchableOpacity onPress={() => router.back()} style={styles.backButton} accessibilityRole="button" accessibilityLabel="Volver">
           <Ionicons name="arrow-back" size={18} color={colors.text} />
         </TouchableOpacity>
-        <View style={[styles.icono, { backgroundColor: convocatoria?.colorFrom ?? '#7C3AED' }]}>
-          <Ionicons name="shield" size={18} color="#fff" />
+        <View style={[styles.icono, { backgroundColor: convocatoria?.colorFrom ?? COLOR_CLUB_BASE }]}>
+          <Ionicons name="shield" size={20} color={SOBRE_COLOR} />
         </View>
-        <View style={{ flex: 1 }}>
-          <Text style={styles.title} numberOfLines={1}>{nombreClub}</Text>
+        <View style={styles.topbarTextos}>
+          <Text accessibilityRole="header" style={styles.title} numberOfLines={1}>{nombreClub}</Text>
           <Text style={styles.sub} numberOfLines={1}>
             {convocatoria ? convocatoria.titulo : 'Consultas de convocatoria'}
           </Text>
         </View>
       </View>
 
-      <ScrollView ref={scroll} style={{ flex: 1 }} contentContainerStyle={styles.mensajes}>
+      <ScrollView ref={scroll} style={styles.scroll} contentContainerStyle={styles.mensajes}>
         {total === 0 ? (
           <View style={styles.vacio}>
             <Ionicons name="chatbubbles-outline" size={40} color={colors.textMuted} />
@@ -102,7 +110,7 @@ export default function ChatClubScreen() {
       </ScrollView>
 
       {abierta ? (
-        <View style={[styles.inputBar, { paddingBottom: insets.bottom + 10 }]}>
+        <View style={[styles.inputBar, { paddingBottom: insets.bottom + espacio.m }]}>
           <TextInput
             style={styles.input}
             value={texto}
@@ -111,19 +119,22 @@ export default function ChatClubScreen() {
             placeholderTextColor={colors.textMuted}
             multiline
             maxLength={MAX_CONSULTA}
+            accessibilityLabel="Escribe tu consulta"
           />
           <TouchableOpacity
-            style={[styles.enviarBtn, !texto.trim() && styles.enviarBtnOff]}
+            style={[styles.enviarBtn, sinTexto && styles.enviarBtnOff]}
             onPress={enviar}
-            disabled={!texto.trim()}
+            disabled={sinTexto}
+            accessibilityRole="button"
+            accessibilityState={{ disabled: sinTexto }}
             accessibilityLabel="Enviar consulta"
           >
-            <Ionicons name="send" size={16} color="#fff" />
+            <Ionicons name="send" size={18} color={SOBRE_COLOR} />
           </TouchableOpacity>
         </View>
       ) : (
-        <View style={[styles.cerrada, { paddingBottom: insets.bottom + 12 }]}>
-          <Ionicons name="lock-closed-outline" size={14} color={colors.textMuted} />
+        <View style={[styles.cerrada, { paddingBottom: insets.bottom + espacio.m }]}>
+          <Ionicons name="lock-closed-outline" size={16} color={colors.textMuted} />
           <Text style={styles.cerradaTexto}>
             La convocatoria está cerrada: ya no se pueden enviar consultas nuevas.
           </Text>
@@ -136,26 +147,28 @@ export default function ChatClubScreen() {
 const makeStyles = (c: Colors) =>
   StyleSheet.create({
     container: { flex: 1, backgroundColor: c.bg },
-    topbar: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 20, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: c.border },
-    backButton: { width: 34, height: 34, borderRadius: 17, backgroundColor: c.card, borderWidth: 1, borderColor: c.border, alignItems: 'center', justifyContent: 'center' },
-    icono: { width: 36, height: 36, borderRadius: 11, alignItems: 'center', justifyContent: 'center' },
-    title: { color: c.text, fontSize: 15, fontWeight: '700' },
-    sub: { color: c.textMuted, fontSize: 11.5, marginTop: 2 },
-    mensajes: { padding: 16, gap: 8, flexGrow: 1 },
-    vacio: { alignItems: 'center', paddingHorizontal: 30, marginTop: 50, gap: 8 },
-    vacioTitulo: { color: c.text, fontSize: 14, fontWeight: '700', marginTop: 6 },
-    vacioTexto: { color: c.textMuted, fontSize: 12, textAlign: 'center', lineHeight: 18 },
-    burbuja: { maxWidth: '80%', borderRadius: 16, paddingHorizontal: 12, paddingVertical: 8 },
-    burbujaPropia: { alignSelf: 'flex-end', backgroundColor: c.primary, borderBottomRightRadius: 4 },
-    burbujaAjena: { alignSelf: 'flex-start', backgroundColor: c.card, borderWidth: 1, borderColor: c.border, borderBottomLeftRadius: 4 },
-    texto: { color: c.text, fontSize: 13, lineHeight: 18 },
-    textoPropio: { color: '#fff' },
-    horaMsg: { color: c.textMuted, fontSize: 9.5, marginTop: 3, alignSelf: 'flex-end' },
-    horaMsgPropia: { color: 'rgba(255,255,255,0.75)' },
-    inputBar: { flexDirection: 'row', alignItems: 'flex-end', gap: 10, paddingHorizontal: 16, paddingTop: 10, borderTopWidth: 1, borderTopColor: c.border, backgroundColor: c.bg },
-    input: { flex: 1, maxHeight: 110, backgroundColor: c.inputBg, borderWidth: 1, borderColor: c.border, borderRadius: 18, paddingHorizontal: 14, paddingVertical: 10, color: c.text, fontSize: 13 },
-    enviarBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: c.primary, alignItems: 'center', justifyContent: 'center' },
+    topbar: { flexDirection: 'row', alignItems: 'center', gap: espacio.s, paddingHorizontal: espacio.l, paddingBottom: espacio.m, borderBottomWidth: 1, borderBottomColor: c.border },
+    backButton: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
+    icono: { width: 40, height: 40, borderRadius: radio.control, alignItems: 'center', justifyContent: 'center' },
+    topbarTextos: { flex: 1, marginLeft: espacio.xs },
+    title: { color: c.text, ...tipo.seccion },
+    sub: { color: c.textMuted, ...tipo.dato, marginTop: 2 },
+    scroll: { flex: 1 },
+    mensajes: { padding: espacio.xl, gap: espacio.m, flexGrow: 1 },
+    vacio: { alignItems: 'center', paddingHorizontal: espacio.xxl + espacio.s, marginTop: 50, gap: espacio.s },
+    vacioTitulo: { color: c.text, ...tipo.seccion, marginTop: espacio.s - 2 },
+    vacioTexto: { color: c.textMuted, ...tipo.cuerpo, textAlign: 'center', lineHeight: 19 },
+    burbuja: { maxWidth: '80%', borderRadius: radio.tarjeta, paddingHorizontal: espacio.l - 2, paddingVertical: espacio.m - 1 },
+    burbujaPropia: { alignSelf: 'flex-end', backgroundColor: c.primary, borderBottomRightRadius: espacio.xs },
+    burbujaAjena: { alignSelf: 'flex-start', backgroundColor: c.card, borderWidth: 1, borderColor: c.border, borderBottomLeftRadius: espacio.xs },
+    texto: { color: c.text, ...tipo.cuerpo, fontSize: 14, lineHeight: 20 },
+    textoPropio: { color: SOBRE_COLOR },
+    horaMsg: { color: c.textMuted, ...tipo.etiqueta, fontWeight: '400', marginTop: 3, alignSelf: 'flex-end' },
+    horaMsgPropia: { color: SOBRE_COLOR_SUAVE },
+    inputBar: { flexDirection: 'row', alignItems: 'flex-end', gap: espacio.s, paddingHorizontal: espacio.l, paddingTop: espacio.m, borderTopWidth: 1, borderTopColor: c.border, backgroundColor: c.bg },
+    input: { flex: 1, minHeight: 44, maxHeight: 110, backgroundColor: c.inputBg, borderWidth: 1, borderColor: c.border, borderRadius: 22, paddingHorizontal: espacio.l, paddingVertical: espacio.s + 1, color: c.text, fontSize: 14, fontWeight: '400' },
+    enviarBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: c.primary, alignItems: 'center', justifyContent: 'center' },
     enviarBtnOff: { opacity: 0.4 },
-    cerrada: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 20, paddingTop: 12, borderTopWidth: 1, borderTopColor: c.border, backgroundColor: c.chip },
-    cerradaTexto: { color: c.textMuted, fontSize: 12, flex: 1 },
+    cerrada: { flexDirection: 'row', alignItems: 'center', gap: espacio.s, paddingHorizontal: espacio.xl, paddingTop: espacio.m, borderTopWidth: 1, borderTopColor: c.border, backgroundColor: c.chip },
+    cerradaTexto: { color: c.textMuted, ...tipo.dato, flex: 1 },
   });

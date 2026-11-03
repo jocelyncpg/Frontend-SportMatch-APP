@@ -4,6 +4,7 @@ import { YO } from '../../../services/actividades';
 import { useNoLeidosTotal } from '../../../services/chat';
 import { useNoLeidosGrupales } from '../../../services/chatGrupal';
 import { useNoLeidosConsultas } from '../../../services/consultas';
+import { useVibrarAlLlegarAvisos } from '../../../services/notificaciones';
 import { useAppTheme } from '../../../theme/ThemeContext';
 
 export default function TabLayout() {
@@ -11,6 +12,9 @@ export default function TabLayout() {
 
   // Globo de la pestaña Chat: sin leer en chats 1 a 1, grupos de actividad y respuestas de clubes.
   const noLeidos = useNoLeidosTotal() + useNoLeidosGrupales() + useNoLeidosConsultas(YO);
+
+  // Vibra cuando llega algo nuevo: un mensaje (chat, grupo o club) o un aviso (solicitud, actividad o club).
+  useVibrarAlLlegarAvisos(noLeidos);
 
   return (
     <Tabs

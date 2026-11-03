@@ -1,4 +1,5 @@
-import { useMemo, useSyncExternalStore } from 'react';
+import * as Haptics from 'expo-haptics';
+import { useEffect, useMemo, useRef, useSyncExternalStore } from 'react';
 import { YO, getAvisos, useAvisos, type AvisoActividad } from './actividades';
 import { getAvisosClub, useAvisosRecibidos, type AvisoClub } from './avisosClub';
 import { marcarTodasLeidasEnChats, useConversaciones, type Conversacion } from './chat';
@@ -163,4 +164,40 @@ export function useNotificaciones() {
   }, [matches, avisos, avisosClub, conversaciones, leidos]);
   const noLeidas = lista.filter((n) => !n.leida).length;
   return { lista, noLeidas };
+}
+
+/** Al abrir la app los datos de ejemplo terminan de cargar y suben el contador; en ese rato no se vibra. */
+const GRACIA_ARRANQUE_MS = 3000;
+
+/**
+ * Vibra una vez cada vez que llega algo nuevo: una solicitud de match, un mensaje (chat 1 a 1, grupo de
+ * actividad o respuesta de un club) o un aviso (actividad o club). Se llama una sola vez, desde el layout de
+ * las pestañas, para que funcione en cualquier pantalla de la app.
+ *
+ * `mensajesNoLeidos` es el total de mensajes sin leer (ya sin contar los chats silenciados). Se mira aparte del
+ * contador de avisos porque un chat con varios mensajes sin leer es un solo aviso: sin esto, solo vibraría
+ * con el primer mensaje de cada chat. Las solicitudes también se miran aparte: una solicitud nueva llega ya
+ * como "leída" en la bandeja, así que no sube ese contador. Solo vibra cuando algo sube: leer, abrir un chat o
+ * responder una solicitud (que lo bajan) no vibra.
+ */
+export function useVibrarAlLlegarAvisos(mensajesNoLeidos: number) {
+  const { noLeidas } = useNotificaciones();
+  const solicitudes = useMatches().solicitudes.length;
+  const anteriorAvisos = useRef(noLeidas);
+  const anteriorMensajes = useRef(mensajesNoLeidos);
+  const anteriorSolicitudes = useRef(solicitudes);
+  const inicio = useRef(Date.now());
+  useEffect(() => {
+    const subio =
+      noLeidas > anteriorAvisos.current ||
+      mensajesNoLeidos > anteriorMensajes.current ||
+      solicitudes > anteriorSolicitudes.current;
+    anteriorAvisos.current = noLeidas;
+    anteriorMensajes.current = mensajesNoLeidos;
+    anteriorSolicitudes.current = solicitudes;
+    if (!subio || Date.now() - inicio.current < GRACIA_ARRANQUE_MS) return;
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {
+      // Algunos teléfonos o emuladores no tienen vibración: no pasa nada.
+    });
+  }, [noLeidas, mensajesNoLeidos, solicitudes]);
 }

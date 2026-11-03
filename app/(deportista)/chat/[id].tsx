@@ -19,6 +19,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Avatar from '../../../components/Avatar';
 import ReportarModal from '../../../components/ReportarModal';
+import { Boton } from '../../../components/ui';
 import {
   abrirChat,
   bloquearUsuario,
@@ -34,8 +35,15 @@ import {
   type UbicacionChat,
 } from '../../../services/chat';
 import { solicitarUbicacion } from '../../../services/location';
+import { useMatches } from '../../../services/matchStore';
 import type { TipoReporte } from '../../../services/reportes';
-import { Colors, useAppTheme } from '../../../theme/ThemeContext';
+import { Colors, espacio, radio, tipo, useAppTheme } from '../../../theme/ThemeContext';
+
+// Texto e íconos sobre fondos de color fuerte (burbuja propia, botón enviar).
+const SOBRE_COLOR = '#FFFFFF';
+
+// DEMO: segundos que tarda en llegar la respuesta simulada, para alcanzar a salir del chat y ver el aviso y la vibración.
+const DEMO_RETRASO_MS = 5000;
 
 /** Lo que se está reportando desde el chat (HU-42): la persona o un mensaje suyo. */
 type ObjetivoReporte = { tipo: TipoReporte; id: string; nombre: string };
@@ -49,6 +57,12 @@ export default function ChatScreen() {
   const personaId = id ?? '';
   const nombre = name ?? 'Deportista';
   const primerNombre = nombre.split(' ')[0];
+
+  // La foto se busca por id en los datos de matches, así se ve venga el chat de donde venga
+  // (Matches, Chats, Descubrir, avisos, búsqueda...) sin tener que pasarla como parámetro.
+  const { confirmados, solicitudes, catalogo } = useMatches();
+  const fotoUri =
+    [...confirmados, ...solicitudes, ...catalogo].find((p) => p.id === personaId)?.fotoUri ?? null;
 
   // Los mensajes viven en services/chat.ts (HU-60), así no se pierden al salir del chat.
   const { mensajes, silenciado, bloqueado } = useConversacion(personaId);
@@ -179,7 +193,7 @@ export default function ChatScreen() {
     }
     if (m.ubicacion) {
       const u = m.ubicacion;
-      const color = m.propio ? '#fff' : colors.text;
+      const color = m.propio ? SOBRE_COLOR : colors.text;
       return (
         <TouchableOpacity style={styles.ubicacion} onPress={() => abrirEnMapas(u)} accessibilityLabel="Abrir ubicación en mapas">
           <View style={styles.ubicacionFila}>
@@ -199,38 +213,39 @@ export default function ChatScreen() {
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
     >
-      <View style={[styles.topbar, { paddingTop: insets.top + 12 }]}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+      <View style={[styles.topbar, { paddingTop: insets.top + espacio.m }]}>
+        <TouchableOpacity onPress={() => router.back()} style={styles.backButton} accessibilityRole="button" accessibilityLabel="Volver">
           <Ionicons name="arrow-back" size={18} color={colors.text} />
         </TouchableOpacity>
-        <Avatar name={nombre} colorFrom={colorFrom ?? '#7C3AED'} style={styles.avatar} fontSize={13} />
+        <Avatar name={nombre} colorFrom={colorFrom ?? '#7C3AED'} uri={fotoUri} style={styles.avatar} fontSize={13} />
         <View style={styles.topbarTextos}>
-          <Text style={styles.name}>{nombre}</Text>
+          <Text style={styles.name} numberOfLines={1}>{nombre}</Text>
           <View style={styles.subtitulo}>
             <Text style={styles.sport}>{sport ?? ''}</Text>
             {silenciado && !bloqueado ? (
               <View style={styles.etiqueta}>
-                <Ionicons name="notifications-off-outline" size={11} color={colors.textMuted} />
+                <Ionicons name="notifications-off-outline" size={13} color={colors.textMuted} />
                 <Text style={styles.etiquetaTexto}>Silenciado</Text>
               </View>
             ) : null}
             {bloqueado ? (
               <View style={styles.etiqueta}>
-                <Ionicons name="ban-outline" size={11} color={colors.danger} />
+                <Ionicons name="ban-outline" size={13} color={colors.danger} />
                 <Text style={[styles.etiquetaTexto, { color: colors.danger }]}>Bloqueado</Text>
               </View>
             ) : null}
           </View>
         </View>
-        <TouchableOpacity onPress={abrirOpciones} style={styles.reportButton} accessibilityLabel={`Opciones de ${nombre}`}>
-          <Ionicons name="ellipsis-vertical" size={16} color={colors.textMuted} />
+        <TouchableOpacity onPress={abrirOpciones} style={styles.reportButton} accessibilityRole="button" accessibilityLabel={`Opciones de ${nombre}`}>
+          <Ionicons name="ellipsis-vertical" size={18} color={colors.textMuted} />
         </TouchableOpacity>
         <TouchableOpacity
           onPress={() => setReporte({ tipo: 'usuario', id: personaId, nombre })}
           style={styles.reportButton}
+          accessibilityRole="button"
           accessibilityLabel={`Reportar a ${nombre}`}
         >
-          <Ionicons name="flag-outline" size={16} color={colors.textMuted} />
+          <Ionicons name="flag-outline" size={18} color={colors.textMuted} />
         </TouchableOpacity>
       </View>
 
@@ -243,14 +258,14 @@ export default function ChatScreen() {
         ListEmptyComponent={
           <View style={styles.intro}>
             <View style={styles.introIcono}>
-              <Ionicons name="heart" size={22} color="#fff" />
+              <Ionicons name="heart" size={22} color={SOBRE_COLOR} />
             </View>
             <Text style={styles.introTitulo}>Hiciste match con {primerNombre}</Text>
             <Text style={styles.introTexto}>Rompe el hielo y coordinen su primer entrenamiento.</Text>
             {!bloqueado ? (
               <View style={styles.sugerencias}>
                 {sugerencias.map((s) => (
-                  <TouchableOpacity key={s} style={styles.sugerencia} onPress={() => enviar(s)}>
+                  <TouchableOpacity key={s} style={styles.sugerencia} onPress={() => enviar(s)} accessibilityRole="button" accessibilityLabel={`Enviar: ${s}`}>
                     <Text style={styles.sugerenciaTexto}>{s}</Text>
                   </TouchableOpacity>
                 ))}
@@ -279,25 +294,24 @@ export default function ChatScreen() {
 
       {bloqueado ? (
         // Persona bloqueada (HU-59): no se puede escribir hasta desbloquearla.
-        <View style={[styles.bloqueadoBox, { paddingBottom: insets.bottom + 12 }]}>
+        <View style={[styles.bloqueadoBox, { paddingBottom: insets.bottom + espacio.m }]}>
           <Ionicons name="ban-outline" size={18} color={colors.danger} />
           <Text style={styles.bloqueadoTexto}>Bloqueaste a {primerNombre}. No pueden enviarse mensajes.</Text>
-          <TouchableOpacity style={styles.desbloquearBtn} onPress={() => desbloquearUsuario(personaId)}>
-            <Text style={styles.desbloquearTexto}>Desbloquear</Text>
-          </TouchableOpacity>
+          <Boton texto="Desbloquear" variante="secundario" onPress={() => desbloquearUsuario(personaId)} style={styles.desbloquearBtn} />
         </View>
       ) : (
         <>
           {/* DEMO: quitar cuando los mensajes lleguen del backend */}
           {personaId !== '' && (
-            <TouchableOpacity style={styles.demoLink} onPress={() => simularRespuesta(personaId)}>
-              <Text style={styles.demoLinkTexto}>Demo: simular que {primerNombre} te responde</Text>
+            <TouchableOpacity style={styles.demoLink} onPress={() => setTimeout(() => simularRespuesta(personaId), DEMO_RETRASO_MS)} accessibilityRole="button">
+              <Text style={styles.demoLinkTexto}>Demo: simular que {primerNombre} te responde (en 5 s)</Text>
             </TouchableOpacity>
           )}
 
-          <View style={[styles.inputRow, { paddingBottom: insets.bottom + 12 }]}>
+          <View style={[styles.inputRow, { paddingBottom: insets.bottom + espacio.m }]}>
             <TouchableOpacity
               style={styles.adjuntarButton}
+              accessibilityRole="button"
               onPress={abrirAdjuntos}
               disabled={obteniendoUbicacion}
               accessibilityLabel="Adjuntar ubicación o foto"
@@ -305,7 +319,7 @@ export default function ChatScreen() {
               {obteniendoUbicacion ? (
                 <ActivityIndicator size="small" color={colors.textMuted} />
               ) : (
-                <Ionicons name="add" size={20} color={colors.textMuted} />
+                <Ionicons name="add" size={22} color={colors.textMuted} />
               )}
             </TouchableOpacity>
             <TextInput
@@ -316,9 +330,10 @@ export default function ChatScreen() {
               onChangeText={setTexto}
               onSubmitEditing={() => enviar()}
               returnKeyType="send"
+              accessibilityLabel="Escribe un mensaje"
             />
-            <TouchableOpacity style={styles.sendButton} onPress={() => enviar()}>
-              <Ionicons name="send" size={16} color="#fff" />
+            <TouchableOpacity style={styles.sendButton} onPress={() => enviar()} accessibilityRole="button" accessibilityLabel="Enviar mensaje">
+              <Ionicons name="send" size={18} color={SOBRE_COLOR} />
             </TouchableOpacity>
           </View>
         </>
@@ -339,47 +354,46 @@ export default function ChatScreen() {
 const makeStyles = (c: Colors) =>
   StyleSheet.create({
     container: { flex: 1, backgroundColor: c.bg },
-    topbar: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 20, paddingBottom: 16, borderBottomWidth: 1, borderColor: c.border },
-    backButton: { width: 34, height: 34, borderRadius: 17, backgroundColor: c.card, borderWidth: 1, borderColor: c.border, alignItems: 'center', justifyContent: 'center' },
+    topbar: { flexDirection: 'row', alignItems: 'center', gap: espacio.s, paddingHorizontal: espacio.l, paddingBottom: espacio.m, borderBottomWidth: 1, borderColor: c.border },
+    backButton: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
     topbarTextos: { flex: 1 },
-    reportButton: { width: 34, height: 34, borderRadius: 17, backgroundColor: c.card, borderWidth: 1, borderColor: c.border, alignItems: 'center', justifyContent: 'center' },
-    avatar: { width: 36, height: 36, borderRadius: 18 },
-    name: { color: c.text, fontSize: 14, fontWeight: '700' },
-    subtitulo: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-    sport: { color: c.textMuted, fontSize: 11 },
-    etiqueta: { flexDirection: 'row', alignItems: 'center', gap: 3 },
-    etiquetaTexto: { color: c.textMuted, fontSize: 10.5, fontWeight: '600' },
-    list: { padding: 20, gap: 10 },
+    reportButton: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
+    avatar: { width: 40, height: 40, borderRadius: 20 },
+    name: { color: c.text, ...tipo.seccion },
+    subtitulo: { flexDirection: 'row', alignItems: 'center', gap: espacio.s },
+    sport: { color: c.textMuted, ...tipo.dato },
+    etiqueta: { flexDirection: 'row', alignItems: 'center', gap: espacio.xs },
+    etiquetaTexto: { color: c.textMuted, ...tipo.etiqueta },
+    list: { padding: espacio.xl, gap: espacio.m },
     listVacia: { flexGrow: 1, justifyContent: 'center' },
-    bubble: { maxWidth: '75%', borderRadius: 16, paddingHorizontal: 14, paddingVertical: 10, marginBottom: 4 },
+    bubble: { maxWidth: '78%', borderRadius: radio.tarjeta, paddingHorizontal: espacio.l - 2, paddingVertical: espacio.m - 1, marginBottom: espacio.xs },
     bubbleMedia: { padding: 6 },
-    bubbleOther: { backgroundColor: c.card, borderWidth: 1, borderColor: c.border, alignSelf: 'flex-start', borderBottomLeftRadius: 4 },
-    bubbleOwn: { backgroundColor: c.primary, alignSelf: 'flex-end', borderBottomRightRadius: 4 },
-    bubbleTextOther: { color: c.text, fontSize: 13 },
-    bubbleTextOwn: { color: '#fff', fontSize: 13 },
-    imagen: { width: 200, height: 150, borderRadius: 12 },
-    ubicacion: { paddingHorizontal: 8, paddingVertical: 6, gap: 4 },
+    bubbleOther: { backgroundColor: c.card, borderWidth: 1, borderColor: c.border, alignSelf: 'flex-start', borderBottomLeftRadius: espacio.xs },
+    bubbleOwn: { backgroundColor: c.primary, alignSelf: 'flex-end', borderBottomRightRadius: espacio.xs },
+    bubbleTextOther: { color: c.text, ...tipo.cuerpo, fontSize: 14, lineHeight: 20 },
+    bubbleTextOwn: { color: SOBRE_COLOR, ...tipo.cuerpo, fontSize: 14, lineHeight: 20 },
+    imagen: { width: 200, height: 150, borderRadius: radio.control },
+    ubicacion: { paddingHorizontal: espacio.s, paddingVertical: 6, gap: espacio.xs, minHeight: 44, justifyContent: 'center' },
     ubicacionFila: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-    ubicacionTitulo: { fontSize: 13, fontWeight: '700' },
-    ubicacionAccion: { fontSize: 11.5, textDecorationLine: 'underline' },
-    intro: { alignItems: 'center', paddingHorizontal: 12 },
-    introIcono: { width: 48, height: 48, borderRadius: 24, backgroundColor: '#EC4899', alignItems: 'center', justifyContent: 'center', marginBottom: 12 },
-    introTitulo: { color: c.text, fontSize: 16, fontWeight: '700' },
-    introTexto: { color: c.textMuted, fontSize: 12, marginTop: 4, textAlign: 'center' },
-    sugerencias: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 8, marginTop: 18 },
-    sugerencia: { backgroundColor: c.chip, borderRadius: 16, paddingHorizontal: 12, paddingVertical: 8 },
-    sugerenciaTexto: { color: c.accent, fontSize: 12, fontWeight: '600' },
-    demoLink: { alignItems: 'center', paddingVertical: 6 },
-    demoLinkTexto: { color: c.textMuted, fontSize: 11 },
-    inputRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingTop: 12, paddingHorizontal: 16, borderTopWidth: 1, borderColor: c.border },
-    adjuntarButton: { width: 40, height: 40, borderRadius: 20, backgroundColor: c.card, borderWidth: 1, borderColor: c.border, alignItems: 'center', justifyContent: 'center' },
-    input: { flex: 1, backgroundColor: c.inputBg, borderWidth: 1, borderColor: c.border, borderRadius: 20, paddingHorizontal: 16, paddingVertical: 10, color: c.text, fontSize: 13 },
-    sendButton: { width: 40, height: 40, borderRadius: 20, backgroundColor: c.primary, alignItems: 'center', justifyContent: 'center' },
+    ubicacionTitulo: { ...tipo.cuerpoFuerte },
+    ubicacionAccion: { ...tipo.dato, textDecorationLine: 'underline' },
+    intro: { alignItems: 'center', paddingHorizontal: espacio.m },
+    introIcono: { width: 52, height: 52, borderRadius: 26, backgroundColor: c.primary, alignItems: 'center', justifyContent: 'center', marginBottom: espacio.m },
+    introTitulo: { color: c.text, ...tipo.titulo },
+    introTexto: { color: c.textMuted, ...tipo.cuerpo, lineHeight: 19, marginTop: espacio.xs, textAlign: 'center' },
+    sugerencias: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: espacio.s, marginTop: espacio.xl },
+    sugerencia: { backgroundColor: c.chip, borderRadius: radio.control, paddingHorizontal: espacio.l, minHeight: 44, justifyContent: 'center' },
+    sugerenciaTexto: { color: c.accent, ...tipo.cuerpoFuerte },
+    demoLink: { alignItems: 'center', justifyContent: 'center', minHeight: 44 },
+    demoLinkTexto: { color: c.textMuted, ...tipo.etiqueta },
+    inputRow: { flexDirection: 'row', alignItems: 'center', gap: espacio.s, paddingTop: espacio.m, paddingHorizontal: espacio.l, borderTopWidth: 1, borderColor: c.border },
+    adjuntarButton: { width: 44, height: 44, borderRadius: 22, backgroundColor: c.card, borderWidth: 1, borderColor: c.border, alignItems: 'center', justifyContent: 'center' },
+    input: { flex: 1, minHeight: 44, backgroundColor: c.inputBg, borderWidth: 1, borderColor: c.border, borderRadius: 22, paddingHorizontal: espacio.l, paddingVertical: espacio.s, color: c.text, fontSize: 14, fontWeight: '400' },
+    sendButton: { width: 44, height: 44, borderRadius: 22, backgroundColor: c.primary, alignItems: 'center', justifyContent: 'center' },
     bloqueadoBox: {
-      flexDirection: 'row', alignItems: 'center', gap: 10, flexWrap: 'wrap',
-      paddingTop: 12, paddingHorizontal: 16, borderTopWidth: 1, borderColor: c.border, backgroundColor: c.card,
+      flexDirection: 'row', alignItems: 'center', gap: espacio.m, flexWrap: 'wrap',
+      paddingTop: espacio.m, paddingHorizontal: espacio.l, borderTopWidth: 1, borderColor: c.border, backgroundColor: c.card,
     },
-    bloqueadoTexto: { flex: 1, color: c.textMuted, fontSize: 12, lineHeight: 17 },
-    desbloquearBtn: { borderWidth: 1, borderColor: c.accent, borderRadius: 14, paddingHorizontal: 12, paddingVertical: 7 },
-    desbloquearTexto: { color: c.accent, fontSize: 12, fontWeight: '700' },
+    bloqueadoTexto: { flex: 1, color: c.textMuted, ...tipo.dato, lineHeight: 17 },
+    desbloquearBtn: { minHeight: 44, paddingHorizontal: espacio.l },
   });

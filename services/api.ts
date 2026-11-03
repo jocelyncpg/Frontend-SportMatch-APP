@@ -4,6 +4,8 @@ type RequestOptions = {
   method?: 'GET' | 'POST' | 'PUT' | 'DELETE';
   body?: unknown;
   token?: string | null;
+  /** Si el servidor no responde en este tiempo (ms), se corta con un error claro. */
+  timeoutMs?: number;
 };
 
 /** Error del backend con su código HTTP y el `detail` original, para decidir qué hacer. */
@@ -43,7 +45,10 @@ function leerDetail(data: any): string {
 }
 
 export async function apiRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
-  const { method = 'GET', body, token } = options;
+  const { method = 'GET', body, token, timeoutMs } = options;
+
+  const control = timeoutMs ? new AbortController() : null;
+  const temporizador = control ? setTimeout(() => control.abort(), timeoutMs) : null;
 
   let res: Response;
   try {
@@ -54,6 +59,7 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
       },
       body: body ? JSON.stringify(body) : undefined,
+      signal: control?.signal,
     });
   } catch {
     throw new ApiError(
@@ -61,6 +67,8 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
       0,
       '',
     );
+  } finally {
+    if (temporizador) clearTimeout(temporizador);
   }
 
   if (!res.ok) {

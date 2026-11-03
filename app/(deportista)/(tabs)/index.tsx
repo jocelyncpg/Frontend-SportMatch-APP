@@ -2,18 +2,16 @@ import { Ionicons } from '@expo/vector-icons';
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useMemo, useState } from 'react';
 import {
-  Image,
   ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import AthleteCard from '../../../components/AthleteCard';
-import BrandLogo from '../../../components/BrandLogo';
 import TrainingRow from '../../../components/TrainingRow';
+import { AvatarMini, EncabezadoMarca } from '../../../components/ui';
 import {
   FILTROS_ACTIVIDADES_VACIOS,
   filtrarActividades,
@@ -23,7 +21,10 @@ import {
 import { Usuario, getSession } from '../../../services/auth';
 import { cargarSugerencias, sugerencias, useMatches } from '../../../services/matchStore';
 import { useNotificaciones } from '../../../services/notificaciones';
-import { Colors, useAppTheme } from '../../../theme/ThemeContext';
+import { Colors, espacio, radio, tipo, useAppTheme } from '../../../theme/ThemeContext';
+
+// Texto sobre fondos de color fuerte.
+const SOBRE_COLOR = '#FFFFFF';
 
 // Cuántas actividades se ven en Inicio antes de tocar "Ver más".
 const ACTIVIDADES_VISIBLES = 4;
@@ -31,7 +32,6 @@ const ACTIVIDADES_VISIBLES = 4;
 export default function HomeScreen() {
   const { colors } = useAppTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
-  const insets = useSafeAreaInsets();
 
   const estado = useMatches();
   const { noLeidas } = useNotificaciones();
@@ -57,48 +57,35 @@ export default function HomeScreen() {
     : '..';
 
   return (
-    <ScrollView
-      style={styles.container}
-      contentContainerStyle={[styles.content, { paddingTop: insets.top + 12 }]}
-    >
+    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       {/* Encabezado */}
-      <View style={styles.header}>
-        <BrandLogo width={200} />
+      <EncabezadoMarca
+        margenHorizontal={0}
+        derecha={
+          <>
+            {/* Campanita: abre la bandeja y muestra cuántos avisos faltan por leer */}
+            <TouchableOpacity
+              onPress={() => router.push('/(deportista)/notificaciones')}
+              style={styles.bell}
+              accessibilityRole="button"
+              accessibilityLabel={noLeidas > 0 ? `Notificaciones, ${noLeidas} sin leer` : 'Notificaciones'}
+            >
+              <Ionicons name="notifications-outline" size={20} color={colors.text} />
+              {noLeidas > 0 ? (
+                <View style={styles.bellBadge}>
+                  <Text style={styles.bellBadgeText}>{noLeidas > 9 ? '9+' : noLeidas}</Text>
+                </View>
+              ) : null}
+            </TouchableOpacity>
 
-        <View style={styles.headerAcciones}>
-          {/* Campanita: abre la bandeja y muestra cuántos avisos faltan por leer */}
-          <TouchableOpacity
-            onPress={() => router.push('/(deportista)/notificaciones')}
-            style={styles.bell}
-            accessibilityLabel="Notificaciones"
-          >
-            <Ionicons name="notifications-outline" size={17} color={colors.text} />
-            {noLeidas > 0 ? (
-              <View style={styles.bellBadge}>
-                <Text style={styles.bellBadgeText}>{noLeidas > 9 ? '9+' : noLeidas}</Text>
-              </View>
-            ) : null}
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            onPress={() =>
-              router.push('/(deportista)/(tabs)/profile')
-            }
-            style={styles.miniAvatar}
-          >
-            {usuario?.fotoPerfil ? (
-              <Image
-                source={{ uri: usuario.fotoPerfil }}
-                style={styles.miniAvatarImage}
-              />
-            ) : (
-              <Text style={styles.miniAvatarText}>
-                {iniciales}
-              </Text>
-            )}
-          </TouchableOpacity>
-        </View>
-      </View>
+            <AvatarMini
+              uri={usuario?.fotoPerfil}
+              iniciales={iniciales}
+              onPress={() => router.push('/(deportista)/(tabs)/profile')}
+            />
+          </>
+        }
+      />
 
       <Text style={styles.greeting}>
         ¡Hola, {usuario?.nombre ?? '...'}!
@@ -112,6 +99,8 @@ export default function HomeScreen() {
       <TouchableOpacity
         style={styles.searchBox}
         onPress={() => router.push('/(deportista)/buscar')}
+        accessibilityRole="button"
+        accessibilityLabel="Buscar deportistas"
         activeOpacity={0.7}
       >
         <Ionicons
@@ -135,6 +124,7 @@ export default function HomeScreen() {
       <TouchableOpacity
         style={styles.clubBanner}
         onPress={() => router.push('/(deportista)/convocatorias')}
+        accessibilityRole="button"
       >
         <Ionicons name="megaphone-outline" size={18} color={colors.accent} />
         <Text style={styles.clubBannerText}>Explorar convocatorias abiertas</Text>
@@ -147,7 +137,11 @@ export default function HomeScreen() {
           Deportistas recomendados
         </Text>
 
-        <TouchableOpacity onPress={() => router.push('/(deportista)/(tabs)/discover')}>
+        <TouchableOpacity
+          onPress={() => router.push('/(deportista)/(tabs)/discover')}
+          accessibilityRole="button"
+          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+        >
           <Text style={styles.sectionLink}>
             Ver todos
           </Text>
@@ -195,7 +189,7 @@ export default function HomeScreen() {
       )}
 
       {/* Sección: Entrenamientos cerca de ti (todas las actividades abiertas, aquí mismo) */}
-      <View style={[styles.sectionRow, { marginTop: 24 }]}>
+      <View style={[styles.sectionRow, { marginTop: espacio.xxl }]}>
         <Text style={styles.sectionTitle}>
           Entrenamientos cerca de ti
         </Text>
@@ -211,6 +205,7 @@ export default function HomeScreen() {
         <TouchableOpacity
           style={styles.accionSecundaria}
           onPress={() => router.push({ pathname: '/(deportista)/activities', params: { tab: 'mias' } })}
+          accessibilityRole="button"
           accessibilityLabel="Mis actividades"
         >
           <Ionicons name="calendar-outline" size={15} color={colors.accent} />
@@ -220,9 +215,10 @@ export default function HomeScreen() {
         <TouchableOpacity
           style={styles.accionPrimaria}
           onPress={() => router.push('/(deportista)/activity/nueva')}
+          accessibilityRole="button"
           accessibilityLabel="Crear actividad"
         >
-          <Ionicons name="add" size={16} color="#fff" />
+          <Ionicons name="add" size={16} color={SOBRE_COLOR} />
           <Text style={styles.accionPrimariaTexto}>Crear actividad</Text>
         </TouchableOpacity>
       </View>
@@ -273,28 +269,14 @@ const makeStyles = (c: Colors) =>
     },
 
     content: {
-      paddingHorizontal: 20,
-      paddingBottom: 30,
-    },
-
-    header: {
-      width: '100%',
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      marginBottom: 20,
-    },
-
-    headerAcciones: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 10,
+      paddingHorizontal: espacio.xl,
+      paddingBottom: espacio.xxl + espacio.s,
     },
 
     bell: {
-      width: 34,
-      height: 34,
-      borderRadius: 17,
+      width: 44,
+      height: 44,
+      borderRadius: 22,
       backgroundColor: c.card,
       borderWidth: 1,
       borderColor: c.border,
@@ -304,95 +286,70 @@ const makeStyles = (c: Colors) =>
 
     bellBadge: {
       position: 'absolute',
-      top: -4,
-      right: -4,
-      minWidth: 16,
-      height: 16,
-      borderRadius: 8,
-      paddingHorizontal: 4,
-      backgroundColor: '#DB2777',
+      top: -2,
+      right: -2,
+      minWidth: 18,
+      height: 18,
+      borderRadius: 9,
+      paddingHorizontal: espacio.xs,
+      backgroundColor: c.danger,
       alignItems: 'center',
       justifyContent: 'center',
     },
 
     bellBadgeText: {
-      color: '#fff',
-      fontSize: 9,
+      color: SOBRE_COLOR,
+      ...tipo.etiqueta,
       fontWeight: '800',
-    },
-
-    miniAvatar: {
-      width: 34,
-      height: 34,
-      borderRadius: 17,
-      backgroundColor: c.card,
-      borderWidth: 1,
-      borderColor: c.border,
-      alignItems: 'center',
-      justifyContent: 'center',
-      overflow: 'hidden',
-    },
-
-    miniAvatarImage: {
-      width: '100%',
-      height: '100%',
-    },
-
-    miniAvatarText: {
-      color: c.text,
-      fontSize: 12,
-      fontWeight: '700',
     },
 
     greeting: {
       color: c.text,
-      fontSize: 22,
-      fontWeight: '700',
-      marginBottom: 4,
+      ...tipo.titulo,
+      marginBottom: espacio.xs,
     },
 
     subtitle: {
       color: c.textMuted,
-      fontSize: 13,
-      marginBottom: 16,
+      ...tipo.cuerpo,
+      marginBottom: espacio.l,
     },
 
     searchBox: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 8,
+      gap: espacio.s,
+      minHeight: 48,
       backgroundColor: c.inputBg,
       borderWidth: 1,
       borderColor: c.border,
-      borderRadius: 13,
-      paddingHorizontal: 14,
-      paddingVertical: 12,
-      marginBottom: 14,
+      borderRadius: radio.control,
+      paddingHorizontal: espacio.l,
+      marginBottom: espacio.m,
     },
 
     searchPlaceholder: {
       color: c.textMuted,
-      fontSize: 13,
+      ...tipo.cuerpo,
       flex: 1,
     },
 
     clubBanner: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 10,
+      gap: espacio.m,
+      minHeight: 48,
       backgroundColor: c.card,
       borderWidth: 1,
       borderColor: c.border,
-      borderRadius: 13,
-      paddingHorizontal: 14,
-      paddingVertical: 12,
-      marginBottom: 22,
+      borderRadius: radio.control,
+      paddingHorizontal: espacio.l,
+      marginBottom: espacio.xl + 2,
     },
 
     clubBannerText: {
       color: c.text,
-      fontSize: 12.5,
-      fontWeight: '600',
+      ...tipo.cuerpoFuerte,
       flex: 1,
     },
 
@@ -400,89 +357,83 @@ const makeStyles = (c: Colors) =>
       flexDirection: 'row',
       justifyContent: 'space-between',
       alignItems: 'baseline',
-      marginBottom: 12,
+      marginBottom: espacio.m,
     },
 
     sectionTitle: {
       color: c.text,
-      fontSize: 14,
-      fontWeight: '700',
+      ...tipo.seccion,
     },
 
     sectionLink: {
       color: c.accent,
-      fontSize: 11,
-      fontWeight: '600',
+      ...tipo.cuerpoFuerte,
     },
 
     sectionCount: {
       color: c.textMuted,
-      fontSize: 11,
-      fontWeight: '600',
+      ...tipo.etiqueta,
     },
 
     actividadesAcciones: {
       flexDirection: 'row',
-      gap: 10,
-      marginBottom: 14,
+      gap: espacio.m,
+      marginBottom: espacio.l,
     },
 
     accionSecundaria: {
       flex: 1,
+      minHeight: 44,
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'center',
-      gap: 6,
+      gap: espacio.s - 2,
       backgroundColor: c.card,
       borderWidth: 1,
       borderColor: c.border,
-      borderRadius: 12,
-      paddingVertical: 10,
+      borderRadius: radio.control,
     },
 
     accionSecundariaTexto: {
       color: c.accent,
-      fontSize: 12,
-      fontWeight: '700',
+      ...tipo.cuerpoFuerte,
     },
 
     accionPrimaria: {
       flex: 1,
+      minHeight: 44,
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'center',
-      gap: 4,
+      gap: espacio.xs,
       backgroundColor: c.primary,
-      borderRadius: 12,
-      paddingVertical: 10,
+      borderRadius: radio.control,
     },
 
     accionPrimariaTexto: {
-      color: '#fff',
-      fontSize: 12,
-      fontWeight: '700',
+      color: SOBRE_COLOR,
+      ...tipo.cuerpoFuerte,
     },
 
     verMasBtn: {
+      minHeight: 44,
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'center',
-      gap: 6,
+      gap: espacio.s - 2,
       borderWidth: 1,
       borderColor: c.border,
-      borderRadius: 12,
-      paddingVertical: 10,
+      borderRadius: radio.control,
       marginTop: 2,
     },
 
     verMasTexto: {
       color: c.accent,
-      fontSize: 12,
-      fontWeight: '700',
+      ...tipo.cuerpoFuerte,
     },
 
     emptyText: {
       color: c.textMuted,
-      fontSize: 12,
+      ...tipo.cuerpo,
     },
   });

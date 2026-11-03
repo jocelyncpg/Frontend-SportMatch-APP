@@ -7,6 +7,7 @@ import Avatar from '../../../components/Avatar';
 import MatchModal from '../../../components/MatchModal';
 import RatingModal from '../../../components/RatingModal';
 import ReportarModal from '../../../components/ReportarModal';
+import { Boton } from '../../../components/ui';
 import { Usuario, getSession } from '../../../services/auth';
 import {
   Persona,
@@ -19,7 +20,20 @@ import {
   rechazarSolicitud,
   useMatches,
 } from '../../../services/matchStore';
-import { Colors, useAppTheme } from '../../../theme/ThemeContext';
+import { Colors, espacio, radio, tipo, useAppTheme } from '../../../theme/ThemeContext';
+
+// Colores que se usan sobre la foto o sobre un botón de color fuerte: no cambian con el tema.
+const SOBRE_COLOR = '#FFFFFF';
+const FONDO_SOBRE_FOTO = 'rgba(11,15,25,0.6)';
+const VERDE_SOBRE_FOTO = '#4ADE80';
+const VERDE_ACEPTAR = '#16A34A';
+
+/** La distancia siempre con su unidad: "3.4" → "3.4 km"; "800 m" y "1.8 km" quedan como están. */
+function textoDistancia(d?: string): string | null {
+  const t = d?.trim();
+  if (!t) return null;
+  return /\b(km|m)\b/i.test(t) ? t : `${t} km`;
+}
 
 export default function PerfilDeportistaScreen() {
   const { colors } = useAppTheme();
@@ -119,18 +133,41 @@ export default function PerfilDeportistaScreen() {
 
   const miNombre = usuario ? `${usuario.nombre} ${usuario.apellidoPaterno}` : 'Yo';
   const tieneFoto = !!persona.fotoUri;
+  const distancia = textoDistancia(persona.distance);
+
+  // La foto se muestra con su proporción real (sin recortarla), dentro de un rango razonable.
+  const [proporcion, setProporcion] = useState<number | null>(null);
+  useEffect(() => {
+    setProporcion(null);
+    const uri = persona.fotoUri;
+    if (!uri) return;
+    let activo = true;
+    Image.getSize(
+      uri,
+      (w, hh) => { if (activo && w > 0 && hh > 0) setProporcion(w / hh); },
+      () => undefined,
+    );
+    return () => { activo = false; };
+  }, [persona.fotoUri]);
+  const proporcionFoto = tieneFoto ? Math.min(1.3, Math.max(0.7, proporcion ?? 0.8)) : 1;
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top + 12 }]}>
-      <TouchableOpacity onPress={() => router.back()} style={[styles.backButton, { top: insets.top + 12 }]}>
-        <Ionicons name="arrow-back" size={18} color={colors.text} />
+    <View style={styles.container}>
+      <TouchableOpacity
+        onPress={() => router.back()}
+        style={[styles.backButton, { top: insets.top + espacio.s }]}
+        accessibilityRole="button"
+        accessibilityLabel="Volver"
+      >
+        <Ionicons name="arrow-back" size={20} color={SOBRE_COLOR} />
       </TouchableOpacity>
       <TouchableOpacity
         onPress={() => setReportando(true)}
-        style={[styles.reportButton, { top: insets.top + 12 }]}
+        style={[styles.reportButton, { top: insets.top + espacio.s }]}
+        accessibilityRole="button"
         accessibilityLabel={`Reportar a ${persona.name}`}
       >
-        <Ionicons name="flag-outline" size={17} color={colors.text} />
+        <Ionicons name="flag-outline" size={19} color={SOBRE_COLOR} />
       </TouchableOpacity>
 
       <ScrollView contentContainerStyle={styles.content}>
@@ -138,18 +175,19 @@ export default function PerfilDeportistaScreen() {
         <TouchableOpacity
           activeOpacity={tieneFoto ? 0.9 : 1}
           onPress={() => tieneFoto && setFotoAmpliada(true)}
+          accessibilityRole={tieneFoto ? 'button' : undefined}
           accessibilityLabel={tieneFoto ? `Ampliar foto de ${persona.name}` : undefined}
         >
           <Avatar
             name={persona.name}
             colorFrom={persona.colorFrom}
             uri={persona.fotoUri}
-            style={styles.foto}
+            style={[styles.foto, { aspectRatio: proporcionFoto }]}
             fontSize={56}
           >
             {tieneFoto ? (
               <View style={styles.ampliarBadge} pointerEvents="none">
-                <Ionicons name="expand-outline" size={16} color="#fff" />
+                <Ionicons name="expand-outline" size={16} color={SOBRE_COLOR} />
               </View>
             ) : null}
             <View style={styles.compatBadge}>
@@ -159,12 +197,16 @@ export default function PerfilDeportistaScreen() {
         </TouchableOpacity>
 
         <View style={styles.info}>
-          <View style={styles.nameRow}>
-            <Text style={styles.name}>
-              {persona.name}{persona.age ? `, ${persona.age}` : ''}
-            </Text>
-            {persona.distance ? <Text style={styles.distance}>{persona.distance}</Text> : null}
-          </View>
+          <Text style={styles.name}>
+            {persona.name}{persona.age ? `, ${persona.age}` : ''}
+          </Text>
+
+          {distancia ? (
+            <View style={styles.distanciaFila}>
+              <Ionicons name="location-outline" size={16} color={colors.textMuted} />
+              <Text style={styles.distance}>A {distancia} de ti</Text>
+            </View>
+          ) : null}
 
           <View style={styles.tagsRow}>
             <View style={styles.tag}>
@@ -183,51 +225,47 @@ export default function PerfilDeportistaScreen() {
       </ScrollView>
 
       {/* ACCIONES según la relación con esta persona */}
-      <View style={[styles.actions, { paddingBottom: insets.bottom + 16 }]}>
+      <View style={[styles.actions, { paddingBottom: insets.bottom + espacio.l }]}>
         {esMatch ? (
           <>
-            <TouchableOpacity style={styles.pillSecundario} onPress={() => setCalificando(true)}>
-              <Ionicons
-                name={miCalificacion ? 'star' : 'star-outline'}
-                size={16}
-                color={miCalificacion ? '#FACC15' : colors.accent}
-              />
-              <Text style={styles.pillSecundarioTexto}>
-                {miCalificacion ? `Tu calificación: ${miCalificacion.estrellas}★` : 'Calificar'}
-              </Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity style={styles.pillPrimario} onPress={() => irAlChat(false)}>
-              <Ionicons name="chatbubble-ellipses" size={16} color="#fff" />
-              <Text style={styles.pillPrimarioTexto}>Enviar mensaje</Text>
-            </TouchableOpacity>
+            <Boton
+              variante="secundario"
+              icono={miCalificacion ? 'star' : 'star-outline'}
+              texto={miCalificacion ? `Tu calificación: ${miCalificacion.estrellas}★` : 'Calificar'}
+              onPress={() => setCalificando(true)}
+              style={styles.accionFlex}
+            />
+            <Boton
+              icono="chatbubble-ellipses"
+              texto="Enviar mensaje"
+              onPress={() => irAlChat(false)}
+              style={styles.accionFlex}
+            />
           </>
         ) : esSolicitud ? (
           <>
-            <TouchableOpacity style={styles.rejectButton} onPress={handleRechazar}>
+            <TouchableOpacity style={styles.rejectButton} onPress={handleRechazar} accessibilityRole="button" accessibilityLabel="Rechazar solicitud">
               <Ionicons name="close" size={26} color={colors.textMuted} />
             </TouchableOpacity>
-            <TouchableOpacity style={styles.aceptarButton} onPress={handleAceptar}>
-              <Ionicons name="checkmark" size={26} color="#fff" />
+            <TouchableOpacity style={styles.aceptarButton} onPress={handleAceptar} accessibilityRole="button" accessibilityLabel="Aceptar solicitud">
+              <Ionicons name="checkmark" size={26} color={SOBRE_COLOR} />
             </TouchableOpacity>
           </>
         ) : esEnviada ? (
           <>
-            <View style={styles.pillSecundario}>
+            <View style={styles.enviada}>
               <Ionicons name="paper-plane-outline" size={16} color={colors.accent} />
-              <Text style={styles.pillSecundarioTexto}>Solicitud enviada</Text>
+              <Text style={styles.enviadaTexto}>Solicitud enviada</Text>
             </View>
-            <TouchableOpacity style={styles.pillCancelar} onPress={handleCancelarSolicitud}>
-              <Text style={styles.pillCancelarTexto}>Cancelar solicitud</Text>
-            </TouchableOpacity>
+            <Boton variante="peligro" texto="Cancelar solicitud" onPress={handleCancelarSolicitud} style={styles.accionFlex} />
           </>
         ) : (
           <>
-            <TouchableOpacity style={styles.rejectButton} onPress={handlePasar}>
+            <TouchableOpacity style={styles.rejectButton} onPress={handlePasar} accessibilityRole="button" accessibilityLabel="Pasar">
               <Ionicons name="close" size={26} color={colors.textMuted} />
             </TouchableOpacity>
-            <TouchableOpacity style={styles.acceptButton} onPress={handleMeGusta}>
-              <Ionicons name="heart" size={24} color="#fff" />
+            <TouchableOpacity style={styles.acceptButton} onPress={handleMeGusta} accessibilityRole="button" accessibilityLabel="Me gusta">
+              <Ionicons name="heart" size={24} color={SOBRE_COLOR} />
             </TouchableOpacity>
           </>
         )}
@@ -248,10 +286,11 @@ export default function PerfilDeportistaScreen() {
 
           <TouchableOpacity
             onPress={() => setFotoAmpliada(false)}
-            style={[styles.visorCerrar, { top: insets.top + 12 }]}
+            style={[styles.visorCerrar, { top: insets.top + espacio.m }]}
+            accessibilityRole="button"
             accessibilityLabel="Cerrar foto"
           >
-            <Ionicons name="close" size={22} color="#fff" />
+            <Ionicons name="close" size={22} color={SOBRE_COLOR} />
           </TouchableOpacity>
 
           <View style={[styles.visorPie, { paddingBottom: insets.bottom + 20 }]} pointerEvents="none">
@@ -303,78 +342,70 @@ const makeStyles = (c: Colors) =>
   StyleSheet.create({
     container: { flex: 1, backgroundColor: c.bg },
     backButton: {
-      position: 'absolute', left: 20, zIndex: 2,
-      width: 36, height: 36, borderRadius: 18,
-      backgroundColor: c.card, borderWidth: 1, borderColor: c.border,
+      position: 'absolute', left: espacio.l, zIndex: 2,
+      width: 44, height: 44, borderRadius: 22,
+      backgroundColor: FONDO_SOBRE_FOTO,
       alignItems: 'center', justifyContent: 'center',
     },
     reportButton: {
-      position: 'absolute', right: 20, zIndex: 2,
-      width: 36, height: 36, borderRadius: 18,
-      backgroundColor: c.card, borderWidth: 1, borderColor: c.border,
+      position: 'absolute', right: espacio.l, zIndex: 2,
+      width: 44, height: 44, borderRadius: 22,
+      backgroundColor: FONDO_SOBRE_FOTO,
       alignItems: 'center', justifyContent: 'center',
     },
-    content: { paddingBottom: 30 },
-    foto: { width: '100%', height: 320 },
+    content: { paddingBottom: espacio.xxl + espacio.s },
+    foto: { width: '100%' },
     compatBadge: {
-      position: 'absolute', bottom: 16, right: 16,
-      backgroundColor: 'rgba(11,15,25,0.75)', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20,
+      position: 'absolute', bottom: espacio.l, right: espacio.l,
+      backgroundColor: FONDO_SOBRE_FOTO, paddingHorizontal: espacio.m, paddingVertical: espacio.s - 2, borderRadius: radio.tarjeta + 4,
     },
-    compatText: { color: '#4ADE80', fontSize: 12, fontWeight: '800' },
+    compatText: { color: VERDE_SOBRE_FOTO, ...tipo.cuerpoFuerte, fontWeight: '800' },
     ampliarBadge: {
-      position: 'absolute', bottom: 16, left: 16,
+      position: 'absolute', bottom: espacio.l, left: espacio.l,
       width: 32, height: 32, borderRadius: 16,
-      backgroundColor: 'rgba(11,15,25,0.75)', alignItems: 'center', justifyContent: 'center',
+      backgroundColor: FONDO_SOBRE_FOTO, alignItems: 'center', justifyContent: 'center',
     },
-    info: { padding: 20 },
-    nameRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 10 },
-    name: { color: c.text, fontSize: 22, fontWeight: '700' },
-    distance: { color: c.textMuted, fontSize: 12 },
-    tagsRow: { flexDirection: 'row', gap: 8, marginBottom: 20 },
-    tag: { backgroundColor: c.chip, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 6 },
-    tagText: { color: c.accent, fontSize: 12, fontWeight: '700' },
-    sectionTitle: { color: c.text, fontSize: 14, fontWeight: '700', marginBottom: 8 },
-    bio: { color: c.textMuted, fontSize: 13.5, lineHeight: 20 },
+    info: { padding: espacio.xl },
+    // Nombre del perfil: es el dato principal, por eso queda fuera de la escala de texto.
+    name: { color: c.text, fontSize: 24, fontWeight: '800', lineHeight: 30 },
+    distanciaFila: { flexDirection: 'row', alignItems: 'center', gap: espacio.xs + 2, marginTop: espacio.xs + 2 },
+    distance: { color: c.textMuted, ...tipo.cuerpo, flexShrink: 1 },
+    tagsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: espacio.s, marginTop: espacio.l, marginBottom: espacio.xl },
+    tag: { backgroundColor: c.chip, borderRadius: radio.control, paddingHorizontal: espacio.m, paddingVertical: espacio.s - 1 },
+    tagText: { color: c.accent, ...tipo.cuerpoFuerte },
+    sectionTitle: { color: c.text, ...tipo.seccion, marginBottom: espacio.s },
+    bio: { color: c.textMuted, ...tipo.cuerpo, fontSize: 14, lineHeight: 21 },
     actions: {
-      flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 14,
-      paddingTop: 16, paddingHorizontal: 20, borderTopWidth: 1, borderColor: c.border,
+      flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: espacio.l,
+      paddingTop: espacio.l, paddingHorizontal: espacio.xl, borderTopWidth: 1, borderColor: c.border, backgroundColor: c.bg,
     },
+    accionFlex: { flex: 1 },
     rejectButton: {
       width: 56, height: 56, borderRadius: 28, backgroundColor: c.card,
       borderWidth: 1, borderColor: c.border, alignItems: 'center', justifyContent: 'center',
     },
     acceptButton: {
-      width: 56, height: 56, borderRadius: 28, backgroundColor: '#DB2777',
+      width: 56, height: 56, borderRadius: 28, backgroundColor: c.primary,
       alignItems: 'center', justifyContent: 'center',
     },
     aceptarButton: {
-      width: 56, height: 56, borderRadius: 28, backgroundColor: '#16A34A',
+      width: 56, height: 56, borderRadius: 28, backgroundColor: VERDE_ACEPTAR,
       alignItems: 'center', justifyContent: 'center',
     },
-    pillPrimario: {
-      flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
-      backgroundColor: c.primary, borderRadius: 14, paddingVertical: 14,
+    enviada: {
+      flex: 1, minHeight: 48, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: espacio.s,
+      backgroundColor: c.card, borderWidth: 1, borderColor: c.border, borderRadius: radio.control,
     },
-    pillPrimarioTexto: { color: '#fff', fontSize: 13, fontWeight: '700' },
-    pillSecundario: {
-      flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
-      backgroundColor: c.card, borderWidth: 1, borderColor: c.border, borderRadius: 14, paddingVertical: 14,
-    },
-    pillSecundarioTexto: { color: c.text, fontSize: 13, fontWeight: '700' },
-    pillCancelar: {
-      flex: 1, alignItems: 'center', justifyContent: 'center',
-      borderWidth: 1, borderColor: c.danger, borderRadius: 14, paddingVertical: 14,
-    },
-    pillCancelarTexto: { color: c.danger, fontSize: 13, fontWeight: '700' },
+    enviadaTexto: { color: c.text, ...tipo.cuerpoFuerte },
 
     // Visor de foto (siempre oscuro, como un visor de imágenes)
     visorFondo: { flex: 1, backgroundColor: 'rgba(0,0,0,0.95)', alignItems: 'center', justifyContent: 'center' },
     visorImagen: { width: '100%', height: '100%' },
     visorCerrar: {
-      position: 'absolute', right: 20,
-      width: 38, height: 38, borderRadius: 19,
+      position: 'absolute', right: espacio.xl,
+      width: 44, height: 44, borderRadius: 22,
       backgroundColor: 'rgba(255,255,255,0.16)', alignItems: 'center', justifyContent: 'center',
     },
-    visorPie: { position: 'absolute', bottom: 0, left: 0, right: 0, alignItems: 'center', paddingTop: 12 },
-    visorNombre: { color: '#fff', fontSize: 15, fontWeight: '700' },
+    visorPie: { position: 'absolute', bottom: 0, left: 0, right: 0, alignItems: 'center', paddingTop: espacio.m },
+    visorNombre: { color: SOBRE_COLOR, ...tipo.seccion },
   });

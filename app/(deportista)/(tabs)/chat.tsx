@@ -1,16 +1,23 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Avatar from '../../../components/Avatar';
 import InsigniaDeporte from '../../../components/InsigniaDeporte';
+import { AvatarMini, EncabezadoMarca, EncabezadoPantalla } from '../../../components/ui';
 import { YO } from '../../../services/actividades';
+import { Usuario, getSession } from '../../../services/auth';
 import { getConversacion, horaCorta, ultimoMensaje, useConversaciones } from '../../../services/chat';
 import { ChatGrupal, ultimoMensajeGrupal, useChatsGrupales } from '../../../services/chatGrupal';
 import { Hilo, useHilosDePostulante } from '../../../services/consultas';
 import { Persona, useMatches } from '../../../services/matchStore';
-import { Colors, useAppTheme } from '../../../theme/ThemeContext';
+import { Colors, espacio, radio, tipo, useAppTheme } from '../../../theme/ThemeContext';
+
+// Texto sobre fondos de color fuerte (contador, etiqueta "Nuevo").
+const SOBRE_COLOR = '#FFFFFF';
+
+// Cuántas conversaciones se ven antes de tocar "Ver más".
+const VISIBLES = 5;
 
 type Item =
   | { tipo: 'persona'; persona: Persona; orden: number; nuevo: boolean }
@@ -20,7 +27,12 @@ type Item =
 export default function ChatListScreen() {
   const { colors } = useAppTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
-  const insets = useSafeAreaInsets();
+  const [usuario, setUsuario] = useState<Usuario | null>(null);
+  useEffect(() => {
+    getSession().then(setUsuario);
+  }, []);
+  const iniciales = usuario ? `${usuario.nombre[0]}${usuario.apellidoPaterno[0]}` : '..';
+  const [verTodas, setVerTodas] = useState(false);
 
   const { confirmados } = useMatches();
   const conversaciones = useConversaciones();
@@ -74,7 +86,13 @@ export default function ChatListScreen() {
     const noLeidos = conv.noLeidos;
     const { silenciado, bloqueado } = conv;
     return (
-      <TouchableOpacity key={`p-${persona.id}`} style={styles.card} onPress={() => abrirChat(persona)}>
+      <TouchableOpacity
+        key={`p-${persona.id}`}
+        style={styles.card}
+        onPress={() => abrirChat(persona)}
+        accessibilityRole="button"
+        accessibilityLabel={`Chat con ${persona.name}${noLeidos > 0 ? `, ${noLeidos} sin leer` : ''}`}
+      >
         <Avatar
           name={persona.name}
           colorFrom={persona.colorFrom}
@@ -101,10 +119,10 @@ export default function ChatListScreen() {
           <View style={styles.cardDerecha}>
             <View style={styles.horaFila}>
               {silenciado && !bloqueado ? (
-                <Ionicons name="notifications-off-outline" size={12} color={colors.textMuted} accessibilityLabel="Silenciado" />
+                <Ionicons name="notifications-off-outline" size={14} color={colors.textMuted} accessibilityLabel="Silenciado" />
               ) : null}
               {bloqueado ? (
-                <Ionicons name="ban-outline" size={12} color={colors.danger} accessibilityLabel="Bloqueado" />
+                <Ionicons name="ban-outline" size={14} color={colors.danger} accessibilityLabel="Bloqueado" />
               ) : null}
               <Text style={[styles.cardHora, noLeidos > 0 && !silenciado && styles.cardHoraSinLeer]}>{horaCorta(ultimo.enviadoEn)}</Text>
             </View>
@@ -132,13 +150,19 @@ export default function ChatListScreen() {
       ? `${ultimo.propio ? 'Tú' : ultimo.autorNombre.split(' ')[0]}: ${ultimo.texto}`
       : 'Aún no hay mensajes. ¡Saluda al grupo!';
     return (
-      <TouchableOpacity key={`g-${actividad.id}`} style={styles.card} onPress={() => abrirGrupo(g)}>
+      <TouchableOpacity
+        key={`g-${actividad.id}`}
+        style={styles.card}
+        onPress={() => abrirGrupo(g)}
+        accessibilityRole="button"
+        accessibilityLabel={`Grupo ${actividad.titulo}${noLeidos > 0 ? `, ${noLeidos} sin leer` : ''}`}
+      >
         <InsigniaDeporte deporte={actividad.deporte} tamano={46} />
         <View style={styles.cardInfo}>
           <View style={styles.nombreFila}>
             <Text style={[styles.cardName, styles.cardNameGrupo]} numberOfLines={1}>{actividad.titulo}</Text>
             <View style={styles.grupoTag}>
-              <Ionicons name="people" size={10} color={colors.accent} />
+              <Ionicons name="people" size={12} color={colors.accent} />
               <Text style={styles.grupoTagTexto}>{participantes}</Text>
             </View>
           </View>
@@ -149,7 +173,7 @@ export default function ChatListScreen() {
         <View style={styles.cardDerecha}>
           <View style={styles.horaFila}>
             {silenciado ? (
-              <Ionicons name="notifications-off-outline" size={12} color={colors.textMuted} accessibilityLabel="Silenciado" />
+              <Ionicons name="notifications-off-outline" size={14} color={colors.textMuted} accessibilityLabel="Silenciado" />
             ) : null}
             {ultimoCualquiera ? (
               <Text style={[styles.cardHora, noLeidos > 0 && !silenciado && styles.cardHoraSinLeer]}>{horaCorta(ultimoCualquiera.enviadoEn)}</Text>
@@ -170,7 +194,13 @@ export default function ChatListScreen() {
     const ultimo = h.mensajes[h.mensajes.length - 1];
     const noLeidos = h.noLeidosPostulante;
     return (
-      <TouchableOpacity key={`c-${h.id}`} style={styles.card} onPress={() => abrirClub(h)}>
+      <TouchableOpacity
+        key={`c-${h.id}`}
+        style={styles.card}
+        onPress={() => abrirClub(h)}
+        accessibilityRole="button"
+        accessibilityLabel={`Consulta con ${h.clubNombre}${noLeidos > 0 ? `, ${noLeidos} sin leer` : ''}`}
+      >
         <View style={styles.clubIcono}>
           <Ionicons name="shield-outline" size={22} color={colors.accent} />
         </View>
@@ -198,13 +228,37 @@ export default function ChatListScreen() {
   }
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top + 12 }]}>
+    <View style={styles.container}>
+      <EncabezadoMarca
+        derecha={
+          <AvatarMini
+            uri={usuario?.fotoPerfil}
+            iniciales={iniciales}
+            onPress={() => router.push('/(deportista)/(tabs)/profile')}
+          />
+        }
+      />
       <View style={styles.topbar}>
-        <Text style={styles.title}>Chats</Text>
+        <EncabezadoPantalla titulo="Chats" conVolver={false} />
       </View>
 
       <ScrollView contentContainerStyle={styles.list}>
-        {items.map((it) => (it.tipo === 'grupo' ? tarjetaGrupo(it.grupo) : it.tipo === 'club' ? tarjetaClub(it.hilo) : tarjetaPersona(it.persona)))}
+        {(verTodas ? items : items.slice(0, VISIBLES)).map((it) => (it.tipo === 'grupo' ? tarjetaGrupo(it.grupo) : it.tipo === 'club' ? tarjetaClub(it.hilo) : tarjetaPersona(it.persona)))}
+
+        {items.length > VISIBLES ? (
+          <TouchableOpacity
+            style={styles.verMasBtn}
+            onPress={() => setVerTodas((v) => !v)}
+            activeOpacity={0.7}
+            accessibilityRole="button"
+            accessibilityLabel={verTodas ? 'Ver menos conversaciones' : 'Ver más conversaciones'}
+          >
+            <Text style={styles.verMasTexto}>
+              {verTodas ? 'Ver menos' : `Ver más (${items.length - VISIBLES})`}
+            </Text>
+            <Ionicons name={verTodas ? 'chevron-up' : 'chevron-down'} size={14} color={colors.accent} />
+          </TouchableOpacity>
+        ) : null}
 
         {items.length === 0 && (
           <View style={styles.emptyState}>
@@ -223,39 +277,43 @@ export default function ChatListScreen() {
 const makeStyles = (c: Colors) =>
   StyleSheet.create({
     container: { flex: 1, backgroundColor: c.bg },
-    topbar: { paddingHorizontal: 20, marginBottom: 16 },
-    title: { color: c.text, fontSize: 20, fontWeight: '700' },
-    list: { paddingHorizontal: 20, paddingBottom: 30 },
+    topbar: { paddingHorizontal: espacio.xl },
+    list: { paddingHorizontal: espacio.xl, paddingBottom: espacio.xxl + espacio.s },
     card: {
-      flexDirection: 'row', alignItems: 'center', gap: 12,
+      flexDirection: 'row', alignItems: 'center', gap: espacio.m,
       backgroundColor: c.card, borderWidth: 1, borderColor: c.border,
-      borderRadius: 14, padding: 12, marginBottom: 10,
+      borderRadius: radio.tarjeta, padding: espacio.m + 2, marginBottom: espacio.m, minHeight: 72,
     },
-    avatar: { width: 46, height: 46, borderRadius: 23 },
-    clubIcono: { width: 46, height: 46, borderRadius: 13, backgroundColor: c.chip, alignItems: 'center', justifyContent: 'center' },
+    avatar: { width: 48, height: 48, borderRadius: 24 },
+    clubIcono: { width: 46, height: 46, borderRadius: radio.control, backgroundColor: c.chip, alignItems: 'center', justifyContent: 'center' },
     cardInfo: { flex: 1 },
-    nombreFila: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-    cardName: { color: c.text, fontSize: 13, fontWeight: '700' },
+    nombreFila: { flexDirection: 'row', alignItems: 'center', gap: espacio.s },
+    cardName: { color: c.text, ...tipo.seccion },
     cardNameGrupo: { flexShrink: 1 },
-    grupoTag: { flexDirection: 'row', alignItems: 'center', gap: 3, backgroundColor: c.chip, borderRadius: 9, paddingHorizontal: 6, paddingVertical: 2 },
-    grupoTagTexto: { color: c.accent, fontSize: 10, fontWeight: '700' },
-    cardMessage: { color: c.textMuted, fontSize: 11.5, fontWeight: '400', marginTop: 2 },
+    grupoTag: { flexDirection: 'row', alignItems: 'center', gap: espacio.xs, backgroundColor: c.chip, borderRadius: radio.control, paddingHorizontal: espacio.s, paddingVertical: 2 },
+    grupoTagTexto: { color: c.accent, ...tipo.etiqueta },
+    cardMessage: { color: c.textMuted, ...tipo.cuerpo, marginTop: 2 },
     cardMessageSinLeer: { color: c.text, fontWeight: '700' },
-    cardMessageNuevo: { color: c.accent, fontSize: 11.5, marginTop: 2, fontWeight: '600' },
-    cardBloqueado: { color: c.danger, fontSize: 11.5, marginTop: 2, fontWeight: '600' },
-    cardDerecha: { alignItems: 'flex-end', gap: 5 },
-    horaFila: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-    cardHora: { color: c.textMuted, fontSize: 10, fontWeight: '400' },
+    cardMessageNuevo: { color: c.accent, ...tipo.cuerpoFuerte, marginTop: 2 },
+    cardBloqueado: { color: c.danger, ...tipo.cuerpoFuerte, marginTop: 2 },
+    cardDerecha: { alignItems: 'flex-end', gap: espacio.xs + 1 },
+    horaFila: { flexDirection: 'row', alignItems: 'center', gap: espacio.xs },
+    cardHora: { color: c.textMuted, ...tipo.etiqueta, fontWeight: '400' },
     cardHoraSinLeer: { color: c.primary, fontWeight: '700' },
     contador: {
-      minWidth: 18, height: 18, borderRadius: 9, paddingHorizontal: 5,
+      minWidth: 22, height: 22, borderRadius: 11, paddingHorizontal: espacio.xs + 2,
       backgroundColor: c.primary, alignItems: 'center', justifyContent: 'center',
     },
     contadorSilenciado: { backgroundColor: c.textMuted },
-    contadorTexto: { color: '#fff', fontSize: 10, fontWeight: '700' },
-    nuevoBadge: { backgroundColor: c.primary, borderRadius: 10, paddingHorizontal: 8, paddingVertical: 3 },
-    nuevoText: { color: '#fff', fontSize: 9.5, fontWeight: '700' },
-    emptyState: { alignItems: 'center', paddingHorizontal: 30, marginTop: 60, gap: 8 },
-    emptyTitle: { color: c.text, fontSize: 14, fontWeight: '700', marginTop: 6 },
-    emptyText: { color: c.textMuted, fontSize: 12, fontWeight: '400', textAlign: 'center', lineHeight: 18 },
+    contadorTexto: { color: SOBRE_COLOR, ...tipo.etiqueta, fontWeight: '700' },
+    nuevoBadge: { backgroundColor: c.primary, borderRadius: radio.control, paddingHorizontal: espacio.s + 2, paddingVertical: espacio.xs },
+    nuevoText: { color: SOBRE_COLOR, ...tipo.etiqueta, fontWeight: '700' },
+    verMasBtn: {
+      minHeight: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: espacio.s - 2,
+      borderWidth: 1, borderColor: c.border, borderRadius: radio.control,
+    },
+    verMasTexto: { color: c.accent, ...tipo.cuerpoFuerte },
+    emptyState: { alignItems: 'center', paddingHorizontal: espacio.xxl + espacio.s, marginTop: 60, gap: espacio.s },
+    emptyTitle: { color: c.text, ...tipo.seccion, marginTop: espacio.s },
+    emptyText: { color: c.textMuted, ...tipo.cuerpo, textAlign: 'center', lineHeight: 19 },
   });
