@@ -2,7 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import MapaUbicacion from '../../components/MapaUbicacion';
+import MapaEstatico from '../../components/MapaEstatico';
 import { Usuario, getSession } from '../../services/auth';
 import { DEPORTES_CLUB } from '../../services/consultas';
 import { solicitarUbicacion } from '../../services/location';
@@ -20,8 +20,6 @@ import { Colors, useAppTheme } from '../../theme/ThemeContext';
 // DATOS DE EJEMPLO: igual que el panel del club, el id y el nombre salen de la cuenta; si no hay sesión se usa este.
 const NOMBRE_CLUB_DEMO = 'Club de Atletismo';
 const CLUB_ID_DEMO = 'club-demo';
-// Hacia dónde mira el mapa mientras el club no marca su punto: Santiago centro.
-const CENTRO_SANTIAGO = { latitud: -33.4489, longitud: -70.6693 };
 
 /** HU-31: el club edita la información pública de su entidad. */
 export default function MiClubScreen() {
@@ -52,8 +50,6 @@ function Formulario({ clubId, inicial }: { clubId: string; inicial: PerfilClub }
   const [f, setF] = useState<PerfilClub>(inicial);
   const [error, setError] = useState('');
   const [guardado, setGuardado] = useState(false);
-  // Mientras el dedo mueve el mapa, la pantalla no debe hacer scroll.
-  const [scrollActivo, setScrollActivo] = useState(true);
   const [buscandoGps, setBuscandoGps] = useState(false);
 
   const tienePunto = f.latitud != null && f.longitud != null;
@@ -86,9 +82,9 @@ function Formulario({ clubId, inicial }: { clubId: string; inicial: PerfilClub }
     try {
       const r = await solicitarUbicacion();
       if (r.ok && r.ubicacion) marcar(Number(r.ubicacion.latitud.toFixed(6)), Number(r.ubicacion.longitud.toFixed(6)));
-      else setError('No se pudo usar el GPS. Permite el acceso a la ubicación o toca el mapa para marcarla.');
+      else setError('No se pudo usar el GPS. Permite el acceso a la ubicación.');
     } catch {
-      setError('No se pudo obtener tu ubicación. Toca el mapa para marcarla.');
+      setError('No se pudo obtener tu ubicación.');
     } finally {
       setBuscandoGps(false);
     }
@@ -122,7 +118,7 @@ function Formulario({ clubId, inicial }: { clubId: string; inicial: PerfilClub }
 
   return (
     <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" scrollEnabled={scrollActivo}>
+      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         <TouchableOpacity style={styles.volver} onPress={() => router.back()} accessibilityLabel="Volver">
           <Ionicons name="chevron-back" size={20} color={colors.text} />
         </TouchableOpacity>
@@ -171,18 +167,13 @@ function Formulario({ clubId, inicial }: { clubId: string; inicial: PerfilClub }
 
         <View style={styles.tarjeta}>
           <Text style={styles.tituloTarjeta}>Ubicación</Text>
-          <Text style={styles.ayuda}>Así te encuentran los deportistas. Toca el mapa para marcar dónde está tu club.</Text>
+          <Text style={styles.ayuda}>Así te encuentran los deportistas. Usa tu ubicación actual para marcar dónde está tu club.</Text>
           {campo('Dirección', f.direccion, (v) => set('direccion', v), { placeholder: 'Calle y número', maxLength: MAX_DIRECCION_CLUB })}
-          <View style={styles.mapaWrap}>
-            <MapaUbicacion
-              latitud={f.latitud ?? CENTRO_SANTIAGO.latitud}
-              longitud={f.longitud ?? CENTRO_SANTIAGO.longitud}
-              marcar={tienePunto}
-              titulo={f.nombre || 'Mi club'}
-              onElegir={marcar}
-              onMoviendo={(moviendo) => setScrollActivo(!moviendo)}
-            />
-          </View>
+          {tienePunto ? (
+            <View style={styles.mapaWrap}>
+              <MapaEstatico latitud={f.latitud as number} longitud={f.longitud as number} />
+            </View>
+          ) : null}
           <View style={styles.accionesMapa}>
             <TouchableOpacity style={styles.accionBoton} onPress={usarMiUbicacion} disabled={buscandoGps} accessibilityRole="button">
               <Ionicons name="locate-outline" size={16} color={colors.accent} />

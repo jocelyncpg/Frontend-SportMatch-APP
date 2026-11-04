@@ -3,7 +3,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 import { Alert, Linking, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import MapaUbicacion from '../../../components/MapaUbicacion';
+import MapaEstatico from '../../../components/MapaEstatico';
 import { NOMBRES_NIVEL, YO } from '../../../services/actividades';
 import { Usuario, getSession } from '../../../services/auth';
 import { idHilo, useConvocatoria, useHilo } from '../../../services/consultas';
@@ -40,8 +40,6 @@ export default function ClubProfileScreen() {
   const clubId = id ?? '';
   // Lo que el club editó en "Mi club"; si aún no lo edita, se muestra lo que llegó al abrir la pantalla.
   const perfil = usePerfilClub(clubId);
-  // Mientras el dedo mueve el mapa, la pantalla no debe hacer scroll.
-  const [scrollActivo, setScrollActivo] = useState(true);
 
   // Cuenta con la que se inició sesión: de ahí sale el nombre y el nivel con que el club ve tu postulación.
   const [sesion, setSesion] = useState<Usuario | null>(null);
@@ -171,7 +169,6 @@ export default function ClubProfileScreen() {
     <ScrollView
       style={styles.container}
       contentContainerStyle={[styles.content, { paddingTop: insets.top + 60 }]}
-      scrollEnabled={scrollActivo}
     >
       <TouchableOpacity onPress={() => router.back()} style={[styles.backButton, { top: insets.top + 12 }]} accessibilityLabel="Volver">
         <Ionicons name="arrow-back" size={18} color={colors.text} />
@@ -239,12 +236,7 @@ export default function ClubProfileScreen() {
           {lugar ? <Text style={styles.lugarTexto}>{lugar}</Text> : null}
           {perfil && tieneMapa ? (
             <View style={styles.mapaWrap}>
-              <MapaUbicacion
-                latitud={perfil.latitud as number}
-                longitud={perfil.longitud as number}
-                titulo={perfil.nombre || name}
-                onMoviendo={(moviendo) => setScrollActivo(!moviendo)}
-              />
+              <MapaEstatico latitud={perfil.latitud as number} longitud={perfil.longitud as number} />
             </View>
           ) : null}
         </View>
