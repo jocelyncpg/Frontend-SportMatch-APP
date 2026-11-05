@@ -1,4 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -37,9 +38,14 @@ const SOBRE_FOTO_SUAVE = 'rgba(255,255,255,0.85)';
 const CARD_HEIGHT_MAX = 540;
 const CARD_HEIGHT_INICIAL = Math.min(CARD_HEIGHT_MAX, Math.round(SCREEN_HEIGHT * 0.5));
 
-// Degradado oscuro bajo el texto, hecho con franjas (no necesita librerías extra).
-const FRANJAS = 14;
-const SOMBRA = Array.from({ length: FRANJAS }, (_, i) => Math.pow((i + 1) / FRANJAS, 1.7) * 0.92);
+// Degradado oscuro bajo el texto, continuo (con franjas se veían líneas horizontales sobre la foto).
+const SOMBRA_COLORES = [
+  'rgba(8,10,20,0)',
+  'rgba(8,10,20,0.10)',
+  'rgba(8,10,20,0.30)',
+  'rgba(8,10,20,0.60)',
+  'rgba(8,10,20,0.88)',
+] as const;
 
 const RADIOS: { label: string; km: number | null }[] = [
   { label: 'Todas', km: null },
@@ -345,11 +351,7 @@ export default function DiscoverScreen() {
               </Animated.View>
 
               {/* Degradado para que el texto se lea sobre cualquier foto */}
-              <View style={styles.sombra} pointerEvents="none">
-                {SOMBRA.map((a, i) => (
-                  <View key={i} style={{ flex: 1, backgroundColor: `rgba(8,10,20,${a.toFixed(3)})` }} />
-                ))}
-              </View>
+              <LinearGradient colors={SOMBRA_COLORES} style={styles.sombra} pointerEvents="none" />
 
               <View style={styles.info} pointerEvents="none">
                 <Text style={styles.name} numberOfLines={1}>

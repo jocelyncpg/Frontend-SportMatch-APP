@@ -120,14 +120,25 @@ export default function HomeScreen() {
         />
       </TouchableOpacity>
 
-      {/* Acceso a las convocatorias abiertas de los clubes */}
+      {/* Acceso a las convocatorias de los clubes */}
       <TouchableOpacity
-        style={styles.clubBanner}
+        style={[styles.clubBanner, styles.clubBannerSeguido]}
         onPress={() => router.push('/(deportista)/convocatorias')}
         accessibilityRole="button"
       >
         <Ionicons name="megaphone-outline" size={18} color={colors.accent} />
-        <Text style={styles.clubBannerText}>Explorar convocatorias abiertas</Text>
+        <Text style={styles.clubBannerText}>Explorar convocatorias</Text>
+        <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
+      </TouchableOpacity>
+
+      {/* Acceso al directorio de clubes */}
+      <TouchableOpacity
+        style={styles.clubBanner}
+        onPress={() => router.push('/(deportista)/clubs')}
+        accessibilityRole="button"
+      >
+        <Ionicons name="shield-outline" size={18} color={colors.accent} />
+        <Text style={styles.clubBannerText}>Explorar clubes</Text>
         <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
       </TouchableOpacity>
 
@@ -345,6 +356,10 @@ const makeStyles = (c: Colors) =>
       borderRadius: radio.control,
       paddingHorizontal: espacio.l,
       marginBottom: espacio.xl + 2,
+    },
+
+    clubBannerSeguido: {
+      marginBottom: espacio.m,
     },
 
     clubBannerText: {

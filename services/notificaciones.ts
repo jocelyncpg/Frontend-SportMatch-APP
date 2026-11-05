@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef, useSyncExternalStore } from 'react';
 import { YO, getAvisos, useAvisos, type AvisoActividad } from './actividades';
 import { getAvisosClub, useAvisosRecibidos, type AvisoClub } from './avisosClub';
 import { marcarTodasLeidasEnChats, useConversaciones, type Conversacion } from './chat';
-import { useMatches, type Persona } from './matchStore';
+import { agregarCalificacionRecibida, getEstado as getEstadoMatches, useMatches, type Persona } from './matchStore';
 import type { CalificacionRecibida } from './reputacion';
 
 export type TipoNotificacion = 'solicitud' | 'match' | 'calificacion' | 'actividad' | 'mensaje' | 'club';
@@ -147,6 +147,30 @@ export function marcarTodasLeidas() {
 export function reiniciarNotificaciones() {
   estado = { sinLeer: new Set(SIN_LEER_INICIALES), avisosLeidos: new Set() };
   emitir();
+}
+
+// DEMO: calificaciones que "llegan" de tus matches mientras pruebas la app.
+const CALIFICACIONES_DEMO: { estrellas: number; comentario: string }[] = [
+  { estrellas: 5, comentario: 'Muy buena compañía para entrenar, totalmente recomendado.' },
+  { estrellas: 4, comentario: 'Puntual y con buena energía.' },
+  { estrellas: 5, comentario: 'Súper motivador, repetiría sin dudar.' },
+];
+
+/**
+ * SOLO DEMO: simula que uno de tus matches te califica. La calificación entra al promedio y a las reseñas
+ * del perfil, y llega como aviso sin leer (campanita, vibración y banner). Se marca `simulada` para que el
+ * perfil la siga mostrando como "Ejemplo". Se quita cuando las calificaciones lleguen desde el backend.
+ */
+export function simularCalificacionRecibida() {
+  const { confirmados, calificacionesRecibidas } = getEstadoMatches();
+  const n = calificacionesRecibidas.length;
+  const de = confirmados.length > 0 ? confirmados[n % confirmados.length].name : 'Un deportista';
+  const modelo = CALIFICACIONES_DEMO[n % CALIFICACIONES_DEMO.length];
+  const id = `rec-sim-${Date.now()}`;
+  // Primero queda pendiente por leer y después aparece la calificación: así el aviso nace sin leer.
+  estado = { ...estado, sinLeer: new Set(estado.sinLeer).add(`cal-${id}`) };
+  emitir();
+  agregarCalificacionRecibida({ id, de, estrellas: modelo.estrellas, comentario: modelo.comentario, cuando: 'Ahora', simulada: true });
 }
 
 export function useNotificaciones() {

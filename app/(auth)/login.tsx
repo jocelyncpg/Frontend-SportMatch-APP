@@ -1,9 +1,10 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
-import { Alert, KeyboardAvoidingView, Platform, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Alert, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import BrandLogo from '../../components/BrandLogo';
+import { useTecladoVisible } from '../../hooks/use-teclado';
 import { EmailNotVerifiedError, Usuario, login, loginConHuella, rutaInicial } from '../../services/auth';
 import {
   activarBiometria,
@@ -26,6 +27,7 @@ export default function LoginScreen() {
   const { colors, mode, setMode } = useAppTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const insets = useSafeAreaInsets();
+  const tecladoAbierto = useTecladoVisible();
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -131,7 +133,7 @@ export default function LoginScreen() {
   return (
     <KeyboardAvoidingView
       style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
       {/* Apariencia: claro / oscuro / automático */}
       <View style={[styles.temaBarra, { top: insets.top + 10 }]}>
@@ -152,7 +154,14 @@ export default function LoginScreen() {
         })}
       </View>
 
-      <View style={styles.content}>
+      <ScrollView
+        contentContainerStyle={[
+          styles.content,
+          { paddingTop: insets.top + 56, paddingBottom: tecladoAbierto ? 120 : insets.bottom + 24 },
+        ]}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
         <BrandLogo width={222} style={styles.logo} />
 
         <Text style={styles.title}>Bienvenido</Text>
@@ -220,7 +229,7 @@ export default function LoginScreen() {
             ¿No tienes cuenta? <Text style={styles.registerLinkAccent}>Regístrate</Text>
           </Text>
         </TouchableOpacity>
-      </View>
+      </ScrollView>
     </KeyboardAvoidingView>
   );
 }
@@ -228,7 +237,7 @@ export default function LoginScreen() {
 const makeStyles = (c: Colors) =>
   StyleSheet.create({
     container: { flex: 1, backgroundColor: c.bg },
-    content: { flex: 1, justifyContent: 'center', paddingHorizontal: 24 },
+    content: { flexGrow: 1, justifyContent: 'center', paddingHorizontal: 24 },
     logo: { marginBottom: 36 },
 
     temaBarra: {

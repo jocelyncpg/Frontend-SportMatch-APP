@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
-import { Alert, Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import InsigniaDeporte from '../../../components/InsigniaDeporte';
 import ReportarModal from '../../../components/ReportarModal';
@@ -22,6 +22,7 @@ import {
 } from '../../../services/actividades';
 import { Usuario, getSession } from '../../../services/auth';
 import { accesoGrupal, miembrosDe, useSalaGrupal } from '../../../services/chatGrupal';
+import { dialogo } from '../../../services/dialogo';
 import { Colors, useAppTheme } from '../../../theme/ThemeContext';
 
 export default function ActividadDetalleScreen() {
@@ -83,16 +84,16 @@ export default function ActividadDetalleScreen() {
     const r = postular(a.id, mensaje, usuario?.deportes);
     setModalPostular(false);
     if (!r.ok) {
-      Alert.alert('No se pudo postular', r.motivo);
+      dialogo('No se pudo postular', r.motivo);
       return;
     }
-    Alert.alert('Postulación enviada', 'Quien organiza revisará tu postulación y te avisará su decisión.');
+    dialogo('Postulación enviada', 'Quien organiza revisará tu postulación y te avisará su decisión.');
   }
 
   function confirmarRetiro() {
     if (!a) return;
     const aprobada = relacion === 'aprobada';
-    Alert.alert(
+    dialogo(
       aprobada ? 'Retirarme de la actividad' : 'Cancelar postulación',
       aprobada ? 'Tu cupo quedará libre para otras personas. ¿Quieres retirarte?' : '¿Quieres cancelar tu postulación?',
       [
@@ -105,12 +106,12 @@ export default function ActividadDetalleScreen() {
   function responder(personaId: string, decision: 'aprobada' | 'rechazada') {
     if (!a) return;
     const r = responderPostulacion(a.id, personaId, decision);
-    if (!r.ok) Alert.alert('No se pudo responder', r.motivo);
+    if (!r.ok) dialogo('No se pudo responder', r.motivo);
   }
 
   function confirmarCancelacion() {
     if (!a) return;
-    Alert.alert('Cancelar actividad', 'Las personas postuladas verán que la actividad fue cancelada. ¿Quieres cancelarla?', [
+    dialogo('Cancelar actividad', 'Las personas postuladas verán que la actividad fue cancelada. ¿Quieres cancelarla?', [
       { text: 'No', style: 'cancel' },
       { text: 'Sí, cancelar', style: 'destructive', onPress: () => { cancelarActividad(a.id); } },
     ]);

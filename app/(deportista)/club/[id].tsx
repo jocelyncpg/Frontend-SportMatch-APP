@@ -1,12 +1,13 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
-import { Alert, Linking, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Linking, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import MapaEstatico from '../../../components/MapaEstatico';
 import { NOMBRES_NIVEL, YO } from '../../../services/actividades';
 import { Usuario, getSession } from '../../../services/auth';
 import { idHilo, useConvocatoria, useHilo } from '../../../services/consultas';
+import { dialogo } from '../../../services/dialogo';
 import { usePerfilClub } from '../../../services/perfilClub';
 import { PerfilPostulante, idPostulacion, postular, retirarPostulacion, usePostulacion } from '../../../services/postulaciones';
 import { Colors, espacio, radio, tipo, useAppTheme } from '../../../theme/ThemeContext';
@@ -28,7 +29,7 @@ function fechaCorta(iso: string): string {
 }
 
 function abrirEnlace(url: string) {
-  Linking.openURL(url).catch(() => Alert.alert('No se pudo abrir', 'No se pudo abrir el enlace en este dispositivo.'));
+  Linking.openURL(url).catch(() => dialogo('No se pudo abrir', 'No se pudo abrir el enlace en este dispositivo.'));
 }
 
 export default function ClubProfileScreen() {
@@ -73,22 +74,22 @@ export default function ClubProfileScreen() {
   function enviarPostulacion() {
     const r = postular(clubId, miPerfil());
     if (!r.ok) {
-      Alert.alert('No se pudo postular', r.motivo);
+      dialogo('No se pudo postular', r.motivo);
       return;
     }
     const prueba = convocatoria?.fecha ? ` La prueba es el ${fechaCorta(convocatoria.fecha)}.` : '';
-    Alert.alert('Postulación enviada', `El club revisará tu perfil y te avisaremos con el resultado.${prueba}`);
+    dialogo('Postulación enviada', `El club revisará tu perfil y te avisaremos con el resultado.${prueba}`);
   }
 
   function confirmarRetiro() {
-    Alert.alert('Retirar postulación', '¿Quieres retirar tu postulación a esta convocatoria?', [
+    dialogo('Retirar postulación', '¿Quieres retirar tu postulación a esta convocatoria?', [
       { text: 'Cancelar', style: 'cancel' },
       {
         text: 'Retirar',
         style: 'destructive',
         onPress: () => {
           const r = retirarPostulacion(idPostulacion(clubId, YO));
-          if (!r.ok) Alert.alert('No se pudo retirar', r.motivo);
+          if (!r.ok) dialogo('No se pudo retirar', r.motivo);
         },
       },
     ]);

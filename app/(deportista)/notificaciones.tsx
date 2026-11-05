@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useMemo, useState } from 'react';
-import { Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   CambioActividad,
@@ -12,24 +12,16 @@ import {
 } from '../../services/actividades';
 import { reiniciarAvisosClub } from '../../services/avisosClub';
 import { reiniciarChat, simularRespuesta as simularMensajeDeChat } from '../../services/chat';
+import { dialogo } from '../../services/dialogo';
+import { abrirNotificacion, estiloNotificacion } from '../../services/notificacionUi';
 import {
   Notificacion,
-  TipoNotificacion,
-  marcarLeida,
   marcarTodasLeidas,
   reiniciarNotificaciones,
+  simularCalificacionRecibida,
   useNotificaciones,
 } from '../../services/notificaciones';
 import { Colors, useAppTheme } from '../../theme/ThemeContext';
-
-const ICONO: Record<TipoNotificacion, keyof typeof Ionicons.glyphMap> = {
-  solicitud: 'person-add-outline',
-  match: 'heart',
-  calificacion: 'star',
-  actividad: 'calendar-outline',
-  mensaje: 'chatbubble-ellipses',
-  club: 'megaphone-outline',
-};
 
 export default function NotificacionesScreen() {
   const { colors } = useAppTheme();
@@ -41,24 +33,16 @@ export default function NotificacionesScreen() {
   const nuevas = lista.filter((n) => !n.leida);
   const anteriores = lista.filter((n) => n.leida);
 
-  const colorDe = (n: Notificacion) =>
-    n.resultado === 'aprobada' ? colors.success
-      : n.resultado === 'rechazada' ? colors.danger
-      : n.tipo === 'match' ? '#DB2777' : n.tipo === 'calificacion' ? '#FACC15' : n.tipo === 'actividad' ? '#38BDF8' : n.tipo === 'mensaje' ? colors.primary : n.tipo === 'club' ? colors.success : colors.accent;
-
-  const iconoDe = (n: Notificacion): keyof typeof Ionicons.glyphMap =>
-    n.resultado === 'aprobada' ? 'checkmark-circle' : n.resultado === 'rechazada' ? 'close-circle' : ICONO[n.tipo];
-
   /** SOLO DEMO: simula que quien organiza cambia o cancela una actividad en la que participas. */
   function simular(id: string, cambio: CambioActividad) {
     const r = simularCambioDelOrganizador(id, cambio);
-    if (!r.ok) Alert.alert('No se pudo simular', r.motivo);
+    if (!r.ok) dialogo('No se pudo simular', r.motivo);
   }
 
   /** SOLO DEMO: simula que quien organiza responde tu postulación pendiente (HU-38). */
   function simularRespuesta(id: string, decision: DecisionPostulacion) {
     const r = simularRespuestaDelOrganizador(id, decision);
-    if (!r.ok) Alert.alert('No se pudo simular', r.motivo);
+    if (!r.ok) dialogo('No se pudo simular', r.motivo);
   }
 
   function restablecer() {
@@ -69,57 +53,27 @@ export default function NotificacionesScreen() {
   }
 
   /** Al tocar un aviso se marca como leído y se abre lo que corresponde. */
-  function abrir(n: Notificacion) {
-    marcarLeida(n.id);
-    const p = n.persona;
-    if (n.tipo === 'solicitud' && p) {
-      router.push({
-        pathname: '/(deportista)/perfil/[id]',
-        params: {
-          id: p.id,
-          name: p.name,
-          sport: p.sport,
-          level: p.level,
-          age: p.age?.toString() ?? '',
-          compatibility: p.compatibility.toString(),
-          distance: p.distance ?? '',
-          bio: p.bio ?? '',
-          colorFrom: p.colorFrom,
-          fotoUri: p.fotoUri ?? '',
-        },
-      });
-    } else if (n.tipo === 'club' && n.clubId) {
-      router.push({ pathname: '/(deportista)/club/[id]', params: { id: n.clubId, name: n.clubNombre ?? '' } });
-    } else if (n.tipo === 'actividad' && n.actividadId) {
-      router.push({ pathname: '/(deportista)/activity/[id]', params: { id: n.actividadId } });
-    } else if ((n.tipo === 'match' || n.tipo === 'mensaje') && p) {
-      router.push({
-        pathname: '/(deportista)/chat/[id]',
-        params: { id: p.id, name: p.name, sport: p.sport, colorFrom: p.colorFrom },
-      });
-    } else {
-      router.push('/(deportista)/(tabs)/profile');
-    }
-  }
-
-  const fila = (n: Notificacion) => (
-    <TouchableOpacity
-      key={n.id}
-      style={[styles.fila, !n.leida && styles.filaNueva]}
-      onPress={() => abrir(n)}
-      activeOpacity={0.7}
-    >
-      <View style={[styles.icono, { backgroundColor: colors.chip }]}>
-        <Ionicons name={iconoDe(n)} size={17} color={colorDe(n)} />
-      </View>
-      <View style={styles.textos}>
-        <Text style={[styles.titulo, !n.leida && styles.tituloNuevo]} numberOfLines={2}>{n.titulo}</Text>
-        <Text style={styles.detalle} numberOfLines={2}>{n.detalle}</Text>
-        <Text style={styles.cuando}>{n.cuando}</Text>
-      </View>
-      {!n.leida ? <View style={styles.punto} /> : <Ionicons name="chevron-forward" size={15} color={colors.textMuted} />}
-    </TouchableOpacity>
-  );
+  const fila = (n: Notificacion) => {
+    const { icono, color } = estiloNotificacion(n, colors);
+    return (
+      <TouchableOpacity
+        key={n.id}
+        style={[styles.fila, !n.leida && styles.filaNueva]}
+        onPress={() => abrirNotificacion(n)}
+        activeOpacity={0.7}
+      >
+        <View style={[styles.icono, { backgroundColor: colors.chip }]}>
+          <Ionicons name={icono} size={17} color={color} />
+        </View>
+        <View style={styles.textos}>
+          <Text style={[styles.titulo, !n.leida && styles.tituloNuevo]} numberOfLines={2}>{n.titulo}</Text>
+          <Text style={styles.detalle} numberOfLines={2}>{n.detalle}</Text>
+          <Text style={styles.cuando}>{n.cuando}</Text>
+        </View>
+        {!n.leida ? <View style={styles.punto} /> : <Ionicons name="chevron-forward" size={15} color={colors.textMuted} />}
+      </TouchableOpacity>
+    );
+  };
 
   return (
     <View style={[styles.container, { paddingTop: insets.top + 12 }]}>
@@ -183,6 +137,9 @@ export default function NotificacionesScreen() {
             </TouchableOpacity>
             <TouchableOpacity style={styles.demoBtn} onPress={() => simularMensajeDeChat('camila')}>
               <Text style={styles.demoBtnTexto}>Camila me escribe por chat</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.demoBtn} onPress={() => setTimeout(simularCalificacionRecibida, 5000)}>
+              <Text style={styles.demoBtnTexto}>Alguien me califica (llega en 5 s)</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.demoBtn} onPress={restablecer}>
               <Text style={styles.demoBtnTexto}>Restablecer la demo</Text>

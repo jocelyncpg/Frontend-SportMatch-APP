@@ -41,9 +41,6 @@ export default function ConvocatoriasScreen() {
             {lista.length} {lista.length === 1 ? 'convocatoria' : 'convocatorias'}
           </Text>
         </View>
-        <TouchableOpacity onPress={() => router.push('/(deportista)/clubs')} accessibilityLabel="Ver el directorio de clubes">
-          <Text style={styles.link}>Ver clubes</Text>
-        </TouchableOpacity>
       </View>
 
       {deportes.length > 1 ? (
@@ -107,7 +104,6 @@ const makeStyles = (c: Colors) =>
     backButton: { width: 34, height: 34, borderRadius: 17, backgroundColor: c.card, borderWidth: 1, borderColor: c.border, alignItems: 'center', justifyContent: 'center' },
     title: { color: c.text, fontSize: 17, fontWeight: '700' },
     subtitle: { color: c.textMuted, fontSize: 11, marginTop: 2 },
-    link: { color: c.accent, fontSize: 12, fontWeight: '700' },
     filtros: { flexGrow: 0, marginBottom: 14 },
     filtrosFila: { paddingHorizontal: 20, gap: 8 },
     chip: { borderWidth: 1, borderColor: c.border, backgroundColor: c.card, borderRadius: 999, paddingHorizontal: 14, paddingVertical: 8 },

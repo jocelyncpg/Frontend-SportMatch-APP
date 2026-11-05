@@ -3,6 +3,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useTecladoVisible } from '../../../hooks/use-teclado';
 import { YO } from '../../../services/actividades';
 import { getSession } from '../../../services/auth';
 import { horaCorta } from '../../../services/chat';
@@ -27,6 +28,9 @@ export default function ChatClubScreen() {
   const { colors } = useAppTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const insets = useSafeAreaInsets();
+  // Con el teclado abierto no hace falta el margen del borde inferior: dejaba un hueco sobre el teclado.
+  const tecladoAbierto = useTecladoVisible();
+  const margenInferior = tecladoAbierto ? espacio.m : insets.bottom + espacio.m;
 
   const { id } = useLocalSearchParams<{ id: string }>();
   const clubId = id ?? '';
@@ -72,7 +76,11 @@ export default function ChatClubScreen() {
   const sinTexto = !texto.trim();
 
   return (
-    <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+    <KeyboardAvoidingView
+      style={styles.container}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      keyboardVerticalOffset={0}
+    >
       <View style={[styles.topbar, { paddingTop: insets.top + espacio.m }]}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backButton} accessibilityRole="button" accessibilityLabel="Volver">
           <Ionicons name="arrow-back" size={18} color={colors.text} />
@@ -110,7 +118,7 @@ export default function ChatClubScreen() {
       </ScrollView>
 
       {abierta ? (
-        <View style={[styles.inputBar, { paddingBottom: insets.bottom + espacio.m }]}>
+        <View style={[styles.inputBar, { paddingBottom: margenInferior }]}>
           <TextInput
             style={styles.input}
             value={texto}
@@ -133,7 +141,7 @@ export default function ChatClubScreen() {
           </TouchableOpacity>
         </View>
       ) : (
-        <View style={[styles.cerrada, { paddingBottom: insets.bottom + espacio.m }]}>
+        <View style={[styles.cerrada, { paddingBottom: margenInferior }]}>
           <Ionicons name="lock-closed-outline" size={16} color={colors.textMuted} />
           <Text style={styles.cerradaTexto}>
             La convocatoria está cerrada: ya no se pueden enviar consultas nuevas.

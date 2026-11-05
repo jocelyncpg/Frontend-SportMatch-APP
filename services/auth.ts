@@ -298,6 +298,14 @@ export async function updatePerfilExtra(
   await actualizarSesionYUsuario(userId, datos);
 }
 
+/** Cambia nombre y apellidos (Configuración). El correo y el RUT no se editan desde la app. */
+export async function updateDatosPersonales(
+  userId: string,
+  datos: { nombre: string; apellidoPaterno: string; apellidoMaterno?: string }
+): Promise<void> {
+  await actualizarSesionYUsuario(userId, datos);
+}
+
 // ---------- Contraseña ----------
 
 /**

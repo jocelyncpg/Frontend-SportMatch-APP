@@ -1,7 +1,13 @@
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import 'react-native-reanimated';
+import BannerAviso from '../components/BannerAviso';
+import DialogoHost from '../components/DialogoHost';
+import { usarDialogosDeLaApp } from '../services/dialogo';
 import { AppThemeProvider, useAppTheme } from '../theme/ThemeContext';
+
+// Todos los Alert.alert de la app pasan a verse con la visual de la app.
+usarDialogosDeLaApp();
 
 function RootStack() {
   const { colors, isDark } = useAppTheme();
@@ -15,6 +21,8 @@ function RootStack() {
         <Stack.Screen name="(admin)" />
         <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
       </Stack>
+      <BannerAviso />
+      <DialogoHost />
       <StatusBar style={isDark ? 'light' : 'dark'} />
     </>
   );

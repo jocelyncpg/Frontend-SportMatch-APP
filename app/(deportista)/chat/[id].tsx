@@ -20,6 +20,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Avatar from '../../../components/Avatar';
 import ReportarModal from '../../../components/ReportarModal';
 import { Boton } from '../../../components/ui';
+import { useTecladoVisible } from '../../../hooks/use-teclado';
 import {
   abrirChat,
   bloquearUsuario,
@@ -52,6 +53,9 @@ export default function ChatScreen() {
   const { colors } = useAppTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const insets = useSafeAreaInsets();
+  // Con el teclado abierto no hace falta el margen del borde inferior: dejaba un hueco sobre el teclado.
+  const tecladoAbierto = useTecladoVisible();
+  const margenInferior = tecladoAbierto ? espacio.m : insets.bottom + espacio.m;
 
   const { id, name, sport, colorFrom } = useLocalSearchParams<{ id: string; name: string; sport: string; colorFrom: string }>();
   const personaId = id ?? '';
@@ -211,7 +215,7 @@ export default function ChatScreen() {
     <KeyboardAvoidingView
       style={styles.container}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
+      keyboardVerticalOffset={0}
     >
       <View style={[styles.topbar, { paddingTop: insets.top + espacio.m }]}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backButton} accessibilityRole="button" accessibilityLabel="Volver">
@@ -294,7 +298,7 @@ export default function ChatScreen() {
 
       {bloqueado ? (
         // Persona bloqueada (HU-59): no se puede escribir hasta desbloquearla.
-        <View style={[styles.bloqueadoBox, { paddingBottom: insets.bottom + espacio.m }]}>
+        <View style={[styles.bloqueadoBox, { paddingBottom: margenInferior }]}>
           <Ionicons name="ban-outline" size={18} color={colors.danger} />
           <Text style={styles.bloqueadoTexto}>Bloqueaste a {primerNombre}. No pueden enviarse mensajes.</Text>
           <Boton texto="Desbloquear" variante="secundario" onPress={() => desbloquearUsuario(personaId)} style={styles.desbloquearBtn} />
@@ -308,7 +312,7 @@ export default function ChatScreen() {
             </TouchableOpacity>
           )}
 
-          <View style={[styles.inputRow, { paddingBottom: insets.bottom + espacio.m }]}>
+          <View style={[styles.inputRow, { paddingBottom: margenInferior }]}>
             <TouchableOpacity
               style={styles.adjuntarButton}
               accessibilityRole="button"

@@ -16,6 +16,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import InsigniaDeporte from '../../../components/InsigniaDeporte';
 import ReportarModal from '../../../components/ReportarModal';
 import { Boton } from '../../../components/ui';
+import { useTecladoVisible } from '../../../hooks/use-teclado';
 import { useActividades } from '../../../services/actividades';
 import { horaCorta } from '../../../services/chat';
 import {
@@ -43,6 +44,9 @@ export default function ChatGrupoScreen() {
   const { colors } = useAppTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const insets = useSafeAreaInsets();
+  // Con el teclado abierto no hace falta el margen del borde inferior: dejaba un hueco sobre el teclado.
+  const tecladoAbierto = useTecladoVisible();
+  const margenInferior = tecladoAbierto ? espacio.m : insets.bottom + espacio.m;
 
   const { id } = useLocalSearchParams<{ id: string }>();
   const actividadId = id ?? '';
@@ -161,7 +165,7 @@ export default function ChatGrupoScreen() {
     <KeyboardAvoidingView
       style={styles.container}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
+      keyboardVerticalOffset={0}
     >
       <View style={[styles.topbar, { paddingTop: insets.top + espacio.m }]}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backButton} accessibilityRole="button" accessibilityLabel="Volver">
@@ -203,7 +207,7 @@ export default function ChatGrupoScreen() {
       />
 
       {soloLectura ? (
-        <View style={[styles.avisoBox, { paddingBottom: insets.bottom + espacio.m }]}>
+        <View style={[styles.avisoBox, { paddingBottom: margenInferior }]}>
           <Ionicons name="time-outline" size={18} color={colors.textMuted} />
           <Text style={styles.avisoTexto}>La actividad ya finalizó: el chat quedó solo de lectura.</Text>
         </View>
@@ -218,7 +222,7 @@ export default function ChatGrupoScreen() {
 
           {error ? <Text accessibilityRole="alert" style={styles.errorTexto}>{error}</Text> : null}
 
-          <View style={[styles.inputRow, { paddingBottom: insets.bottom + espacio.m }]}>
+          <View style={[styles.inputRow, { paddingBottom: margenInferior }]}>
             <TextInput
               placeholder="Escribe al grupo..."
               placeholderTextColor={colors.textMuted}
