@@ -222,6 +222,7 @@ export default function ConfiguracionScreen() {
         keyboardShouldPersistTaps="handled"
       >
         <EncabezadoPantalla titulo="Configuración" subtitulo="Administra tu cuenta y tu privacidad." />
+        <Boton texto="Mis pagos" icono="receipt-outline" variante="secundario" onPress={() => router.push('/(deportista)/mis-pagos')} />
 
         {/* Cuenta */}
         <Text style={styles.seccion}>Cuenta</Text>

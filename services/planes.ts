@@ -114,7 +114,7 @@ export type PlanApi = {
   id: number; nombre: string; tipo: 'USUARIO' | 'CLUB'; categoria?: 'PLAN' | 'CONVENIO'; descripcion: string | null; precio: number;
   duracion_dias: number; beneficios?: string[];
 };
-type SuscripcionApi = { estado: 'ACTIVE' | 'EXPIRED'; plan: Pick<PlanApi, 'tipo'> & Partial<PlanApi>; fecha_fin: string };
+export type SuscripcionApi = { estado: 'ACTIVE' | 'EXPIRED'; plan: Pick<PlanApi, 'tipo'> & Partial<PlanApi>; fecha_fin: string };
 type PagoIniciadoApi = { token_ws: string; checkout_url: string };
 type PagoConfirmadoApi = { status: 'PENDING' | 'APPROVED' | 'REJECTED' | 'CANCELLED'; suscripcion: SuscripcionApi | null };
 
@@ -255,4 +255,35 @@ export async function confirmarPago(cuenta: CuentaPlan, retorno: string | Retorn
 export function reiniciarPlanes() {
   estado = { ...estado, actual: { ...SIN_PLAN } };
   emitir();
+}
+
+export type PeriodoSuscripcion = {
+  id: string; transaccion_id: string; plan_nombre: string; precio_pagado: number;
+  fecha_inicio: string; fecha_fin: string; vigente: boolean;
+};
+export type PagoHistorial = {
+  transaccion_id: string; buy_order: string; fecha: string; plan: PlanApi; amount: number;
+  status: 'APPROVED' | 'REJECTED' | 'CANCELLED' | 'PENDING';
+  authorization_code: string | null; card_last4: string | null; payment_type_code: string | null;
+  periodo: PeriodoSuscripcion | null;
+};
+export type PaginaHistorial<T> = { items: T[]; total: number; page: number; page_size: number };
+
+export async function cargarHistorialPagos(page = 1): Promise<PaginaHistorial<PagoHistorial>> {
+  return apiRequest(`/payments/history/me?page=${page}&page_size=10`, { token: await token() });
+}
+
+export async function cargarHistorialPeriodos(page = 1): Promise<PaginaHistorial<PeriodoSuscripcion>> {
+  return apiRequest(`/payments/subscriptions/me/history?page=${page}&page_size=10`, { token: await token() });
+}
+
+export async function cargarMiSuscripcion(): Promise<SuscripcionApi | null> {
+  try { return await apiRequest('/payments/subscription/me', { token: await token() }); }
+  catch (error) { if (error instanceof ApiError && error.status === 404) return null; throw error; }
+}
+
+export async function cargarComprobante(id: string): Promise<string> {
+  return apiRequest(`/payments/history/${encodeURIComponent(id)}/receipt`, {
+    token: await token(), responseType: 'text',
+  });
 }

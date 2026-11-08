@@ -6,6 +6,7 @@ type RequestOptions = {
   body?: unknown;
   token?: string | null;
   timeoutMs?: number;
+  responseType?: 'json' | 'text';
 };
 
 /** Error del backend con su código HTTP y el `detail` original, para decidir qué hacer. */
@@ -118,5 +119,6 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
   }
 
   if (res.status === 204) return undefined as T;
+  if (options.responseType === 'text') return await res.text() as T;
   return res.json();
 }

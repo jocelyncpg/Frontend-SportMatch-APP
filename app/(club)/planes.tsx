@@ -4,6 +4,7 @@ import { useCallback, useMemo, useState } from 'react';
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import CatalogoPlanes from '../../components/CatalogoPlanes';
 import ContratarPlanModal from '../../components/ContratarPlanModal';
+import { Boton } from '../../components/ui';
 import { cargarPlanes, nombreDelPlan, planesParaContratar, precioTexto, usePlanActual, usePlanes, type Plan } from '../../services/planes';
 import { Colors, useAppTheme } from '../../theme/ThemeContext';
 
@@ -27,6 +28,7 @@ export default function PlanesClubScreen() {
       </TouchableOpacity>
 
       <Text style={styles.titulo}>Planes y beneficios</Text>
+      <Boton texto="Mis pagos" variante="secundario" icono="receipt-outline" onPress={() => router.push('/(club)/mis-pagos')} />
       <Text style={styles.subtitulo}>
         Revisa lo que incluye cada plan. El plan Club suma el panel web, las convocatorias y la gestión de postulantes.
       </Text>

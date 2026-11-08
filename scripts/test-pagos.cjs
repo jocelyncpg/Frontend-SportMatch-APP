@@ -38,6 +38,40 @@ function cargar() {
 const plan = { id: 'pro', nombre: 'Pro', precioMensual: 3990, paraCuenta: 'deportista', backendId: 1 };
 const created = { token_ws: 'a'.repeat(64), checkout_url: 'https://api.test/api/v1/payments/webpay/checkout?ticket=signed' };
 
+test('historial pide páginas propias con JWT y no envía identificadores de dueño', async () => {
+  const c = cargar();
+  const page = { items: [{ transaccion_id: 'id', status: 'REJECTED', periodo: null }], total: 1, page: 2, page_size: 10 };
+  c.respond(page);
+  assert.equal(await c.api.cargarHistorialPagos(2), page);
+  assert.equal(c.calls.at(-1).url, '/payments/history/me?page=2&page_size=10');
+  assert.equal(c.calls.at(-1).options.token, 'access-token');
+  assert.equal(c.calls.at(-1).options.body, undefined);
+  assert.equal(await c.api.cargarHistorialPeriodos(3), page);
+  assert.equal(c.calls.at(-1).url, '/payments/subscriptions/me/history?page=3&page_size=10');
+});
+
+test('comprobante descarga texto autenticado y propaga un 404 sin inventar recibo', async () => {
+  const c = cargar();
+  c.respond('<html>SportMatch</html>');
+  assert.equal(await c.api.cargarComprobante('id'), '<html>SportMatch</html>');
+  assert.equal(c.calls.at(-1).url, '/payments/history/id/receipt');
+  assert.equal(c.calls.at(-1).options.token, 'access-token');
+  assert.equal(c.calls.at(-1).options.responseType, 'text');
+  c.respond(new c.ApiError('Comprobante no encontrado.', 404));
+  await assert.rejects(c.api.cargarComprobante('ajeno'), (e) => e.status === 404);
+});
+
+test('mis pagos permite no tener suscripción y conserva errores de sesión y conexión', async () => {
+  const c = cargar();
+  c.respond(new c.ApiError('Sin suscripción', 404));
+  assert.equal(await c.api.cargarMiSuscripcion(), null);
+  for (const status of [401, 503]) {
+    c.respond(new c.ApiError('Error', status));
+    await assert.rejects(c.api.cargarMiSuscripcion(), (e) => e.status === status);
+    await assert.rejects(c.api.cargarHistorialPagos(), (e) => e.status === status);
+  }
+});
+
 test('abre el formulario POST firmado del backend y guarda el pago para recuperar tras reiniciar', async () => {
   const c = cargar(); c.respond(created);
   const result = await c.api.iniciarPago('deportista', plan);
