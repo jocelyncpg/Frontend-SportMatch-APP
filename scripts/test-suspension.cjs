@@ -24,6 +24,7 @@ function cargarApi(respuesta) {
     module, exports: module.exports, Error, Promise, JSON, Set, setTimeout, clearTimeout, AbortController,
     fetch: async () => respuesta,
     require(name) {
+      if (name === 'react-native') return { Platform: { OS: 'web' } };
       if (name === './config') return { API_BASE_URL: 'http://gateway/api/v1' };
       if (name === './suspension') return cargarSuspension();
       throw Error(name);
@@ -129,6 +130,7 @@ test('logout limpia la sesión local aunque revocar las alertas falle (403 de un
   vm.runInNewContext(compile('services/auth.ts'), {
     module, exports: module.exports, Error, Promise, JSON,
     require(name) {
+      if (name === 'react-native') return { Platform: { OS: 'web' } };
       if (name === '@react-native-async-storage/async-storage') return { default: { multiRemove: async (claves) => { quitadas.push(...claves); } } };
       if (name === './api') return { ApiError, apiRequest: async () => undefined };
       if (name === './deportes') return { codigoDeporte: (v) => v, nombreDeporte: (v) => v };

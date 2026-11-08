@@ -27,7 +27,7 @@ import {
 } from '../../../services/consultas';
 import { cargarClub, useClub } from '../../../services/clubes';
 import { chatPostulantesHabilitado, misPostulaciones } from '../../../services/convocatorias';
-import { Colors, useAppTheme } from '../../../theme/ThemeContext';
+import { Colors, useAppTheme, espacio, radio, tipo } from '../../../theme/ThemeContext';
 export default function ChatClubScreen() {
   const { colors } = useAppTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
@@ -164,25 +164,19 @@ const makeStyles = (c: Colors) =>
       alignItems: 'center',
       justifyContent: 'center'
     },
-    icono: { width: 36, height: 36, borderRadius: 11, alignItems: 'center', justifyContent: 'center' },
-    title: { color: c.text, fontSize: 15, fontWeight: '700' },
-    sub: { color: c.textMuted, fontSize: 11.5, marginTop: 2 },
-    mensajes: { padding: 16, gap: 8, flexGrow: 1 },
-    vacio: { alignItems: 'center', paddingHorizontal: 30, marginTop: 50, gap: 8 },
-    vacioTitulo: { color: c.text, fontSize: 14, fontWeight: '700', marginTop: 6 },
-    vacioTexto: { color: c.textMuted, fontSize: 12, textAlign: 'center', lineHeight: 18 },
-    burbuja: { maxWidth: '80%', borderRadius: 16, paddingHorizontal: 12, paddingVertical: 8 },
-    burbujaPropia: { alignSelf: 'flex-end', backgroundColor: c.primary, borderBottomRightRadius: 4 },
-    burbujaAjena: {
-      alignSelf: 'flex-start',
-      backgroundColor: c.card,
-      borderWidth: 1,
-      borderColor: c.border,
-      borderBottomLeftRadius: 4
-    },
-    texto: { color: c.text, fontSize: 13, lineHeight: 18 },
-    textoPropio: { color: '#fff' },
-    horaMsg: { color: c.textMuted, fontSize: 9.5, marginTop: 3, alignSelf: 'flex-end' },
+    icono: { width: 40, height: 40, borderRadius: radio.control, alignItems: 'center', justifyContent: 'center' },
+    title: { color: c.text, ...tipo.seccion },
+    sub: { color: c.textMuted, ...tipo.dato, marginTop: 2 },
+    mensajes: { padding: espacio.xl, gap: espacio.m, flexGrow: 1 },
+    vacio: { alignItems: 'center', paddingHorizontal: espacio.xxl + espacio.s, marginTop: 50, gap: espacio.s },
+    vacioTitulo: { color: c.text, ...tipo.seccion, marginTop: espacio.s - 2 },
+    vacioTexto: { color: c.textMuted, ...tipo.cuerpo, textAlign: 'center', lineHeight: 19 },
+    burbuja: { maxWidth: '80%', borderRadius: radio.tarjeta, paddingHorizontal: espacio.l - 2, paddingVertical: espacio.m - 1 },
+    burbujaPropia: { alignSelf: 'flex-end', backgroundColor: c.primary, borderBottomRightRadius: espacio.xs },
+    burbujaAjena: { alignSelf: 'flex-start', backgroundColor: c.card, borderWidth: 1, borderColor: c.border, borderBottomLeftRadius: espacio.xs },
+    texto: { color: c.text, ...tipo.cuerpo, fontSize: 14, lineHeight: 20 },
+    textoPropio: { color: '#FFFFFF' },
+    horaMsg: { color: c.textMuted, ...tipo.etiqueta, fontWeight: '400', marginTop: 3, alignSelf: 'flex-end' },
     horaMsgPropia: { color: 'rgba(255,255,255,0.75)' },
     inputBar: {
       flexDirection: 'row',
@@ -206,24 +200,8 @@ const makeStyles = (c: Colors) =>
       color: c.text,
       fontSize: 13
     },
-    enviarBtn: {
-      width: 40,
-      height: 40,
-      borderRadius: 20,
-      backgroundColor: c.primary,
-      alignItems: 'center',
-      justifyContent: 'center'
-    },
+    enviarBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: c.primary, alignItems: 'center', justifyContent: 'center' },
     enviarBtnOff: { opacity: 0.4 },
-    cerrada: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 8,
-      paddingHorizontal: 20,
-      paddingTop: 12,
-      borderTopWidth: 1,
-      borderTopColor: c.border,
-      backgroundColor: c.chip
-    },
-    cerradaTexto: { color: c.textMuted, fontSize: 12, flex: 1 },
+    cerrada: { flexDirection: 'row', alignItems: 'center', gap: espacio.s, paddingHorizontal: espacio.xl, paddingTop: espacio.m, borderTopWidth: 1, borderTopColor: c.border, backgroundColor: c.chip },
+    cerradaTexto: { color: c.textMuted, ...tipo.dato, flex: 1 },
   });

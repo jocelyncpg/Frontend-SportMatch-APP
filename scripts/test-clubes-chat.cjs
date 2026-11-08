@@ -18,6 +18,7 @@ function cargar(archivo, responder) {
     module: modulo, exports: modulo.exports, Date, Error, Number, Math, JSON, Object, Promise, Set, Map, URLSearchParams,
     setInterval: () => 1, clearInterval: () => {},
     require(nombre) {
+      if (nombre === 'react-native') return { Platform: { OS: 'web' } };
       if (nombre === 'react') return { useSyncExternalStore: (_, leer) => leer(), useMemo: (fn) => fn() };
       if (nombre === 'react-native') return { AppState: { currentState: 'active' } };
       if (nombre === 'expo-crypto') return { randomUUID: () => 'uuid-' + ++uuid };
@@ -182,6 +183,7 @@ test('registro para club existente no guarda datos de un club pendiente', async 
   vm.runInNewContext(codigo, {
     module: modulo, exports: modulo.exports, Promise, Error, JSON,
     require(nombre) {
+      if (nombre === 'react-native') return { Platform: { OS: 'web' } };
       if (nombre === '@react-native-async-storage/async-storage') return { default: {
         setItem: async (key, value) => { guardado.set(key, value); },
         removeItem: async (key) => { guardado.delete(key); },

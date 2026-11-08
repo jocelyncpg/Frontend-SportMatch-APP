@@ -3,10 +3,12 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { YO } from '../../../services/actividades';
+import MapaEstatico from '../../../components/MapaEstatico';
+import { cargarPerfilClub, type PerfilClub } from '../../../services/perfilClub';
 import { idHilo, puedeConsultarClub, useHilo } from '../../../services/consultas';
 import { cargarClub, useClub } from '../../../services/clubes';
 import { listarTodasConvocatoriasClub, mensajeErrorPostulacion, misPostulaciones, postularConvocatoria, presentacionConvocatoria, type Convocatoria, type Postulacion } from '../../../services/convocatorias';
-import { Colors, useAppTheme } from '../../../theme/ThemeContext';
+import { Colors, useAppTheme, espacio, radio, tipo } from '../../../theme/ThemeContext';
 
 export default function ClubProfileScreen() {
   const { colors } = useAppTheme();
@@ -14,6 +16,7 @@ export default function ClubProfileScreen() {
   const { id, colorFrom } = useLocalSearchParams<{ id: string; colorFrom?: string }>();
   const clubId = id ?? '';
   const club = useClub(clubId);
+  const [perfil, setPerfil] = useState<PerfilClub | null>(null);
   const [error, setError] = useState('');
   const [convocatorias, setConvocatorias] = useState<Convocatoria[]>([]);
   const [errorConvocatorias, setErrorConvocatorias] = useState('');
@@ -41,6 +44,8 @@ export default function ClubProfileScreen() {
 
   useEffect(() => {
     if (!clubId) return;
+    setPerfil(null);
+    void cargarPerfilClub(clubId).then(setPerfil).catch(() => {});
     setConvocatorias([]);
     setPostulaciones([]);
     cargarClub(clubId).catch((e) => {
@@ -93,6 +98,10 @@ export default function ClubProfileScreen() {
         </TouchableOpacity>
       ) : null}
       {club?.rut ? <Text style={styles.meta}>RUT {club.rut}</Text> : null}
+      {perfil && (perfil.direccion || perfil.zona) ? <Text style={styles.meta}>{[perfil.direccion, perfil.zona].filter(Boolean).join(' · ')}</Text> : null}
+      {perfil?.latitud != null && perfil.longitud != null ? (
+        <View style={styles.section}><MapaEstatico latitud={perfil.latitud} longitud={perfil.longitud} /></View>
+      ) : null}
 
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Sobre el club</Text>
@@ -197,31 +206,40 @@ const makeStyles = (c: Colors) =>
     container: { flex: 1, backgroundColor: c.bg },
     content: { padding: 20, paddingTop: 60, alignItems: 'center' },
     backButton: { position: 'absolute', top: 60, left: 20, width: 34, height: 34, borderRadius: 17, backgroundColor: c.card, borderWidth: 1, borderColor: c.border, alignItems: 'center', justifyContent: 'center', zIndex: 1 },
-    avatar: { width: 84, height: 84, borderRadius: 20, alignItems: 'center', justifyContent: 'center', marginBottom: 14 },
-    name: { color: c.text, fontSize: 19, fontWeight: '700' },
-    meta: { color: c.textMuted, fontSize: 12, marginTop: 2, marginBottom: 20 },
-    section: { width: '100%', marginBottom: 20 },
-    sectionTitle: { color: c.text, fontSize: 13, fontWeight: '700', marginBottom: 6 },
-    sectionText: { color: c.textMuted, fontSize: 12, lineHeight: 18 },
-    convocatoria: { width: '100%', backgroundColor: c.card, borderWidth: 1, borderColor: c.border, borderRadius: 16, padding: 16, marginBottom: 14 },
-    convocatoriaHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 },
-    convocatoriaTitle: { color: c.text, fontSize: 13, fontWeight: '700' },
+    avatar: {
+      width: 84, height: 84, borderRadius: 22, backgroundColor: c.chip,
+      alignItems: 'center', justifyContent: 'center', marginBottom: espacio.m + 2,
+    },
+    name: { color: c.text, ...tipo.titulo },
+    meta: { color: c.textMuted, ...tipo.dato, marginTop: 2, marginBottom: espacio.xl },
+    section: { width: '100%', marginBottom: espacio.xl },
+    sectionTitle: { color: c.text, ...tipo.cuerpoFuerte, marginBottom: espacio.s - 2 },
+    sectionText: { color: c.textMuted, ...tipo.cuerpo, lineHeight: 19 },
+    convocatoria: {
+      width: '100%', backgroundColor: c.card, borderWidth: 1, borderColor: c.border,
+      borderRadius: radio.tarjeta, padding: espacio.l, marginBottom: espacio.m + 2,
+    },
+    convocatoriaHeader: { flexDirection: 'row', alignItems: 'center', gap: espacio.s, marginBottom: espacio.s },
+    convocatoriaTitle: { color: c.text, ...tipo.cuerpoFuerte },
     convocatoriaItem: { borderTopWidth: 1, borderTopColor: c.border, paddingTop: 12, marginTop: 12 },
-    convocatoriaNombre: { color: c.text, fontSize: 13.5, fontWeight: '700', marginBottom: 4 },
-    convocatoriaText: { color: c.textMuted, fontSize: 12, lineHeight: 18, marginBottom: 14 },
-    detalle: { backgroundColor: c.bg, borderWidth: 1, borderColor: c.border, borderRadius: 12, paddingHorizontal: 12, marginBottom: 14 },
-    detalleFila: { paddingVertical: 10, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: c.border },
-    detalleEtiqueta: { color: c.textMuted, fontSize: 10.5, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.3 },
-    detalleValor: { color: c.text, fontSize: 13, lineHeight: 18, marginTop: 2 },
-    postularButton: { backgroundColor: c.primary, borderRadius: 12, paddingVertical: 13, alignItems: 'center' },
-    postularButtonText: { color: '#fff', fontSize: 13, fontWeight: '700' },
-    pendienteBadge: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: c.chip, borderRadius: 12, paddingVertical: 12, justifyContent: 'center' },
-    pendienteText: { color: c.textMuted, fontSize: 13, fontWeight: '700', flexShrink: 1, textAlign: 'center' },
-    consultaButton: { width: '100%', flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: c.card, borderWidth: 1, borderColor: c.border, borderRadius: 14, padding: 12 },
+    convocatoriaNombre: { color: c.text, ...tipo.seccion, marginBottom: espacio.xs },
+    convocatoriaText: { color: c.textMuted, ...tipo.cuerpo, lineHeight: 19, marginBottom: espacio.m + 2 },
+    detalle: { marginBottom: espacio.m + 2 },
+    detalleFila: { paddingVertical: espacio.m - 2, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: c.border },
+    detalleEtiqueta: { color: c.textMuted, ...tipo.etiqueta, textTransform: 'uppercase', letterSpacing: 0.3 },
+    detalleValor: { color: c.text, ...tipo.cuerpo, lineHeight: 19, marginTop: 2 },
+    postularButton: { backgroundColor: c.primary, borderRadius: radio.control, paddingVertical: 13, alignItems: 'center' },
+    postularButtonText: { color: '#fff', ...tipo.cuerpoFuerte },
+    pendienteBadge: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: c.chip, borderRadius: radio.control, paddingVertical: espacio.m, justifyContent: 'center' },
+    pendienteText: { color: c.textMuted, ...tipo.cuerpoFuerte },
+    consultaButton: {
+      width: '100%', flexDirection: 'row', alignItems: 'center', gap: espacio.m,
+      backgroundColor: c.card, borderWidth: 1, borderColor: c.border, borderRadius: radio.tarjeta, padding: espacio.m,
+    },
     consultaIcono: { width: 36, height: 36, borderRadius: 11, backgroundColor: c.chip, alignItems: 'center', justifyContent: 'center' },
     consultaTextos: { flex: 1 },
-    consultaTitulo: { color: c.text, fontSize: 13, fontWeight: '700' },
-    consultaSub: { color: c.textMuted, fontSize: 11, marginTop: 2 },
+    consultaTitulo: { color: c.text, ...tipo.cuerpoFuerte },
+    consultaSub: { color: c.textMuted, fontSize: 11, fontWeight: '400', marginTop: 2 },
     consultaBadge: { minWidth: 18, height: 18, borderRadius: 9, paddingHorizontal: 5, backgroundColor: c.primary, alignItems: 'center', justifyContent: 'center' },
     consultaBadgeTexto: { color: '#fff', fontSize: 10, fontWeight: '700' },
   });

@@ -16,17 +16,21 @@ export type PerfilClub = {
   telefono: string;
   instagram: string;
   web: string;
+  direccion: string;
+  latitud: number | null;
+  longitud: number | null;
 };
 
 export const MAX_NOMBRE_CLUB = 60;
 export const MAX_DESCRIPCION_CLUB = 500;
+export const MAX_DIRECCION_CLUB = 250;
 
 /** Forma del perfil que devuelve el backend (solo los campos que usa la pantalla). */
 type ClubApi = {
   id: string;
   nombre: string;
   descripcion: string | null;
-  ubicacion: { comuna: string | null };
+  ubicacion: { comuna: string | null; direccion: string | null; latitud: number | null; longitud: number | null };
   email_contacto: string | null;
   telefono: string | null;
   sitio_web: string | null;
@@ -77,6 +81,9 @@ export async function cargarPerfilClub(clubId: string): Promise<PerfilClub> {
     telefono: c.telefono ?? '',
     instagram: instagramDesdeApi(c.redes_sociales?.instagram),
     web: c.sitio_web ?? '',
+    direccion: c.ubicacion?.direccion ?? '',
+    latitud: c.ubicacion?.latitud ?? null,
+    longitud: c.ubicacion?.longitud ?? null,
   };
 }
 
@@ -95,6 +102,12 @@ export async function guardarPerfilClub(clubId: string, datos: PerfilClub): Prom
   if (telefono && telefono.replace(/\D/g, '').length < 8) return { ok: false, motivo: 'El teléfono debe tener al menos 8 dígitos.' };
   const instagram = datos.instagram.trim();
   if (/\s/.test(instagram)) return { ok: false, motivo: 'El usuario de Instagram no puede tener espacios.' };
+  if (datos.direccion.length > MAX_DIRECCION_CLUB) return { ok: false, motivo: 'La dirección es demasiado larga.' };
+  if ((datos.latitud == null) !== (datos.longitud == null)
+      || (datos.latitud != null && (!Number.isFinite(datos.latitud) || Math.abs(datos.latitud) > 90))
+      || (datos.longitud != null && (!Number.isFinite(datos.longitud) || Math.abs(datos.longitud) > 180))) {
+    return { ok: false, motivo: 'La ubicación marcada no es válida.' };
+  }
 
   try {
     // Los deportes se envían por id del catálogo: el club solo puede publicar los que existen.
@@ -112,6 +125,9 @@ export async function guardarPerfilClub(clubId: string, datos: PerfilClub): Prom
         nombre,
         descripcion: datos.descripcion.trim() || null,
         comuna: datos.zona.trim() || null,
+        direccion: datos.direccion.trim() || null,
+        latitud: datos.latitud,
+        longitud: datos.longitud,
         email_contacto: email || null,
         telefono: telefono || null,
         sitio_web: normalizarWeb(datos.web),

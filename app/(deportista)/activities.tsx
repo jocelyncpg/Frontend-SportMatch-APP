@@ -1,14 +1,13 @@
 import { Ionicons } from '@expo/vector-icons';
-import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
-import { ReactNode, useCallback, useEffect, useMemo, useState } from 'react';
-import { RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { router, useLocalSearchParams } from 'expo-router';
+import { ReactNode, useEffect, useMemo, useState } from 'react';
+import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import InsigniaDeporte from '../../components/InsigniaDeporte';
 import {
   Actividad,
   FILTROS_ACTIVIDADES_VACIOS,
   FiltrosActividades,
-  cargarActividades,
-  cargarHistorial,
   comunasDisponibles,
   cuposTomados,
   estadoActividad,
@@ -17,8 +16,6 @@ import {
   pendientesDe,
   relacionConActividad,
   useActividades,
-  useEstadoActividades,
-  visualDeporte,
 } from '../../services/actividades';
 import { Usuario, getSession } from '../../services/auth';
 import { normalizar } from '../../services/comunas';
@@ -55,11 +52,7 @@ export default function ActivitiesScreen() {
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const insets = useSafeAreaInsets();
   const actividades = useActividades();
-  const carga = useEstadoActividades();
   const ahora = Date.now();
-
-  // Próximas desde el listado; las ya realizadas desde el historial del servidor.
-  useFocusEffect(useCallback(() => { void cargarActividades().then(cargarHistorial); }, []));
 
   // Inicio abre esta pantalla con tab=mias para ir directo a "Mis actividades".
   const { tab } = useLocalSearchParams<{ tab?: string }>();
@@ -106,46 +99,28 @@ export default function ActivitiesScreen() {
   );
 
   const fila = (a: Actividad) => {
-    const visual = visualDeporte(a.deporte);
     const insignia = insigniaDe(a, ahora);
     return (
       <TouchableOpacity key={a.id} style={styles.fila} onPress={() => abrir(a)} activeOpacity={0.7}>
-        <View style={[styles.iconBox, { backgroundColor: visual.colorBg }]}>
-          <Text style={styles.icon}>{visual.icon}</Text>
-        </View>
+        <InsigniaDeporte deporte={a.deporte} tamano={40} />
         <View style={styles.info}>
           <Text style={styles.filaTitulo} numberOfLines={1}>{a.titulo}</Text>
-          <Text style={styles.filaMeta} numberOfLines={1}>{formatearCuando(a.fecha, ahora)}{a.comuna ? ` · ${a.comuna}` : ''}</Text>
+          <Text style={styles.filaMeta} numberOfLines={1}>{formatearCuando(a.fecha, ahora)} · {a.comuna}</Text>
           <Text style={styles.filaMeta} numberOfLines={1}>{a.lugar}</Text>
-        </View>
-        <View style={styles.derecha}>
-          {insignia ? (
-            <View style={[styles.insignia, insignia.tipo === 'ok' && styles.insigniaOk, insignia.tipo === 'mal' && styles.insigniaMal]}>
-              <Text style={[styles.insigniaTexto, insignia.tipo === 'ok' && styles.insigniaTextoOk, insignia.tipo === 'info' && styles.insigniaTextoInfo, insignia.tipo === 'mal' && styles.insigniaTextoMal]}>
-                {insignia.texto}
-              </Text>
-            </View>
-          ) : null}
-          <Text style={styles.cupos}>{a.cupos === null ? 'Sin límite' : `${cuposTomados(a)}/${a.cupos} cupos`}</Text>
+          <View style={styles.pie}>
+            <Text style={styles.cupos}>{cuposTomados(a)}/{a.cupos} cupos</Text>
+            {insignia ? (
+              <View style={[styles.insignia, insignia.tipo === 'ok' && styles.insigniaOk, insignia.tipo === 'mal' && styles.insigniaMal]}>
+                <Text style={[styles.insigniaTexto, insignia.tipo === 'ok' && styles.insigniaTextoOk, insignia.tipo === 'info' && styles.insigniaTextoInfo, insignia.tipo === 'mal' && styles.insigniaTextoMal]}>
+                  {insignia.texto}
+                </Text>
+              </View>
+            ) : null}
+          </View>
         </View>
       </TouchableOpacity>
     );
   };
-
-  const recargar = <RefreshControl refreshing={carga.cargando} onRefresh={() => void cargarActividades().then(cargarHistorial)} tintColor={colors.accent} />;
-
-  // Error, sesión vencida o primera carga: reemplaza el mensaje de lista vacía.
-  const avisoCarga = carga.error ? (
-    <View style={styles.vacio}>
-      <Text style={styles.emptyText}>{carga.error}</Text>
-      <TouchableOpacity style={styles.vacioBoton}
-        onPress={() => carga.sesionExpirada ? router.replace('/(auth)/login') : void cargarActividades()}>
-        <Text style={styles.vacioBotonTexto}>{carga.sesionExpirada ? 'Iniciar sesión' : 'Reintentar'}</Text>
-      </TouchableOpacity>
-    </View>
-  ) : carga.cargando && actividades.length === 0 ? (
-    <View style={styles.vacio}><Text style={styles.emptyText}>Cargando actividades…</Text></View>
-  ) : null;
 
   const seccion = (titulo: string, lista: Actividad[], primera = false) =>
     lista.length > 0 ? (
@@ -227,10 +202,9 @@ export default function ActivitiesScreen() {
             {resultados.length} {resultados.length === 1 ? 'actividad abierta' : 'actividades abiertas'}
           </Text>
 
-          <ScrollView contentContainerStyle={styles.list} refreshControl={recargar}>
-            {avisoCarga}
+          <ScrollView contentContainerStyle={styles.list}>
             {resultados.map(fila)}
-            {!avisoCarga && resultados.length === 0 ? (
+            {resultados.length === 0 ? (
               <View style={styles.vacio}>
                 <Text style={styles.emptyText}>
                   {activos > 0 ? 'No hay actividades abiertas con esos filtros.' : 'No hay actividades abiertas por ahora.'}
@@ -245,12 +219,11 @@ export default function ActivitiesScreen() {
           </ScrollView>
         </>
       ) : (
-        <ScrollView contentContainerStyle={styles.list} refreshControl={recargar}>
-          {avisoCarga}
+        <ScrollView contentContainerStyle={styles.list}>
           {seccion('Organizo', organizo, true)}
           {seccion('Participo y postulaciones', participo, organizo.length === 0)}
           {seccion('Historial', historial, organizo.length === 0 && participo.length === 0)}
-          {!avisoCarga && mias.length === 0 ? (
+          {mias.length === 0 ? (
             <View style={styles.vacio}>
               <Text style={styles.emptyText}>Aún no participas en ninguna actividad.</Text>
               <TouchableOpacity style={styles.vacioBoton} onPress={() => setPestana('explorar')}>
@@ -299,17 +272,15 @@ const makeStyles = (c: Colors) =>
     list: { paddingHorizontal: 20, paddingBottom: 30 },
     seccion: { color: c.textMuted, fontSize: 11, fontWeight: '700', marginBottom: 8 },
     fila: {
-      flexDirection: 'row', alignItems: 'center', gap: 12,
+      flexDirection: 'row', alignItems: 'flex-start', gap: 12,
       backgroundColor: c.card, borderWidth: 1, borderColor: c.border,
       borderRadius: 13, padding: 12, marginBottom: 9,
     },
-    iconBox: { width: 40, height: 40, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
-    icon: { fontSize: 18 },
     info: { flex: 1 },
     filaTitulo: { color: c.text, fontSize: 12.5, fontWeight: '700' },
     filaMeta: { color: c.textMuted, fontSize: 10.5, marginTop: 2 },
-    derecha: { alignItems: 'flex-end', gap: 5 },
-    cupos: { color: c.textMuted, fontSize: 10 },
+    pie: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginTop: 6 },
+    cupos: { color: c.textMuted, fontSize: 11, fontWeight: '600' },
     insignia: { backgroundColor: c.chip, borderRadius: 9, paddingHorizontal: 8, paddingVertical: 3 },
     insigniaOk: { backgroundColor: c.badgeBg },
     insigniaMal: { backgroundColor: c.chip },

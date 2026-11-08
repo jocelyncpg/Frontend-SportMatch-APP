@@ -4,7 +4,7 @@ import * as WebBrowser from 'expo-web-browser';
 import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { beneficiosDe, confirmarPago, iniciarPago, leerPagoPendiente, olvidarPagoPendiente, precioTexto, type CuentaPlan, type Plan } from '../services/planes';
-import { Colors, useAppTheme } from '../theme/ThemeContext';
+import { Colors, useAppTheme, espacio, tipo } from '../theme/ThemeContext';
 
 type Props = {
   visible: boolean;
@@ -156,21 +156,21 @@ const makeStyles = (c: Colors) =>
     fondo: { flex: 1, backgroundColor: c.overlay, justifyContent: 'center', padding: 20 },
     hoja: { backgroundColor: c.card, borderRadius: 18, borderWidth: 1, borderColor: c.border, padding: 18, maxHeight: '90%' },
     centro: { alignItems: 'center', gap: 10, paddingVertical: 10 },
-    titulo: { color: c.text, fontSize: 17, fontWeight: '800' },
-    precio: { color: c.accent, fontSize: 20, fontWeight: '800', marginTop: 4 },
-    resumen: { color: c.textMuted, fontSize: 12, marginTop: 2, marginBottom: 12 },
-    texto: { color: c.textMuted, fontSize: 13, textAlign: 'center', lineHeight: 19 },
+    titulo: { color: c.text, ...tipo.titulo },
+    precio: { color: c.accent, fontSize: 24, fontWeight: '800', marginTop: espacio.xs },
+    resumen: { color: c.textMuted, ...tipo.cuerpo, marginTop: espacio.xs, marginBottom: espacio.l },
+    texto: { color: c.textMuted, ...tipo.cuerpo, textAlign: 'center', lineHeight: 19 },
     lista: { flexGrow: 0, marginBottom: 12 },
-    beneficio: { flexDirection: 'row', gap: 8, alignItems: 'flex-start' },
-    beneficioTexto: { flex: 1, color: c.text, fontSize: 12, lineHeight: 17 },
+    beneficio: { flexDirection: 'row', gap: espacio.m, alignItems: 'flex-start' },
+    beneficioTexto: { flex: 1, color: c.text, ...tipo.cuerpo, lineHeight: 19 },
     aviso: { flexDirection: 'row', gap: 10, alignItems: 'flex-start', backgroundColor: c.chip, borderRadius: 12, padding: 12 },
     avisoTexto: { flex: 1, color: c.textMuted, fontSize: 11.5, lineHeight: 16 },
-    error: { color: c.danger, fontSize: 12, marginTop: 10 },
+    error: { color: c.danger, ...tipo.cuerpo, marginTop: espacio.m },
     acciones: { flexDirection: 'row', gap: 10, marginTop: 14 },
     botonSecundario: { flex: 1, borderWidth: 1, borderColor: c.border, borderRadius: 13, paddingVertical: 13, alignItems: 'center' },
     botonSecundarioTexto: { color: c.text, fontSize: 13, fontWeight: '700' },
     botonPrimario: { flex: 1.4, backgroundColor: c.primary, borderRadius: 13, paddingVertical: 13, alignItems: 'center', minWidth: 120 },
     // Botón de la pantalla "¡Listo!": sin flex, porque está en una columna y flex le quitaría el alto.
-    botonCerrar: { backgroundColor: c.primary, borderRadius: 13, paddingVertical: 13, paddingHorizontal: 40, alignItems: 'center', marginTop: 8 },
+    botonCerrar: { alignSelf: 'stretch', marginTop: espacio.s },
     botonPrimarioTexto: { color: '#fff', fontSize: 13, fontWeight: '700' },
   });
