@@ -16,9 +16,9 @@ export type Plan = {
   destacado: boolean;
   /** Para qué tipo de cuenta está pensado. */
   paraCuenta: 'deportista' | 'club';
-  /** Id del plan en Ms-club (/payments/plans). Sin él, el plan aún no se puede contratar. */
+  /** Id del plan en ms-pago (/payments/plans). Sin él, el plan aún no se puede contratar. */
   backendId?: number;
-  /** Lo siguiente viene de Ms-club cuando el plan ya se cargó; el diseño no lo trae. */
+  /** Lo siguiente viene de ms-pago cuando el plan ya se cargó; el diseño no lo trae. */
   duracionDias?: number | null;
   beneficios?: string[];
 };
@@ -107,7 +107,7 @@ export function beneficiosDe(id: PlanId): string[] {
     .map((f) => (f[id] === true ? f.etiqueta : `${f.etiqueta}: ${f[id]}`));
 }
 
-// ---------- catálogo y plan vigente desde Ms-club (/payments) ----------
+// ---------- catálogo y plan vigente desde ms-pago (/payments) ----------
 
 /** Plan de /payments/plans. USUARIO es el plan de pago del deportista (Pro); CLUB, el del club. */
 export type PlanApi = {
@@ -126,7 +126,7 @@ type EstadoPlanes = { planes: Plan[]; api: Record<CuentaPlan, PlanApi[]>; actual
 const INICIAL: EstadoPlanes = { planes: PLANES, api: { deportista: [], club: [] }, actual: { ...SIN_PLAN } };
 
 /**
- * Los tres planes del diseño con los datos reales de Ms-club por debajo (precio, duración, descripción, beneficios):
+ * Los tres planes del diseño con los datos reales de ms-pago por debajo (precio, duración, descripción, beneficios):
  * Gratuito toma el plan gratuito más barato del deportista, Pro el de pago más barato del deportista y Club el más
  * barato del club. Los nombres y la tabla comparativa son los del diseño. El backend ya deja fuera los planes desactivados.
  */
@@ -161,12 +161,12 @@ const suscribir = (o: () => void) => { oyentes.add(o); return () => { oyentes.de
 
 export const getPlanActual = (cuenta: CuentaPlan): PlanId | null => estado.actual[cuenta];
 
-/** Plan vigente de la cuenta (según Ms-club); se actualiza al cargar o al confirmar un pago. */
+/** Plan vigente de la cuenta (según ms-pago); se actualiza al cargar o al confirmar un pago. */
 export function usePlanActual(cuenta: CuentaPlan): PlanId | null {
   return useSyncExternalStore(suscribir, () => estado.actual[cuenta], () => estado.actual[cuenta]);
 }
 
-/** Los planes con el precio y el id reales de Ms-club, cuando ya se cargaron. */
+/** Los planes con el precio y el id reales de ms-pago, cuando ya se cargaron. */
 export function usePlanes(): Plan[] {
   return useSyncExternalStore(suscribir, () => estado.planes, () => estado.planes);
 }

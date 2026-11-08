@@ -15,7 +15,7 @@ type Props = {
 };
 
 /**
- * HU-42/43: resumen del plan y pago con Webpay Plus (Ms-club).
+ * HU-42/43: resumen del plan y pago con Webpay Plus (ms-pago).
  * Se abre la página de pago en el navegador; al volver, la app confirma el pago con el backend.
  */
 export default function ContratarPlanModal({ visible, plan, cuenta, onClose }: Props) {

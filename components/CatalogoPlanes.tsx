@@ -21,7 +21,7 @@ export default function CatalogoPlanes({
   const { colors } = useAppTheme();
   const planDelDeportista = usePlanActual('deportista');
   const planActual = planIndicado === undefined ? planDelDeportista : planIndicado;
-  // Con el precio real de Ms-club cuando ya se cargó; si no, el referencial.
+  // Con el precio real de ms-pago cuando ya se cargó; si no, el referencial.
   const PLANES = usePlanes();
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
