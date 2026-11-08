@@ -41,6 +41,19 @@ export type CrearConvocatoria = {
   descripcion?: string;
 };
 
+/**
+ * HU-68: lo que se puede cambiar de una convocatoria publicada. Solo se envía lo que cambia; `null` borra las
+ * edades, la comuna, el título o la descripción. Mismas reglas que al publicar.
+ */
+export type EditarConvocatoria = Partial<Omit<CrearConvocatoria, 'edad_minima' | 'edad_maxima' | 'comuna' | 'titulo' | 'descripcion'>> & {
+  edad_minima?: number | null;
+  edad_maxima?: number | null;
+  comuna?: string | null;
+  titulo?: string | null;
+  descripcion?: string | null;
+  chat_postulantes_habilitado?: boolean;
+};
+
 export type PaginaConvocatorias = {
   items: Convocatoria[];
   total: number;
@@ -234,6 +247,16 @@ export async function publicarConvocatoria(clubId: string, datos: CrearConvocato
     token: await tokenActual(),
     body: datos,
   });
+}
+
+/**
+ * El club dueño edita su convocatoria (PATCH /clubs/{club}/announcements/{id}). Si cambian la fecha, el lugar, los
+ * requisitos o el deporte, el servidor avisa a los postulantes. 409: cerrada, finalizada o cupos por debajo de los
+ * aceptados (el mensaje del servidor se muestra tal cual).
+ */
+export async function editarConvocatoria(clubId: string, id: string, cambios: EditarConvocatoria) {
+  const ruta = `/clubs/${encodeURIComponent(clubId)}/announcements/${encodeURIComponent(id)}`;
+  return apiRequest<Convocatoria>(ruta, { method: 'PATCH', token: await tokenActual(), body: cambios });
 }
 
 export async function cerrarConvocatoria(clubId: string, id: string) {

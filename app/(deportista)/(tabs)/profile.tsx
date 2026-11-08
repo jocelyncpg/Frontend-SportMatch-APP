@@ -152,8 +152,13 @@ export default function ProfileScreen() {
   async function guardarFotoSiExiste(resultado: ImagePicker.ImagePickerResult) {
     if (!resultado.canceled && usuario) {
       const uri = resultado.assets[0].uri;
-      await updateFotoPerfil(usuario.id, uri);
-      setUsuario({ ...usuario, fotoPerfil: uri });
+      try {
+        await updateFotoPerfil(usuario.id, uri);
+        // La sesión ya trae la dirección de la foto que guardó el servidor.
+        setUsuario((await getSession()) ?? usuario);
+      } catch (e) {
+        avisarError('No se pudo actualizar el perfil', e);
+      }
     }
   }
 
