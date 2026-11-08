@@ -23,6 +23,25 @@ const light: Colors = {
   success: '#16A34A', successBg: '#DCFCE7', overlay: 'rgba(0,0,0,0.4)',
 };
 
+// ---------- medidas compartidas ----------
+// Usar estas medidas en vez de números sueltos mantiene las pantallas parejas entre sí.
+/** Esquinas: controles (botones, campos, chips) y tarjetas. */
+export const radio = { control: 12, tarjeta: 16 } as const;
+/** Separaciones, de menor a mayor. */
+export const espacio = { xs: 4, s: 8, m: 12, l: 16, xl: 20, xxl: 24 } as const;
+/**
+ * Escala de textos. Siempre con fontWeight explícito (en Android con "Texto en negrita" activado,
+ * un texto sin peso se mide más angosto de lo que se dibuja y se corta). Ningún texto baja de 11.
+ */
+export const tipo = {
+  titulo: { fontSize: 20, fontWeight: '700' },
+  seccion: { fontSize: 15, fontWeight: '700' },
+  cuerpo: { fontSize: 13, fontWeight: '400' },
+  cuerpoFuerte: { fontSize: 13, fontWeight: '700' },
+  dato: { fontSize: 12, fontWeight: '400' },
+  etiqueta: { fontSize: 11, fontWeight: '600' },
+} as const;
+
 export type Mode = 'system' | 'light' | 'dark';
 const KEY = 'sportmatch_theme_mode';
 

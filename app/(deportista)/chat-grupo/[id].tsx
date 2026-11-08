@@ -1,4 +1,4 @@
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useCallback, useMemo, useRef, useState } from 'react';
 import {
@@ -27,7 +27,7 @@ import {
   useSalaGrupal,
   type MensajeGrupal,
 } from '../../../services/chatGrupal';
-import { Colors, useAppTheme } from '../../../theme/ThemeContext';
+import { Colors, useAppTheme, espacio, radio, tipo } from '../../../theme/ThemeContext';
 export default function ChatGrupoScreen() {
   const { colors } = useAppTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
@@ -158,7 +158,7 @@ export default function ChatGrupoScreen() {
         </TouchableOpacity>
         <TouchableOpacity style={styles.topbarCentro} onPress={verActividad} activeOpacity={0.7}>
           <View style={[styles.iconBox, { backgroundColor: visual.colorBg }]}>
-            <Text style={styles.icon}>{visual.icon}</Text>
+            <MaterialCommunityIcons name={visual.icon} size={24} color={visual.color} />
           </View>
           <View style={styles.topbarTextos}>
             <Text style={styles.name} numberOfLines={1}>{chat?.titulo ?? actividad?.titulo}</Text>
@@ -252,39 +252,25 @@ const makeStyles = (c: Colors) =>
     topbarTextos: { flex: 1 },
     iconBox: { width: 36, height: 36, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
     icon: { fontSize: 17 },
-    name: { color: c.text, fontSize: 14, fontWeight: '700' },
-    subtitulo: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-    sport: { color: c.textMuted, fontSize: 11 },
-    etiqueta: { flexDirection: 'row', alignItems: 'center', gap: 3 },
-    etiquetaTexto: { color: c.textMuted, fontSize: 10.5, fontWeight: '600' },
-    list: { padding: 20, gap: 6 },
-    bubble: { maxWidth: '78%', borderRadius: 16, paddingHorizontal: 14, paddingVertical: 9, marginBottom: 4 },
-    bubbleOther: {
-      backgroundColor: c.card,
-      borderWidth: 1,
-      borderColor: c.border,
-      alignSelf: 'flex-start',
-      borderBottomLeftRadius: 4
-    },
-    bubbleOwn: { backgroundColor: c.primary, alignSelf: 'flex-end', borderBottomRightRadius: 4 },
-    autor: { color: c.accent, fontSize: 11, fontWeight: '700', marginBottom: 3 },
-    bubbleTextOther: { color: c.text, fontSize: 13 },
-    bubbleTextOwn: { color: '#fff', fontSize: 13 },
-    horaOther: { color: c.textMuted, fontSize: 9.5, marginTop: 3, alignSelf: 'flex-end' },
-    horaOwn: { color: 'rgba(255,255,255,0.75)', fontSize: 9.5, marginTop: 3, alignSelf: 'flex-end' },
-    sistema: {
-      alignSelf: 'center',
-      backgroundColor: c.chip,
-      borderRadius: 12,
-      paddingHorizontal: 12,
-      paddingVertical: 5,
-      marginVertical: 4,
-      maxWidth: '90%'
-    },
-    sistemaTexto: { color: c.textMuted, fontSize: 11, textAlign: 'center' },
-    demoLink: { alignItems: 'center', paddingVertical: 6 },
-    demoLinkTexto: { color: c.textMuted, fontSize: 11 },
-    errorTexto: { color: c.danger, fontSize: 11.5, paddingHorizontal: 20, paddingBottom: 6 },
+    name: { color: c.text, ...tipo.seccion },
+    subtitulo: { flexDirection: 'row', alignItems: 'center', gap: espacio.s },
+    sport: { color: c.textMuted, ...tipo.dato },
+    etiqueta: { flexDirection: 'row', alignItems: 'center', gap: espacio.xs },
+    etiquetaTexto: { color: c.textMuted, ...tipo.etiqueta },
+    list: { padding: espacio.xl, gap: espacio.m },
+    bubble: { maxWidth: '78%', borderRadius: radio.tarjeta, paddingHorizontal: espacio.l - 2, paddingVertical: espacio.m - 1, marginBottom: espacio.xs },
+    bubbleOther: { backgroundColor: c.card, borderWidth: 1, borderColor: c.border, alignSelf: 'flex-start', borderBottomLeftRadius: espacio.xs },
+    bubbleOwn: { backgroundColor: c.primary, alignSelf: 'flex-end', borderBottomRightRadius: espacio.xs },
+    autor: { color: c.accent, ...tipo.etiqueta, fontWeight: '700', marginBottom: 3 },
+    bubbleTextOther: { color: c.text, ...tipo.cuerpo, fontSize: 14, lineHeight: 20 },
+    bubbleTextOwn: { color: '#FFFFFF', ...tipo.cuerpo, fontSize: 14, lineHeight: 20 },
+    horaOther: { color: c.textMuted, ...tipo.etiqueta, fontWeight: '400', marginTop: 3, alignSelf: 'flex-end' },
+    horaOwn: { color: 'rgba(255,255,255,0.75)', ...tipo.etiqueta, fontWeight: '400', marginTop: 3, alignSelf: 'flex-end' },
+    sistema: { alignSelf: 'center', backgroundColor: c.chip, borderRadius: radio.control, paddingHorizontal: espacio.m, paddingVertical: espacio.xs + 1, marginVertical: espacio.xs, maxWidth: '90%' },
+    sistemaTexto: { color: c.textMuted, ...tipo.dato, textAlign: 'center' },
+    demoLink: { alignItems: 'center', justifyContent: 'center', minHeight: 44 },
+    demoLinkTexto: { color: c.textMuted, ...tipo.etiqueta },
+    errorTexto: { color: c.danger, ...tipo.dato, paddingHorizontal: espacio.xl, paddingBottom: espacio.s - 2 },
     inputRow: {
       flexDirection: 'row',
       alignItems: 'center',
@@ -305,35 +291,15 @@ const makeStyles = (c: Colors) =>
       color: c.text,
       fontSize: 13
     },
-    sendButton: {
-      width: 40,
-      height: 40,
-      borderRadius: 20,
-      backgroundColor: c.primary,
-      alignItems: 'center',
-      justifyContent: 'center'
-    },
+    sendButton: { width: 44, height: 44, borderRadius: 22, backgroundColor: c.primary, alignItems: 'center', justifyContent: 'center' },
     avisoBox: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 10,
-      paddingTop: 12,
-      paddingHorizontal: 16,
-      borderTopWidth: 1,
-      borderColor: c.border,
-      backgroundColor: c.card,
+      flexDirection: 'row', alignItems: 'center', gap: espacio.m,
+      paddingTop: espacio.m, paddingHorizontal: espacio.l, borderTopWidth: 1, borderColor: c.border, backgroundColor: c.card,
     },
-    avisoTexto: { flex: 1, color: c.textMuted, fontSize: 12, lineHeight: 17 },
-    sinAcceso: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 30, gap: 8 },
-    sinAccesoTitulo: { color: c.text, fontSize: 15, fontWeight: '700', marginTop: 6, textAlign: 'center' },
-    sinAccesoTexto: { color: c.textMuted, fontSize: 12, textAlign: 'center', lineHeight: 18 },
-    volverBtn: {
-      marginTop: 14,
-      borderWidth: 1,
-      borderColor: c.border,
-      borderRadius: 12,
-      paddingHorizontal: 18,
-      paddingVertical: 9
-    },
+    avisoTexto: { flex: 1, color: c.textMuted, ...tipo.dato, lineHeight: 17 },
+    sinAcceso: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: espacio.xxl + espacio.s, gap: espacio.s },
+    sinAccesoTitulo: { color: c.text, ...tipo.seccion, marginTop: espacio.s - 2, textAlign: 'center' },
+    sinAccesoTexto: { color: c.textMuted, ...tipo.cuerpo, textAlign: 'center', lineHeight: 19 },
+    volverBtn: { marginTop: espacio.l, alignSelf: 'stretch' },
     volverTexto: { color: c.accent, fontSize: 12, fontWeight: '700' },
   });

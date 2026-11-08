@@ -26,7 +26,7 @@ import {
   useMatches,
 } from '../../../services/matchStore';
 import { bloquear, cargarBloqueados, desbloquear, useBloqueados } from '../../../services/reportes';
-import { Colors, useAppTheme } from '../../../theme/ThemeContext';
+import { Colors, useAppTheme, espacio, radio, tipo } from '../../../theme/ThemeContext';
 
 export default function PerfilDeportistaScreen() {
   const { colors } = useAppTheme();
@@ -409,48 +409,48 @@ const makeStyles = (c: Colors) =>
       alignItems: 'center', justifyContent: 'center',
     },
     reportButton: {
-      position: 'absolute', right: 20, zIndex: 2,
-      width: 36, height: 36, borderRadius: 18,
-      backgroundColor: c.card, borderWidth: 1, borderColor: c.border,
+      position: 'absolute', right: espacio.l, zIndex: 2,
+      width: 44, height: 44, borderRadius: 22,
+      backgroundColor: 'rgba(0,0,0,0.38)',
       alignItems: 'center', justifyContent: 'center',
     },
     content: { paddingBottom: 30 },
-    foto: { width: '100%', height: 320 },
+    foto: { width: '100%' },
     compatBadge: {
-      position: 'absolute', bottom: 16, right: 16,
-      backgroundColor: 'rgba(11,15,25,0.75)', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20,
+      position: 'absolute', bottom: espacio.l, right: espacio.l,
+      backgroundColor: 'rgba(0,0,0,0.38)', paddingHorizontal: espacio.m, paddingVertical: espacio.s - 2, borderRadius: radio.tarjeta + 4,
     },
-    compatText: { color: '#4ADE80', fontSize: 12, fontWeight: '800' },
+    compatText: { color: '#4ADE80', ...tipo.cuerpoFuerte, fontWeight: '800' },
     ampliarBadge: {
-      position: 'absolute', bottom: 16, left: 16,
+      position: 'absolute', bottom: espacio.l, left: espacio.l,
       width: 32, height: 32, borderRadius: 16,
-      backgroundColor: 'rgba(11,15,25,0.75)', alignItems: 'center', justifyContent: 'center',
+      backgroundColor: 'rgba(0,0,0,0.38)', alignItems: 'center', justifyContent: 'center',
     },
-    info: { padding: 20 },
+    info: { padding: espacio.xl },
     nameRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 10 },
-    name: { color: c.text, fontSize: 22, fontWeight: '700' },
-    distance: { color: c.textMuted, fontSize: 12 },
-    tagsRow: { flexDirection: 'row', gap: 8, marginBottom: 20 },
-    tag: { backgroundColor: c.chip, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 6 },
-    tagText: { color: c.accent, fontSize: 12, fontWeight: '700' },
-    sectionTitle: { color: c.text, fontSize: 14, fontWeight: '700', marginBottom: 8 },
-    bio: { color: c.textMuted, fontSize: 13.5, lineHeight: 20 },
+    name: { color: c.text, fontSize: 24, fontWeight: '800', lineHeight: 30 },
+    distance: { color: c.textMuted, ...tipo.cuerpo, flexShrink: 1 },
+    tagsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: espacio.s, marginTop: espacio.l, marginBottom: espacio.xl },
+    tag: { backgroundColor: c.chip, borderRadius: radio.control, paddingHorizontal: espacio.m, paddingVertical: espacio.s - 1 },
+    tagText: { color: c.accent, ...tipo.cuerpoFuerte },
+    sectionTitle: { color: c.text, ...tipo.seccion, marginBottom: espacio.s },
+    bio: { color: c.textMuted, ...tipo.cuerpo, fontSize: 14, lineHeight: 21 },
     bloquear: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 22, alignSelf: 'flex-start', paddingVertical: 6 },
     bloquearTexto: { color: c.danger, fontSize: 12.5, fontWeight: '700' },
     actions: {
-      flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 14,
-      paddingTop: 16, paddingHorizontal: 20, borderTopWidth: 1, borderColor: c.border,
+      flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: espacio.l,
+      paddingTop: espacio.l, paddingHorizontal: espacio.xl, borderTopWidth: 1, borderColor: c.border, backgroundColor: c.bg,
     },
     rejectButton: {
       width: 56, height: 56, borderRadius: 28, backgroundColor: c.card,
       borderWidth: 1, borderColor: c.border, alignItems: 'center', justifyContent: 'center',
     },
     acceptButton: {
-      width: 56, height: 56, borderRadius: 28, backgroundColor: '#DB2777',
+      width: 56, height: 56, borderRadius: 28, backgroundColor: c.primary,
       alignItems: 'center', justifyContent: 'center',
     },
     aceptarButton: {
-      width: 56, height: 56, borderRadius: 28, backgroundColor: '#16A34A',
+      width: 56, height: 56, borderRadius: 28, backgroundColor: '#22C55E',
       alignItems: 'center', justifyContent: 'center',
     },
     pillPrimario: {
@@ -473,10 +473,10 @@ const makeStyles = (c: Colors) =>
     visorFondo: { flex: 1, backgroundColor: 'rgba(0,0,0,0.95)', alignItems: 'center', justifyContent: 'center' },
     visorImagen: { width: '100%', height: '100%' },
     visorCerrar: {
-      position: 'absolute', right: 20,
-      width: 38, height: 38, borderRadius: 19,
+      position: 'absolute', right: espacio.xl,
+      width: 44, height: 44, borderRadius: 22,
       backgroundColor: 'rgba(255,255,255,0.16)', alignItems: 'center', justifyContent: 'center',
     },
-    visorPie: { position: 'absolute', bottom: 0, left: 0, right: 0, alignItems: 'center', paddingTop: 12 },
-    visorNombre: { color: '#fff', fontSize: 15, fontWeight: '700' },
+    visorPie: { position: 'absolute', bottom: 0, left: 0, right: 0, alignItems: 'center', paddingTop: espacio.m },
+    visorNombre: { color: '#FFFFFF', ...tipo.seccion },
   });

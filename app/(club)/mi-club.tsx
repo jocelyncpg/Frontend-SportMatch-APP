@@ -2,14 +2,17 @@ import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import MapaEstatico from '../../components/MapaEstatico';
 import { getSession } from '../../services/auth';
-import { listarDeportesClub, type DeporteClub } from '../../services/clubes';
+import { listarDeportesClub } from '../../services/clubes';
+import { solicitarUbicacion } from '../../services/location';
 import {
-    MAX_DESCRIPCION_CLUB,
-    MAX_NOMBRE_CLUB,
-    cargarPerfilClub,
-    guardarPerfilClub,
-    type PerfilClub,
+  MAX_DESCRIPCION_CLUB,
+  MAX_DIRECCION_CLUB,
+  MAX_NOMBRE_CLUB,
+  guardarPerfilClub,
+  cargarPerfilClub,
+  type PerfilClub,
 } from '../../services/perfilClub';
 import { Colors, useAppTheme } from '../../theme/ThemeContext';
 
@@ -18,51 +21,35 @@ export default function MiClubScreen() {
   const { colors } = useAppTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
-  const [clubId, setClubId] = useState<string | null>(null);
-  const [inicial, setInicial] = useState<PerfilClub | null>(null);
-  const [deportes, setDeportes] = useState<DeporteClub[]>([]);
+  const [perfil, setPerfil] = useState<PerfilClub | null>(null);
+  const [clubId, setClubId] = useState('');
   const [error, setError] = useState('');
   useEffect(() => {
-    let vigente = true;
+    let activo = true;
     (async () => {
-      try {
-        const sesion = await getSession();
-        if (!sesion?.clubId) {
-          if (vigente) setError('Tu cuenta todavía no administra un club.');
-          return;
-        }
-        const [perfil, catalogo] = await Promise.all([cargarPerfilClub(sesion.clubId), listarDeportesClub()]);
-        if (!vigente) return;
-        setClubId(sesion.clubId);
-        setInicial(perfil);
-        setDeportes(catalogo);
-      } catch (e) {
-        if (vigente) setError(e instanceof Error ? e.message : 'No se pudo cargar el perfil del club.');
-      }
-    })();
-    return () => {
-      vigente = false;
-    };
+      const sesion = await getSession();
+      if (!sesion?.clubId) throw new Error('Primero registra o selecciona tu club desde el panel.');
+      const datos = await cargarPerfilClub(sesion.clubId);
+      if (activo) { setClubId(sesion.clubId); setPerfil(datos); }
+    })().catch((e) => { if (activo) setError(e.message); });
+    return () => { activo = false; };
   }, []);
-
-  // Hasta cargar el club real no se muestra el formulario.
-  if (!clubId || !inicial) {
-    return (
-      <View style={styles.container}>
-        {error ? <Text accessibilityRole="alert" style={[styles.error, { margin: 20, marginTop: 60 }]}>{error}</Text> : null}
-      </View>
-    );
-  }
-  return <Formulario key={clubId} clubId={clubId} inicial={inicial} deportes={deportes} />;
+  if (!perfil) return <View style={styles.container}><Text style={styles.subtitulo}>{error || 'Cargando club?'}</Text><TouchableOpacity onPress={() => router.back()}><Text style={styles.subtitulo}>Volver</Text></TouchableOpacity></View>;
+  return <Formulario key={clubId} clubId={clubId} inicial={perfil} />;
 }
 
-function Formulario({ clubId, inicial, deportes }: { clubId: string; inicial: PerfilClub; deportes: DeporteClub[] }) {
+function Formulario({ clubId, inicial }: { clubId: string; inicial: PerfilClub }) {
   const { colors } = useAppTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const [f, setF] = useState<PerfilClub>(inicial);
   const [error, setError] = useState('');
   const [guardado, setGuardado] = useState(false);
+  const [catalogo, setCatalogo] = useState<string[]>([]);
   const [guardando, setGuardando] = useState(false);
+  useEffect(() => { listarDeportesClub().then((ds) => setCatalogo(ds.map((d) => d.nombre))).catch((e) => setError(e.message)); }, []);
+  const [buscandoGps, setBuscandoGps] = useState(false);
+
+  const tienePunto = f.latitud != null && f.longitud != null;
 
   const set = <K extends keyof PerfilClub>(campo: K, valor: PerfilClub[K]) => {
     setF((p) => ({ ...p, [campo]: valor }));
@@ -72,6 +59,32 @@ function Formulario({ clubId, inicial, deportes }: { clubId: string; inicial: Pe
 
   function alternarDeporte(d: string) {
     set('deportes', f.deportes.includes(d) ? f.deportes.filter((x) => x !== d) : [...f.deportes, d]);
+  }
+
+  function marcar(latitud: number, longitud: number) {
+    setF((p) => ({ ...p, latitud, longitud }));
+    setGuardado(false);
+    setError('');
+  }
+
+  function quitarMarca() {
+    setF((p) => ({ ...p, latitud: null, longitud: null }));
+    setGuardado(false);
+  }
+
+  // Útil si el club está físicamente donde se encuentra: usa el GPS del teléfono.
+  async function usarMiUbicacion() {
+    setBuscandoGps(true);
+    setError('');
+    try {
+      const r = await solicitarUbicacion();
+      if (r.ok && r.ubicacion) marcar(Number(r.ubicacion.latitud.toFixed(6)), Number(r.ubicacion.longitud.toFixed(6)));
+      else setError('No se pudo usar el GPS. Permite el acceso a la ubicación.');
+    } catch {
+      setError('No se pudo obtener tu ubicación.');
+    } finally {
+      setBuscandoGps(false);
+    }
   }
 
   async function guardar() {
@@ -134,22 +147,47 @@ function Formulario({ clubId, inicial, deportes }: { clubId: string; inicial: Pe
         <View style={styles.tarjeta}>
           <Text style={styles.etiqueta}>Deportes ofrecidos</Text>
           <View style={styles.chips}>
-            {deportes.map((d) => {
-              const activo = f.deportes.includes(d.nombre);
+            {catalogo.map((d) => {
+              const activo = f.deportes.includes(d);
               return (
                 <TouchableOpacity
-                  key={d.id}
+                  key={d}
                   style={[styles.chip, activo && styles.chipActivo]}
-                  onPress={() => alternarDeporte(d.nombre)}
+                  onPress={() => alternarDeporte(d)}
                   accessibilityRole="button"
                   accessibilityState={{ selected: activo }}
                 >
-                  <Text style={[styles.chipTexto, activo && styles.chipTextoActivo]}>{d.nombre}</Text>
+                  <Text style={[styles.chipTexto, activo && styles.chipTextoActivo]}>{d}</Text>
                 </TouchableOpacity>
               );
             })}
           </View>
           {f.deportes.length === 0 ? <Text style={styles.aviso}>Selecciona al menos un deporte.</Text> : null}
+        </View>
+
+        <View style={styles.tarjeta}>
+          <Text style={styles.tituloTarjeta}>Ubicación</Text>
+          <Text style={styles.ayuda}>Así te encuentran los deportistas. Usa tu ubicación actual para marcar dónde está tu club.</Text>
+          {campo('Dirección', f.direccion, (v) => set('direccion', v), { placeholder: 'Calle y número', maxLength: MAX_DIRECCION_CLUB })}
+          {tienePunto ? (
+            <View style={styles.mapaWrap}>
+              <MapaEstatico latitud={f.latitud as number} longitud={f.longitud as number} />
+            </View>
+          ) : null}
+          <View style={styles.accionesMapa}>
+            <TouchableOpacity style={styles.accionBoton} onPress={usarMiUbicacion} disabled={buscandoGps} accessibilityRole="button">
+              <Ionicons name="locate-outline" size={16} color={colors.accent} />
+              <Text style={styles.accionTexto}>{buscandoGps ? 'Buscando…' : 'Usar mi ubicación actual'}</Text>
+            </TouchableOpacity>
+            {tienePunto ? (
+              <TouchableOpacity onPress={quitarMarca} accessibilityRole="button">
+                <Text style={styles.quitar}>Quitar marca</Text>
+              </TouchableOpacity>
+            ) : null}
+          </View>
+          <Text style={styles.coord}>
+            {tienePunto ? `Marcado: ${(f.latitud as number).toFixed(5)}, ${(f.longitud as number).toFixed(5)}` : 'Aún no marcas la ubicación del club.'}
+          </Text>
         </View>
 
         <View style={styles.tarjeta}>
@@ -162,7 +200,7 @@ function Formulario({ clubId, inicial, deportes }: { clubId: string; inicial: Pe
         {error ? <Text accessibilityRole="alert" style={styles.error}>{error}</Text> : null}
         {guardado ? <Text accessibilityLiveRegion="polite" style={styles.exito}>Cambios guardados</Text> : null}
 
-        <TouchableOpacity style={[styles.guardar, guardando && { opacity: 0.6 }]} onPress={guardar} disabled={guardando} accessibilityRole="button">
+        <TouchableOpacity style={styles.guardar} onPress={guardar} accessibilityRole="button">
           <Text style={styles.guardarTexto}>Guardar cambios</Text>
         </TouchableOpacity>
       </ScrollView>
@@ -181,6 +219,14 @@ const makeStyles = (c: Colors) =>
     titulo: { color: c.text, fontSize: 20, fontWeight: '800' },
     subtitulo: { color: c.textMuted, fontSize: 12.5, lineHeight: 18, marginTop: 4, marginBottom: 18 },
     tarjeta: { backgroundColor: c.card, borderWidth: 1, borderColor: c.border, borderRadius: 16, padding: 16, marginBottom: 14 },
+    tituloTarjeta: { color: c.text, fontSize: 13, fontWeight: '700' },
+    ayuda: { color: c.textMuted, fontSize: 11.5, lineHeight: 16, marginTop: 4, marginBottom: 12 },
+    mapaWrap: { borderRadius: 12, overflow: 'hidden', borderWidth: 1, borderColor: c.border },
+    accionesMapa: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 12 },
+    accionBoton: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+    accionTexto: { color: c.accent, fontSize: 12.5, fontWeight: '700' },
+    quitar: { color: c.danger, fontSize: 12, fontWeight: '700' },
+    coord: { color: c.textMuted, fontSize: 11, marginTop: 8 },
     etiqueta: { color: c.textMuted, fontSize: 11.5, fontWeight: '600', marginBottom: 6 },
     inputBox: { flexDirection: 'row', alignItems: 'center', backgroundColor: c.bg, borderWidth: 1, borderColor: c.border, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12 },
     input: { color: c.text, fontSize: 13, flex: 1 },

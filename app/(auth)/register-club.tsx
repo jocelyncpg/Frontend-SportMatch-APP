@@ -2,32 +2,33 @@ import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useMemo, useState } from 'react';
 import {
-    KeyboardAvoidingView,
-    KeyboardTypeOptions,
-    Platform,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  KeyboardAvoidingView,
+  KeyboardTypeOptions,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import BrandLogo from '../../components/BrandLogo';
 import SelectorTipoCuenta from '../../components/SelectorTipoCuenta';
+import { useTecladoVisible } from '../../hooks/use-teclado';
 import { registerClub } from '../../services/auth';
 import {
-    MAX_REPRESENTANTES,
-    PASSWORD_MAX,
-    formatRut,
-    passwordRules,
-    validateEmail,
-    validateEmailRepetido,
-    validateNombre,
-    validateNombreClub,
-    validatePassword,
-    validatePasswordMatch,
-    validateRutClub,
+  MAX_REPRESENTANTES,
+  PASSWORD_MAX,
+  formatRut,
+  passwordRules,
+  validateEmail,
+  validateEmailRepetido,
+  validateNombre,
+  validateNombreClub,
+  validatePassword,
+  validatePasswordMatch,
+  validateRutClub,
 } from '../../services/validators';
 import { Colors, useAppTheme } from '../../theme/ThemeContext';
 
@@ -55,6 +56,8 @@ export default function RegisterClubScreen() {
   const { colors } = useAppTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const insets = useSafeAreaInsets();
+  // Con el teclado abierto se deja espacio extra abajo para poder subir el último campo sobre el teclado.
+  const tecladoAbierto = useTecladoVisible();
 
   const [clubNombre, setClubNombre] = useState('');
   const [clubRut, setClubRut] = useState('');
@@ -160,12 +163,12 @@ export default function RegisterClubScreen() {
   return (
     <KeyboardAvoidingView
       style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
       <ScrollView
         contentContainerStyle={[
           styles.content,
-          { paddingTop: insets.top + 24, paddingBottom: insets.bottom + 32 },
+          { paddingTop: insets.top + 24, paddingBottom: tecladoAbierto ? 120 : insets.bottom + 32 },
         ]}
         keyboardShouldPersistTaps="handled"
       >

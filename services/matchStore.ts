@@ -407,6 +407,12 @@ export async function calificar(personaId: string, estrellas: number, comentario
   emitir();
 }
 
+/** Agrega una calificación que TÚ recibiste. La más nueva va primero y entra al promedio del perfil. */
+export function agregarCalificacionRecibida(c: CalificacionRecibida) {
+  estado = { ...estado, calificacionesRecibidas: [c, ...estado.calificacionesRecibidas] };
+  emitir();
+}
+
 /** Devuelve la calificación que ya diste a esa persona, si existe. */
 export function calificacionDe(e: Estado, personaId: string): Calificacion | undefined {
   return e.calificaciones[personaId];
