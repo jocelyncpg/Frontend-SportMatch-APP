@@ -24,7 +24,9 @@
     "test:sondeo": "node --test scripts/test-sondeo.cjs",
     "test:canales": "node --test scripts/test-canales.cjs",
     "test:postulaciones": "node --test scripts/test-postulaciones.cjs",
-    "test:postular": "node --test scripts/test-postular.cjs"
+    "test:postular": "node --test scripts/test-postular.cjs",
+    "test:foto": "node --test scripts/test-foto-perfil.cjs",
+    "test:editar-convocatoria": "node --test scripts/test-editar-convocatoria.cjs"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.3",

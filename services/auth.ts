@@ -1,14 +1,14 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Platform } from 'react-native';
 import { MAX_REPRESENTANTES } from './validators';
 
-import { ApiError, apiRequest } from './api';
+import { ApiError, apiRequest, urlFoto } from './api';
 import { codigoDeporte, nombreDeporte } from './deportes';
 
 const SESSION_KEY = 'sportmatch_session';
 const TOKEN_KEY = 'sportmatch_token';
-// La foto de perfil es un archivo del teléfono (file://...) que otros no pueden
-// abrir, así que por ahora solo vive aquí, guardada por id de usuario. La
-// disponibilidad en texto libre también: Ms_Users solo acepta franjas con hora.
+// La disponibilidad en texto libre solo vive aquí, guardada por id de usuario:
+// Ms_Users solo acepta franjas con hora. La foto de perfil ya se guarda en Ms_Users (HU-61).
 const LOCAL_EXTRAS_KEY = 'sportmatch_local_extras';
 // Club que un representante registró pero que aún no existe en ms-club: se crea
 // con POST /clubs en su primer inicio de sesión (el registro no entrega token).
@@ -96,7 +96,7 @@ type Preferences = {
   [otros: string]: unknown;
 };
 
-type LocalExtras = Partial<Pick<Usuario, 'fotoPerfil' | 'disponibilidad'>>;
+type LocalExtras = Partial<Pick<Usuario, 'disponibilidad'>>;
 
 /** El login falló porque la cuenta aún no confirma su correo. */
 export class EmailNotVerifiedError extends Error {
@@ -152,9 +152,8 @@ async function iniciarSesion(tokens: TokenResponse): Promise<Usuario> {
     apiRequest<Preferences>(`/users/${userId}/preferences`, { token: tokens.access_token }),
   ]);
   const club = tokens.user.role === 'club_admin' ? await miClub(tokens.access_token, tokens.user.email) : null;
-  // De lo guardado en el teléfono solo se usan la foto y la disponibilidad; lo demás manda el backend.
+  // De lo guardado en el teléfono solo se usa la disponibilidad; lo demás (también la foto) manda el backend.
   const local = (await getLocalExtras())[userId];
-  const fotoLocal = local?.fotoPerfil;
   const usuario: Usuario = {
     id: userId,
     rut: perfil.rut ?? '',
@@ -162,7 +161,7 @@ async function iniciarSesion(tokens: TokenResponse): Promise<Usuario> {
     apellidoPaterno: perfil.apellido_paterno,
     apellidoMaterno: perfil.apellido_materno ?? undefined,
     email: tokens.user.email,
-    fotoPerfil: fotoLocal ?? perfil.foto_perfil ?? undefined,
+    fotoPerfil: urlFoto(perfil.foto_perfil),
     biografia: perfil.biografia ?? undefined,
     deportes: preferencias.deportes.map((d) => ({ nombre: nombreDeporte(d.deporte_codigo), nivel: d.nivel })),
     nivelesDeportes: Object.fromEntries(preferencias.deportes.map((d) => [d.deporte_codigo, d.nivel])),
@@ -350,10 +349,25 @@ async function cambiarPreferencias(
   await apiRequest(`/users/${userId}/preferences`, { method: 'PUT', token, body: cambio(actuales) });
 }
 
-// Solo en el teléfono: ver LOCAL_EXTRAS_KEY.
+/** Sube la foto elegida a Ms_Users (PUT /users/{id}/profile/photo, multipart, campo "foto") y guarda la URL que devuelve. */
 export async function updateFotoPerfil(userId: string, fotoUri: string): Promise<void> {
-  await saveLocalExtras(userId, { fotoPerfil: fotoUri });
-  await actualizarSesion(userId, { fotoPerfil: fotoUri });
+  const token = await tokenActual();
+  const esPng = /\.png($|\?)/i.test(fotoUri);
+  const nombre = esPng ? 'foto.png' : 'foto.jpg';
+  const tipo = esPng ? 'image/png' : 'image/jpeg';
+  const formulario = new FormData();
+  if (Platform.OS === 'web') {
+    formulario.append('foto', await (await fetch(fotoUri)).blob(), nombre);
+  } else {
+    formulario.append('foto', { uri: fotoUri, name: nombre, type: tipo } as unknown as Blob);
+  }
+  const perfil = await apiRequest<ProfileResponse>(`/users/${userId}/profile/photo`, {
+    method: 'PUT',
+    token,
+    body: formulario,
+    timeoutMs: 60000,
+  });
+  await actualizarSesion(userId, { fotoPerfil: urlFoto(perfil.foto_perfil) });
 }
 
 /** Guarda la comuna (y las coordenadas, si hay) como zona en Ms_Users. */

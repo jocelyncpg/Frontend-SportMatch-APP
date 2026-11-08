@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from 'react';
 
-import { ApiError, apiRequest } from './api';
+import { ApiError, apiRequest, urlFoto } from './api';
 import { getSession, getToken } from './auth';
 import { codigoDeporte, nombreDeporte } from './deportes';
 import { calificarDeportista, cargarCalificacionesDadas, cargarReputacion, type CalificacionRecibida } from './reputacion';
@@ -105,7 +105,7 @@ export function aPersona(s: SugerenciaApi): Persona {
     compatibility: s.compatibilidad,
     colorFrom: colorPara(s.user_id),
     bio: s.biografia ?? undefined,
-    fotoUri: s.foto_perfil,
+    fotoUri: urlFoto(s.foto_perfil),
   };
 }
 

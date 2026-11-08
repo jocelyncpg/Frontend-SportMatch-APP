@@ -25,6 +25,16 @@ export class ApiError extends Error {
 
 export type { Suspension };
 
+/**
+ * La foto de perfil llega del servidor como una ruta del gateway ("/api/v1/users/photos/<clave>.jpg"), igual para la
+ * app y la web. Aquí se completa con la dirección del gateway; sin foto (o con un valor que no es una ruta nuestra)
+ * devuelve undefined y cada pantalla muestra su avatar de siempre.
+ */
+export function urlFoto(valor?: string | null): string | undefined {
+  if (!valor || !valor.startsWith('/api/')) return undefined;
+  return `${API_BASE_URL.replace(/\/api\/v1\/?$/, '')}${valor}`;
+}
+
 export const CUENTA_SUSPENDIDA = 'account_suspended';
 
 // Quien quiera enterarse de que la sesión actual fue suspendida (p. ej. el layout, que cierra la sesión).
@@ -64,15 +74,17 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
   const controller = timeoutMs ? new AbortController() : undefined;
   const timeout = timeoutMs ? setTimeout(() => controller?.abort(), timeoutMs) : undefined;
 
+  // Un FormData (subir la foto) lo arma fetch con su propio Content-Type y límite; el resto va como JSON.
+  const esFormulario = typeof FormData !== 'undefined' && body instanceof FormData;
   let res: Response;
   try {
     res = await fetch(`${API_BASE_URL}${path}`, {
       method,
       headers: {
-        'Content-Type': 'application/json',
+        ...(esFormulario ? {} : { 'Content-Type': 'application/json' }),
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
       },
-      body: body ? JSON.stringify(body) : undefined,
+      body: body ? (esFormulario ? (body as FormData) : JSON.stringify(body)) : undefined,
       ...(controller ? { signal: controller.signal } : {}),
     });
   } catch {

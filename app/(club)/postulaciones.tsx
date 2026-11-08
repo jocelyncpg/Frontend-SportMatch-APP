@@ -5,7 +5,7 @@ import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, TextInput, Touc
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Avatar from '../../components/Avatar';
 import ReportarModal from '../../components/ReportarModal';
-import { ApiError } from '../../services/api';
+import { ApiError, urlFoto } from '../../services/api';
 import { getSession } from '../../services/auth';
 import {
   cambiarEstadoPostulacion,
@@ -203,7 +203,7 @@ export default function PostulacionesClubScreen() {
             const perfil = candidato.perfil_deportivo;
             return <View key={candidato.id} style={styles.tarjeta}>
               <View style={styles.perfilFila}>
-                <Avatar name={nombreCandidato(candidato)} colorFrom="#7C3AED" uri={perfil.foto_perfil} style={styles.avatar} />
+                <Avatar name={nombreCandidato(candidato)} colorFrom="#7C3AED" uri={urlFoto(perfil.foto_perfil)} style={styles.avatar} />
                 <View style={styles.expandir}>
                   <Text style={styles.nombre}>{nombreCandidato(candidato)}</Text>
                   <Text style={styles.info}>{perfil.edad === null ? 'Edad no indicada' : `${perfil.edad} años`}
