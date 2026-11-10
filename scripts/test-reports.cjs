@@ -18,7 +18,7 @@ function load(responder = async () => undefined) {
     require(name) {
       if (name === 'react') return { useSyncExternalStore: () => undefined };
       if (name === './auth') return { getToken: async () => 'token-a' };
-      if (name === './api') return { ApiError, apiRequest: async (...args) => { calls.push(args); return responder(...args); } };
+      if (name === './api') return { ApiError, urlFoto: (v) => v ?? undefined, apiRequest: async (...args) => { calls.push(args); return responder(...args); } };
       throw Error(name);
     },
   });
@@ -53,7 +53,7 @@ test('bloquear y desbloquear actualizan la lista local solo si el servidor acept
   let falla = false;
   const { api, calls } = load(async (ruta, opciones) => {
     if (falla) throw new ApiError('Deportista no disponible.', 404);
-    if (ruta === '/users/me/blocks') return [{ user_id: 'u-9', nombre: 'Carla', apellido_inicial: 'R.', foto_perfil: null }];
+    if (ruta.startsWith('/users/me/blocks?')) return [{ user_id: 'u-9', nombre: 'Carla', apellido_inicial: 'R.', foto_perfil: null }];
     return opciones;
   });
   await api.cargarBloqueados();

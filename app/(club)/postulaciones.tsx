@@ -11,6 +11,7 @@ import {
   cambiarEstadoPostulacion,
   listarCandidatos,
   listarTodasConvocatoriasClub,
+  puedePreseleccionar,
   type Candidato,
   type Convocatoria,
   type EstadoPostulacion,
@@ -219,7 +220,7 @@ export default function PostulacionesClubScreen() {
                 {a.deporte} · {a.institucion} ({a.anio_inicio}–{a.anio_fin ?? 'actualidad'}){a.logros ? ` · ${a.logros}` : ''}
               </Text>)}
               <View style={styles.acciones}>
-                {candidato.estado !== 'PRESELECCIONADO' ? botonEstado('Preseleccionar', candidato, 'PRESELECCIONADO') : null}
+                {puedePreseleccionar(candidato.estado) ? botonEstado('Preseleccionar', candidato, 'PRESELECCIONADO') : null}
                 {candidato.estado !== 'PENDIENTE' ? botonEstado('En espera', candidato, 'PENDIENTE') : null}
                 {candidato.estado !== 'ACEPTADO' ? botonEstado('Aceptar', candidato, 'ACEPTADO') : null}
                 {candidato.estado !== 'RECHAZADO' ? botonEstado('Rechazar', candidato, 'RECHAZADO', true) : null}

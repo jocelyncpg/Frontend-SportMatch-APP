@@ -130,7 +130,8 @@ test('logout limpia la sesión local aunque revocar las alertas falle (403 de un
     module, exports: module.exports, Error, Promise, JSON,
     require(name) {
       if (name === '@react-native-async-storage/async-storage') return { default: { multiRemove: async (claves) => { quitadas.push(...claves); } } };
-      if (name === './api') return { ApiError, apiRequest: async () => undefined };
+      if (name === 'react-native') return { Platform: { OS: 'ios' } };
+      if (name === './api') return { ApiError, urlFoto: (v) => v ?? undefined, apiRequest: async () => undefined };
       if (name === './deportes') return { codigoDeporte: (v) => v, nombreDeporte: (v) => v };
       if (name === './validators') return { MAX_REPRESENTANTES: 1 };
       if (name === './push') return { desactivarPush: async () => { throw new ApiError('suspendida', 403); } };
