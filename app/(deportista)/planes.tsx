@@ -5,7 +5,7 @@ import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-nati
 import CatalogoPlanes from '../../components/CatalogoPlanes';
 import ContratarPlanModal from '../../components/ContratarPlanModal';
 import { cargarPlanes, nombreDelPlan, planesParaContratar, precioTexto, usePlanActual, usePlanes, type Plan } from '../../services/planes';
-import { Colors, useAppTheme } from '../../theme/ThemeContext';
+import { Colors, useAppTheme, espacio, tipo } from '../../theme/ThemeContext';
 
 /** HU-39: consultar el catálogo de planes y beneficios. HU-42: contratar un plan. */
 export default function PlanesScreen() {
@@ -84,5 +84,5 @@ const makeStyles = (c: Colors) =>
     },
     botonInactivo: { opacity: 0.45 },
     botonTexto: { color: '#fff', fontSize: 13, fontWeight: '700' },
-    error: { color: c.danger, fontSize: 12, marginTop: 12, textAlign: 'center' },
+    error: { color: c.danger, ...tipo.cuerpo, marginBottom: espacio.l },
   });

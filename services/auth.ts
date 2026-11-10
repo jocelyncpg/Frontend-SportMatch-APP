@@ -18,6 +18,12 @@ const NIVEL_POR_DEFECTO = 3;
 
 export type DeporteConNivel = { nombre: string; nivel: number };
 
+// Ms_Users expone una foto persistente por perfil; el editor usa ese límite.
+export const MAX_FOTOS = 1;
+export const rutaInicial = (usuario: Usuario) => inicioSegunRol(usuario);
+export const rolDe = (usuario: Pick<Usuario, 'rol'>) => usuario.rol === 'club_admin' ? 'club' : usuario.rol === 'admin' ? 'admin' : 'deportista';
+export const fotosDe = (usuario: Usuario | null): string[] => usuario?.fotoPerfil ? [usuario.fotoPerfil] : [];
+
 export type Usuario = {
   id: string;
   rut: string;
@@ -368,6 +374,29 @@ export async function updateFotoPerfil(userId: string, fotoUri: string): Promise
     timeoutMs: 60000,
   });
   await actualizarSesion(userId, { fotoPerfil: urlFoto(perfil.foto_perfil) });
+}
+
+export async function updateFotos(userId: string, fotos: string[]): Promise<string[]> {
+  if (fotos.length > MAX_FOTOS) throw new Error('Solo se admite una foto de perfil.');
+  const actual = await getSession();
+  if (actual?.id !== userId) throw new Error('Tu sesión cambió. Vuelve a iniciar sesión.');
+  if (fotos[0]) {
+    if (fotos[0] !== actual.fotoPerfil) await updateFotoPerfil(userId, fotos[0]);
+  } else {
+    await apiRequest(`/users/${userId}/profile/photo`, { method: 'DELETE', token: await tokenActual() });
+    await actualizarSesion(userId, { fotoPerfil: undefined });
+  }
+  return fotosDe(await getSession());
+}
+
+export async function updateDatosPersonales(userId: string, datos: Pick<Usuario, 'nombre' | 'apellidoPaterno' | 'apellidoMaterno'>): Promise<void> {
+  const token = await tokenActual();
+  const p = await apiRequest<ProfileResponse>(`/users/${userId}/profile`, { token });
+  await apiRequest(`/users/${userId}/profile`, {
+    method: 'PUT', token,
+    body: { nombre: datos.nombre, apellido_paterno: datos.apellidoPaterno, apellido_materno: datos.apellidoMaterno || null, fecha_nacimiento: p.fecha_nacimiento, telefono: p.telefono, foto_perfil: p.foto_perfil, biografia: p.biografia },
+  });
+  await actualizarSesion(userId, datos);
 }
 
 /** Guarda la comuna (y las coordenadas, si hay) como zona en Ms_Users. */

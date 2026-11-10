@@ -1,9 +1,9 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Alert, Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import Avatar from '../../../components/Avatar';
-import BrandLogo from '../../../components/BrandLogo';
+import { AvatarMini, EncabezadoMarca } from '../../../components/ui';
 import MatchModal from '../../../components/MatchModal';
 import RatingModal from '../../../components/RatingModal';
 import { useMatchingRefresh } from '../../../hooks/useMatchingRefresh';
@@ -19,7 +19,7 @@ import {
   rechazarSolicitud,
   useMatches,
 } from '../../../services/matchStore';
-import { Colors, useAppTheme } from '../../../theme/ThemeContext';
+import { Colors, useAppTheme, espacio, radio, tipo } from '../../../theme/ThemeContext';
 
 export default function MatchesScreen() {
   const { colors } = useAppTheme();
@@ -92,6 +92,7 @@ export default function MatchesScreen() {
     }
   }
 
+  const [verTodas, setVerTodas] = useState(false);
   const lista = tab === 'solicitudes' ? solicitudes : tab === 'enviadas' ? solicitudesEnviadas : confirmados;
   const iniciales = usuario
     ? `${usuario.nombre[0]}${usuario.apellidoPaterno[0]}`
@@ -102,20 +103,7 @@ export default function MatchesScreen() {
     <View style={styles.container}>
 
       {/* HEADER */}
-      <View style={styles.topbar}>
-        <BrandLogo width={200} />
-
-        <TouchableOpacity
-          onPress={() => router.navigate('/(deportista)/(tabs)/profile')}
-          style={styles.miniAvatar}
-        >
-          {usuario?.fotoPerfil ? (
-            <Image source={{ uri: usuario.fotoPerfil }} style={styles.miniAvatarImage} />
-          ) : (
-            <Text style={styles.miniAvatarText}>{iniciales}</Text>
-          )}
-        </TouchableOpacity>
-      </View>
+      <EncabezadoMarca derecha={<AvatarMini uri={usuario?.fotoPerfil} iniciales={iniciales} onPress={() => router.push('/(deportista)/(tabs)/profile')} />} />
 
       {/* TABS */}
       <View style={styles.tabs}>
@@ -125,7 +113,7 @@ export default function MatchesScreen() {
           ['confirmados', 'Confirmados', confirmados.length],
         ] as const).map(([key, label, count]) => (
           <TouchableOpacity key={key} style={[styles.tab, tab === key && styles.tabActive]}
-            onPress={() => setTab(key)} accessibilityRole="tab" accessibilityState={{ selected: tab === key }}>
+            onPress={() => { setTab(key); setVerTodas(false); }} accessibilityRole="tab" accessibilityState={{ selected: tab === key }}>
             <Text style={[styles.tabText, tab === key && styles.tabTextActive]}>
               {label}{count > 0 ? ` (${count})` : ''}
             </Text>
@@ -140,7 +128,7 @@ export default function MatchesScreen() {
             <Text style={styles.emptyText}>{matchingError} · {sesionExpirada ? 'Iniciar sesión' : 'Reintentar'}</Text>
           </TouchableOpacity>
         ) : null}
-        {!matchingError && lista.map((persona) => {
+        {!matchingError && (verTodas ? lista : lista.slice(0, 5)).map((persona) => {
           const ocupado = ocupados.includes(persona.id);
           const miCalificacion = calificacionDe(estado, persona.id);
           return (
@@ -222,6 +210,7 @@ export default function MatchesScreen() {
                 : 'Todavía no tienes matches confirmados.'}
           </Text>
         )}
+        {lista.length > 5 ? <TouchableOpacity onPress={() => setVerTodas((v) => !v)} style={{ padding: espacio.l }}><Text style={styles.emptyText}>{verTodas ? 'Ver menos' : `Ver más (${lista.length - 5})`}</Text></TouchableOpacity> : null}
       </ScrollView>
 
       {/* ¡ES UN MATCH! */}
@@ -261,34 +250,37 @@ const makeStyles = (c: Colors) =>
     },
     miniAvatarImage: { width: '100%', height: '100%' },
     miniAvatarText: { color: c.text, fontSize: 12, fontWeight: '700' },
-    tabs: { flexDirection: 'row', paddingHorizontal: 20, gap: 8, marginBottom: 16 },
-    tab: { flex: 1, backgroundColor: c.card, borderWidth: 1, borderColor: c.border, borderRadius: 12, paddingVertical: 10, alignItems: 'center' },
-    tabActive: { backgroundColor: c.primary, borderColor: c.primary },
-    tabText: { color: c.textMuted, fontSize: 12, fontWeight: '600' },
-    tabTextActive: { color: '#fff' },
-    list: { paddingHorizontal: 20, paddingBottom: 30 },
-    card: {
-      flexDirection: 'row', alignItems: 'center', gap: 12,
-      backgroundColor: c.card, borderWidth: 1, borderColor: c.border,
-      borderRadius: 14, padding: 10, marginBottom: 10,
+    tabs: { flexDirection: 'row', paddingHorizontal: espacio.xl, gap: espacio.s, marginBottom: espacio.l },
+    tab: {
+      flex: 1, minHeight: 44, backgroundColor: c.card, borderWidth: 1, borderColor: c.border,
+      borderRadius: radio.control, alignItems: 'center', justifyContent: 'center',
     },
-    cardTap: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 12 },
-    avatar: { width: 56, height: 56, borderRadius: 12 },
-    avatarOverlay: { alignItems: 'flex-end', padding: 4 },
-    badge: { backgroundColor: c.badgeBg, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 10 },
-    badgeText: { color: c.success, fontSize: 9, fontWeight: '700' },
+    tabActive: { backgroundColor: c.primary, borderColor: c.primary },
+    tabText: { color: c.textMuted, ...tipo.cuerpoFuerte },
+    tabTextActive: { color: '#FFFFFF' },
+    list: { paddingHorizontal: espacio.xl, paddingBottom: espacio.xxl + espacio.s },
+    card: {
+      flexDirection: 'row', alignItems: 'center', gap: espacio.m,
+      backgroundColor: c.card, borderWidth: 1, borderColor: c.border,
+      borderRadius: radio.tarjeta, padding: espacio.m, marginBottom: espacio.m,
+    },
+    cardTap: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: espacio.m },
+    avatar: { width: 56, height: 56, borderRadius: radio.control },
+    avatarOverlay: { alignItems: 'flex-end', padding: espacio.xs },
+    badge: { backgroundColor: c.badgeBg, paddingHorizontal: 6, paddingVertical: 2, borderRadius: radio.control },
+    badgeText: { color: c.success, ...tipo.etiqueta, fontWeight: '700' },
     cardInfo: { flex: 1 },
-    cardName: { color: c.text, fontSize: 13, fontWeight: '700' },
-    cardMeta: { color: c.textMuted, fontSize: 10.5, marginTop: 2 },
-    actions: { flexDirection: 'row', gap: 8 },
-    rejectButton: { width: 34, height: 34, borderRadius: 17, backgroundColor: c.subtle, alignItems: 'center', justifyContent: 'center' },
-    acceptButton: { width: 34, height: 34, borderRadius: 17, backgroundColor: '#16A34A', alignItems: 'center', justifyContent: 'center' },
-    chatButton: { width: 34, height: 34, borderRadius: 17, backgroundColor: c.chip, alignItems: 'center', justifyContent: 'center' },
+    cardName: { color: c.text, ...tipo.seccion },
+    cardMeta: { color: c.textMuted, ...tipo.dato, marginTop: 2 },
+    actions: { flexDirection: 'row', gap: espacio.s },
+    rejectButton: { width: 44, height: 44, borderRadius: 22, backgroundColor: c.subtle, alignItems: 'center', justifyContent: 'center' },
+    acceptButton: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#22C55E', alignItems: 'center', justifyContent: 'center' },
+    chatButton: { width: 44, height: 44, borderRadius: 22, backgroundColor: c.chip, alignItems: 'center', justifyContent: 'center' },
     ratingButton: {
-      flexDirection: 'row', alignItems: 'center', gap: 3, paddingHorizontal: 8, height: 34, borderRadius: 17,
+      flexDirection: 'row', alignItems: 'center', gap: espacio.xs, paddingHorizontal: espacio.m, height: 44, minWidth: 44, borderRadius: 22,
       backgroundColor: c.chip, justifyContent: 'center',
     },
     ratingButtonHecho: { backgroundColor: c.badgeBg, borderWidth: 1, borderColor: '#FACC15' },
-    ratingButtonTexto: { color: '#FACC15', fontSize: 11, fontWeight: '800' },
-    emptyText: { color: c.textMuted, fontSize: 12, textAlign: 'center', marginTop: 30 },
+    ratingButtonTexto: { color: '#FACC15', ...tipo.cuerpoFuerte, fontWeight: '800' },
+    emptyText: { color: c.textMuted, ...tipo.cuerpo, textAlign: 'center', marginTop: espacio.xxl + espacio.s },
   });

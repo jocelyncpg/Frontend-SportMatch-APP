@@ -455,14 +455,14 @@ const makeStyles = (c: Colors) =>
 
     resumen: {
       flexDirection: 'row', alignItems: 'center', backgroundColor: c.card, borderWidth: 1, borderColor: c.border,
-      borderRadius: 14, paddingVertical: 14,
+      borderRadius: 14, paddingVertical: 14, marginBottom: 14,
     },
     resumenItem: { flex: 1, alignItems: 'center' },
     resumenValor: { color: c.text, fontSize: 17, fontWeight: '800' },
-    resumenEtiqueta: { color: c.textMuted, fontSize: 10.5, marginTop: 3, textAlign: 'center' },
+    resumenEtiqueta: { color: c.textMuted, fontSize: 10.5, marginTop: 3 },
     resumenDivisor: { width: 1, height: 28, backgroundColor: c.border },
 
-    consultasCard: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: c.card, borderWidth: 1, borderColor: c.border, borderRadius: 14, padding: 12 },
+    consultasCard: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: c.card, borderWidth: 1, borderColor: c.border, borderRadius: 14, padding: 12, marginBottom: 10 },
     consultasBadge: { minWidth: 20, height: 20, borderRadius: 10, paddingHorizontal: 6, backgroundColor: c.primary, alignItems: 'center', justifyContent: 'center' },
     consultasBadgeTexto: { color: '#fff', fontSize: 10.5, fontWeight: '700' },
     planesIcon: { width: 36, height: 36, borderRadius: 10, backgroundColor: c.chip, alignItems: 'center', justifyContent: 'center' },
@@ -470,16 +470,16 @@ const makeStyles = (c: Colors) =>
     planesTitle: { color: c.text, fontSize: 13, fontWeight: '700' },
     planesSub: { color: c.textMuted, fontSize: 10.5, marginTop: 2 },
 
-    sectionTitle: { color: c.text, fontSize: 14, fontWeight: '700' },
+    sectionTitle: { color: c.text, fontSize: 14, fontWeight: '700', marginBottom: 10 },
 
     passwordButton: {
       flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
-      backgroundColor: c.card, borderWidth: 1, borderColor: c.border, borderRadius: 13, paddingVertical: 13, marginTop: 8,
+      backgroundColor: c.card, borderWidth: 1, borderColor: c.border, borderRadius: 13, paddingVertical: 13, marginTop: 28,
     },
     passwordText: { color: c.accent, fontSize: 13, fontWeight: '700' },
     logoutButton: {
       flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
-      backgroundColor: c.dangerBg, borderRadius: 13, paddingVertical: 13,
+      backgroundColor: c.dangerBg, borderRadius: 13, paddingVertical: 13, marginTop: 12,
     },
     logoutText: { color: c.danger, fontSize: 13, fontWeight: '700' },
 

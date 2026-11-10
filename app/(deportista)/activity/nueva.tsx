@@ -18,7 +18,6 @@ import {
     minutosDelDia,
     opcionesDias,
     useActividades,
-    visualDeporte,
 } from '../../../services/actividades';
 import { Usuario, getSession } from '../../../services/auth';
 import { Colors, useAppTheme } from '../../../theme/ThemeContext';
@@ -110,7 +109,7 @@ export default function NuevaActividadScreen() {
 
         <Text style={styles.label}>Deporte</Text>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipsFila}>
-          {DEPORTES_ACTIVIDAD.map((d) => chip(`dep-${d}`, `${visualDeporte(d).icon} ${d}`, deporte === d, () => setDeporte(d)))}
+          {DEPORTES_ACTIVIDAD.map((d) => chip(`dep-${d}`, d, deporte === d, () => setDeporte(d)))}
         </ScrollView>
 
         <Text style={styles.label}>Nivel mínimo</Text>

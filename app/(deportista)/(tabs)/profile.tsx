@@ -4,10 +4,13 @@ import { router, useFocusEffect } from 'expo-router';
 import { Fragment, useCallback, useMemo, useState } from 'react';
 import { Alert, Image, Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import ComunaPicker from '../../../components/ComunaPicker';
-import MapaUbicacion from '../../../components/MapaUbicacion';
+import IconoDeporte from '../../../components/IconoDeporte';
+import { YO, cargarHistorial, formatearCuando, getActividades, useHistorial } from '../../../services/actividades';
+import FotosPerfil from '../../../components/FotosPerfil';
+import MapaEstatico from '../../../components/MapaEstatico';
+import { EncabezadoMarca } from '../../../components/ui';
 import { ApiError } from '../../../services/api';
 import { DeporteConNivel, Usuario, getSession, logout, refrescarPreferencias, updateFotoPerfil, updatePerfilExtra, updateUbicacion } from '../../../services/auth';
-import { codigoDeporte } from '../../../services/deportes';
 import { OBJETIVOS_DISPONIBLES } from '../../../services/disponibilidad';
 import {
   DIAS_HORARIO,
@@ -24,17 +27,19 @@ import {
   type Horarios,
 } from '../../../services/horarios';
 import { solicitarUbicacion } from '../../../services/location';
-import { YO, cargarHistorial, formatearCuando, getActividades, useHistorial, visualDeporte } from '../../../services/actividades';
-import { cargarCalificaciones, useMatches } from '../../../services/matchStore';
+import { cargarCalificaciones, cargarMatching, useMatches } from '../../../services/matchStore';
 import { cargarPlanes, nombreDelPlan, usePlanActual } from '../../../services/planes';
 import { formatearPromedio } from '../../../services/reputacion';
-import { Colors, Mode, useAppTheme } from '../../../theme/ThemeContext';
+import { Colors, Mode, espacio, radio, tipo, useAppTheme } from '../../../theme/ThemeContext';
 
 const DEPORTES_DISPONIBLES = ['Running', 'Fútbol', 'Ciclismo', 'Yoga', 'Tenis', 'Natación', 'Trekking'];
 const NIVELES = [1, 2, 3, 4, 5];
-/** Ms_Users acepta como máximo 5 objetivos por persona. */
-const MAX_OBJETIVOS = 5;
 const NOMBRES_NIVEL: Record<number, string> = { 1: 'Principiante', 2: 'Básico', 3: 'Intermedio', 4: 'Avanzado', 5: 'Experto' };
+
+// Colores fijos: texto sobre botones de color fuerte, estrella de valoración.
+const SOBRE_COLOR = '#FFFFFF';
+const ESTRELLA = '#FACC15';
+const ZONA_TOQUE = { top: 12, bottom: 12, left: 12, right: 12 };
 
 /** Los cambios del perfil ahora se guardan en el servidor, así que pueden fallar. */
 function avisarError(titulo: string, e: unknown) {
@@ -61,15 +66,12 @@ export default function ProfileScreen() {
   const [usuario, setUsuario] = useState<Usuario | null>(null);
   const [pickerVisible, setPickerVisible] = useState(false);
   const [pidiendoUbicacion, setPidiendoUbicacion] = useState(false);
-  // Mientras el dedo mueve el mapa, la pantalla no debe hacer scroll al mismo tiempo.
-  const [scrollActivo, setScrollActivo] = useState(true);
 
   const [modalBioVisible, setModalBioVisible] = useState(false);
   const [bioTemp, setBioTemp] = useState('');
   const [modalDeportesVisible, setModalDeportesVisible] = useState(false);
   const [deportesTemp, setDeportesTemp] = useState<DeporteConNivel[]>([]);
   const [deporteActivo, setDeporteActivo] = useState<string | null>(null);
-  const [guardandoDeportes, setGuardandoDeportes] = useState(false);
   const [nuevoDeporteTexto, setNuevoDeporteTexto] = useState('');
   const [modalDispVisible, setModalDispVisible] = useState(false);
   // Disponibilidad: días elegidos con sus horas, más el día que se está editando.
@@ -82,15 +84,12 @@ export default function ProfileScreen() {
   const [modalObjVisible, setModalObjVisible] = useState(false);
   const [objTemp, setObjTemp] = useState<string[]>([]);
   const [verTodasResenas, setVerTodasResenas] = useState(false);
-  const [verTodoHistorial, setVerTodoHistorial] = useState(false);
 
-  // Reputación: Entrenamientos = actividades realizadas; Conexiones = matches confirmados;
-  // Valoración = promedio que calcula el servidor con las calificaciones que recibes.
+  // Reputación: Conexiones = tus matches confirmados; Valoración = promedio de lo que recibes.
   const { confirmados, calificacionesRecibidas, promedioRecibido } = useMatches();
+  const [verTodoHistorial, setVerTodoHistorial] = useState(false);
   const historial = useHistorial();
-  const realizadas = historial.ids
-    .map((id) => getActividades().find((a) => a.id === id))
-    .filter((a): a is NonNullable<typeof a> => a !== undefined);
+  const realizadas = historial.ids.map((id) => getActividades().find((a) => a.id === id)).filter((a): a is NonNullable<typeof a> => a !== undefined);
   const realizadasVisibles = verTodoHistorial ? realizadas : realizadas.slice(0, 3);
   const conexiones = confirmados.length;
   const promedio = promedioRecibido;
@@ -98,26 +97,20 @@ export default function ProfileScreen() {
   const hayEjemplos = calificacionesRecibidas.some((c) => c.simulada);
   const resenasVisibles = verTodasResenas ? calificacionesRecibidas : calificacionesRecibidas.slice(0, 1);
 
-  // Al volver a la pestaña se leen deportes, ubicación y objetivos guardados en el servidor.
-  useFocusEffect(useCallback(() => {
-    let active = true;
-    refrescarPreferencias().then((session) => { if (active) setUsuario(session); })
-      .catch((e) => { if (active) avisarError('No se pudo actualizar el perfil', e); });
-    // Reputación e historial vienen de Ms_Activities; si fallan, el resto del perfil sigue igual.
-    cargarCalificaciones().catch(() => {});
-    void cargarHistorial();
-    // El plan vigente viene de Ms-club; si no responde, se muestra el último conocido.
-    cargarPlanes('deportista').catch(() => {});
-    return () => { active = false; };
-  }, []));
+  // Al volver de Configuración se recarga la cuenta, por si cambió el nombre.
+  useFocusEffect(
+    useCallback(() => {
+      void refrescarPreferencias().then(setUsuario).catch(() => getSession().then(setUsuario));
+      void cargarHistorial();
+      void cargarCalificaciones().catch(() => {});
+      void cargarMatching().catch(() => {});
+      void cargarPlanes('deportista').catch(() => {});
+    }, [])
+  );
 
   async function handleLogout() {
-    try {
-      await logout();
-      router.replace('/(auth)/login');
-    } catch {
-      Alert.alert('No se pudo cerrar sesión', 'Necesitamos conexión para desvincular las alertas de este celular. Revisa tu conexión y vuelve a intentarlo.');
-    }
+    await logout();
+    router.replace('/(auth)/login');
   }
 
   async function elegirDeGaleria() {
@@ -152,13 +145,9 @@ export default function ProfileScreen() {
   async function guardarFotoSiExiste(resultado: ImagePicker.ImagePickerResult) {
     if (!resultado.canceled && usuario) {
       const uri = resultado.assets[0].uri;
-      try {
-        await updateFotoPerfil(usuario.id, uri);
-        // La sesión ya trae la dirección de la foto que guardó el servidor.
-        setUsuario((await getSession()) ?? usuario);
-      } catch (e) {
-        avisarError('No se pudo actualizar el perfil', e);
-      }
+      await updateFotoPerfil(usuario.id, uri);
+      // La foto del avatar es la principal: reemplaza a la primera de la galería y deja las demás.
+      setUsuario(await getSession());
     }
   }
 
@@ -249,7 +238,7 @@ export default function ProfileScreen() {
   function agregarDeporte(nombre: string) {
     const limpio = nombre.trim();
     if (!limpio) return;
-    const existente = deportesTemp.find((d) => codigoDeporte(d.nombre) === codigoDeporte(limpio));
+    const existente = deportesTemp.find((d) => d.nombre.toLowerCase() === limpio.toLowerCase());
     if (existente) {
       setDeporteActivo(existente.nombre);
       return;
@@ -275,16 +264,14 @@ export default function ProfileScreen() {
   }
 
   async function guardarDeportes() {
-    if (!usuario || guardandoDeportes) return;
-    setGuardandoDeportes(true);
+    if (!usuario) return;
     try {
       await updatePerfilExtra(usuario.id, { deportes: deportesTemp });
     } catch (e) {
       avisarError('No se pudieron guardar tus deportes', e);
       return;
-    } finally { setGuardandoDeportes(false); }
-    // La sesión guarda los nombres y niveles tal como quedaron en el servidor.
-    setUsuario(await getSession());
+    }
+    setUsuario({ ...usuario, deportes: deportesTemp });
     setModalDeportesVisible(false);
   }
 
@@ -375,10 +362,6 @@ export default function ProfileScreen() {
   }
 
   function toggleObjetivo(objetivo: string) {
-    if (!objTemp.includes(objetivo) && objTemp.length >= MAX_OBJETIVOS) {
-      Alert.alert('Máximo de objetivos', `Puedes elegir hasta ${MAX_OBJETIVOS}. Quita uno para agregar otro.`);
-      return;
-    }
     setObjTemp((prev) => (prev.includes(objetivo) ? prev.filter((o) => o !== objetivo) : [...prev, objetivo]));
   }
 
@@ -406,7 +389,8 @@ export default function ProfileScreen() {
     : usuario?.comuna
       ? usuario.latitud && usuario.longitud ? `${usuario.comuna} · GPS` : usuario.comuna
       : '';
-  // Mapa interactivo: solo si hay GPS guardado (elegir una comuna de la lista descarta las coordenadas).
+  // Mapa: solo si hay GPS guardado (elegir una comuna de la lista descarta las coordenadas).
+  // Es una imagen estática (MapaEstatico): no usa Google Maps, así que no necesita key de Google en el APK.
   const tieneMapa = !!(usuario?.latitud && usuario?.longitud);
   const filasInfo: { key: string; icono: keyof typeof Ionicons.glyphMap; titulo: string; valor: string; onPress: () => void }[] = [
     { key: 'ubicacion', icono: 'location-outline', titulo: 'Ubicación', valor: textoUbicacion, onPress: abrirOpcionesUbicacion },
@@ -415,9 +399,31 @@ export default function ProfileScreen() {
   ];
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content} scrollEnabled={scrollActivo}>
+    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+      {/* Logo en el mismo lugar que en las demás pestañas */}
+      <View style={styles.marca}>
+        <EncabezadoMarca
+          margenHorizontal={0}
+          derecha={
+            <TouchableOpacity
+              onPress={() => router.push('/(deportista)/configuracion' as never)}
+              style={styles.ajustesButton}
+              accessibilityRole="button"
+              accessibilityLabel="Configuración"
+            >
+              <Ionicons name="settings-outline" size={20} color={colors.text} />
+            </TouchableOpacity>
+          }
+        />
+      </View>
+
       <View style={styles.header}>
-        <TouchableOpacity onPress={handleChangePhoto} style={styles.avatarWrapper}>
+        <TouchableOpacity
+          onPress={handleChangePhoto}
+          style={styles.avatarWrapper}
+          accessibilityRole="button"
+          accessibilityLabel="Cambiar foto de perfil"
+        >
           <View style={styles.avatarInner}>
             {usuario?.fotoPerfil ? (
               <Image source={{ uri: usuario.fotoPerfil }} style={styles.avatarImage} />
@@ -426,7 +432,7 @@ export default function ProfileScreen() {
             )}
           </View>
           <View style={styles.editBadge}>
-            <Ionicons name="camera" size={13} color="#fff" />
+            <Ionicons name="camera" size={13} color={SOBRE_COLOR} />
           </View>
         </TouchableOpacity>
         <Text style={styles.name}>{nombreCompleto}</Text>
@@ -444,18 +450,29 @@ export default function ProfileScreen() {
         </View>
         <View style={styles.statBox}>
           <View style={styles.statValueRow}>
-            {promedio !== null ? <Ionicons name="star" size={13} color="#FACC15" /> : null}
+            {promedio !== null ? <Ionicons name="star" size={13} color={ESTRELLA} /> : null}
             <Text style={styles.statNumber}>{valoracion}</Text>
           </View>
           <Text style={styles.statLabel}>Valoración</Text>
         </View>
       </View>
 
+      {/* Foto persistida en el backend */}
+      <FotosPerfil
+        usuario={usuario}
+        subtitulo={
+          usuario?.deportes?.[0]
+            ? `${usuario.deportes[0].nombre} · ${NOMBRES_NIVEL[usuario.deportes[0].nivel] ?? usuario.deportes[0].nivel}`
+            : undefined
+        }
+        onCambio={(fotos) => setUsuario((u) => (u ? { ...u, fotoPerfil: fotos[0] } : u))}
+      />
+
       {/* Deportes */}
       <View style={styles.section}>
         <View style={styles.sectionHeaderRow}>
           <Text style={styles.sectionTitle}>Deportes</Text>
-          <TouchableOpacity onPress={abrirEditorDeportes}>
+          <TouchableOpacity onPress={abrirEditorDeportes} hitSlop={ZONA_TOQUE} accessibilityRole="button" accessibilityLabel="Editar deportes">
             <Text style={styles.updateLink}>Editar</Text>
           </TouchableOpacity>
         </View>
@@ -476,7 +493,7 @@ export default function ProfileScreen() {
       <View style={styles.section}>
         <View style={styles.sectionHeaderRow}>
           <Text style={styles.sectionTitle}>Sobre mí</Text>
-          <TouchableOpacity onPress={abrirEditorBio}>
+          <TouchableOpacity onPress={abrirEditorBio} hitSlop={ZONA_TOQUE} accessibilityRole="button" accessibilityLabel="Editar sobre mí">
             <Text style={styles.updateLink}>Editar</Text>
           </TouchableOpacity>
         </View>
@@ -487,11 +504,16 @@ export default function ProfileScreen() {
 
       {/* Detalles: ubicación, disponibilidad y objetivos en una sola tarjeta */}
       <View style={styles.section}>
-        <Text style={[styles.sectionTitle, { marginBottom: 8 }]}>Detalles</Text>
+        <Text style={[styles.sectionTitle, { marginBottom: espacio.s }]}>Detalles</Text>
         <View style={styles.infoCard}>
           {filasInfo.map((f, i) => (
             <Fragment key={f.key}>
-              <TouchableOpacity style={[styles.infoFila, i > 0 && styles.infoFilaBorde]} onPress={f.onPress}>
+              <TouchableOpacity
+                style={[styles.infoFila, i > 0 && styles.infoFilaBorde]}
+                onPress={f.onPress}
+                accessibilityRole="button"
+                accessibilityLabel={`${f.titulo}: ${f.valor || 'sin definir'}`}
+              >
                 <View style={styles.infoIcono}>
                   <Ionicons name={f.icono} size={16} color={colors.accent} />
                 </View>
@@ -506,11 +528,9 @@ export default function ProfileScreen() {
 
               {/* El mapa va pegado a la fila de Ubicación */}
               {f.key === 'ubicacion' && tieneMapa && usuario?.latitud && usuario?.longitud ? (
-                <MapaUbicacion
-                  latitud={usuario.latitud}
-                  longitud={usuario.longitud}
-                  onMoviendo={(moviendo) => setScrollActivo(!moviendo)}
-                />
+                <View style={styles.mapWrap}>
+                  <MapaEstatico latitud={usuario.latitud} longitud={usuario.longitud} alto={200} />
+                </View>
               ) : null}
             </Fragment>
           ))}
@@ -529,17 +549,14 @@ export default function ProfileScreen() {
         </View>
         {realizadasVisibles.length > 0 ? (
           realizadasVisibles.map((a) => {
-            const visual = visualDeporte(a.deporte);
             return (
               <TouchableOpacity
                 key={a.id}
-                style={styles.historialFila}
+                style={styles.resenaCard}
                 activeOpacity={0.7}
                 onPress={() => router.push({ pathname: '/(deportista)/activity/[id]', params: { id: a.id } })}
               >
-                <View style={[styles.historialIcono, { backgroundColor: visual.colorBg }]}>
-                  <Text>{visual.icon}</Text>
-                </View>
+                  <IconoDeporte deporte={a.deporte} />
                 <View style={{ flex: 1 }}>
                   <Text style={styles.resenaNombre} numberOfLines={1}>{a.titulo}</Text>
                   <Text style={styles.resenaCuando}>
@@ -561,9 +578,7 @@ export default function ProfileScreen() {
       <View style={styles.section}>
         <View style={styles.sectionHeaderRow}>
           <View style={styles.tituloConTag}>
-            <Text style={styles.sectionTitle}>
-              Calificaciones recibidas{calificacionesRecibidas.length > 0 ? ` · ★ ${valoracion}` : ''}
-            </Text>
+            <Text style={styles.sectionTitle}>Calificaciones recibidas</Text>
             {hayEjemplos ? (
               <View style={styles.ejemploTag}>
                 <Text style={styles.ejemploTagText}>Ejemplo</Text>
@@ -571,7 +586,7 @@ export default function ProfileScreen() {
             ) : null}
           </View>
           {calificacionesRecibidas.length > 1 ? (
-            <TouchableOpacity onPress={() => setVerTodasResenas((v) => !v)}>
+            <TouchableOpacity onPress={() => setVerTodasResenas((v) => !v)} hitSlop={ZONA_TOQUE} accessibilityRole="button">
               <Text style={styles.updateLink}>
                 {verTodasResenas ? 'Ver menos' : `Ver todas (${calificacionesRecibidas.length})`}
               </Text>
@@ -589,7 +604,7 @@ export default function ProfileScreen() {
                       key={n}
                       name={n <= r.estrellas ? 'star' : 'star-outline'}
                       size={12}
-                      color={n <= r.estrellas ? '#FACC15' : colors.textMuted}
+                      color={n <= r.estrellas ? ESTRELLA : colors.textMuted}
                     />
                   ))}
                 </View>
@@ -605,9 +620,14 @@ export default function ProfileScreen() {
 
       {/* Suscripción */}
       <View style={styles.section}>
-        <Text style={[styles.sectionTitle, { marginBottom: 8 }]}>Suscripción</Text>
+        <Text style={[styles.sectionTitle, { marginBottom: espacio.s }]}>Suscripción</Text>
         <View style={styles.infoCard}>
-          <TouchableOpacity style={styles.infoFila} onPress={() => router.push('/(deportista)/planes')}>
+          <TouchableOpacity
+            style={styles.infoFila}
+            onPress={() => router.push('/(deportista)/planes')}
+            accessibilityRole="button"
+            accessibilityLabel={`Planes y beneficios. Tu plan: ${nombreDelPlan(planActual)}`}
+          >
             <View style={styles.infoIcono}>
               <Ionicons name="pricetags-outline" size={16} color={colors.accent} />
             </View>
@@ -622,7 +642,7 @@ export default function ProfileScreen() {
 
       {/* Apariencia */}
       <View style={styles.section}>
-        <Text style={[styles.sectionTitle, { marginBottom: 10 }]}>Apariencia</Text>
+        <Text style={[styles.sectionTitle, { marginBottom: espacio.m }]}>Apariencia</Text>
         <View style={styles.themeRow}>
           {OPCIONES_TEMA.map((op) => {
             const seleccionada = mode === op.key;
@@ -631,8 +651,11 @@ export default function ProfileScreen() {
                 key={op.key}
                 style={[styles.themeOption, seleccionada && styles.themeOptionActive]}
                 onPress={() => setMode(op.key)}
+                accessibilityRole="button"
+                accessibilityLabel={`Tema ${op.label}`}
+                accessibilityState={{ selected: seleccionada }}
               >
-                <Ionicons name={op.icon} size={14} color={seleccionada ? '#fff' : colors.textMuted} />
+                <Ionicons name={op.icon} size={14} color={seleccionada ? SOBRE_COLOR : colors.textMuted} />
                 <Text style={[styles.themeOptionText, seleccionada && styles.themeOptionTextActive]}>{op.label}</Text>
               </TouchableOpacity>
             );
@@ -640,7 +663,7 @@ export default function ProfileScreen() {
         </View>
       </View>
 
-      <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
+      <TouchableOpacity style={styles.logoutButton} onPress={handleLogout} accessibilityRole="button" accessibilityLabel="Cerrar sesión">
         <Ionicons name="log-out-outline" size={18} color={colors.danger} />
         <Text style={styles.logoutText}>Cerrar sesión</Text>
       </TouchableOpacity>
@@ -670,10 +693,10 @@ export default function ProfileScreen() {
             />
             <Text style={styles.charCount}>{bioTemp.length}/200</Text>
             <View style={styles.modalActions}>
-              <TouchableOpacity style={styles.modalCancel} onPress={() => setModalBioVisible(false)}>
+              <TouchableOpacity accessibilityRole="button" style={styles.modalCancel} onPress={() => setModalBioVisible(false)}>
                 <Text style={styles.modalCancelText}>Cancelar</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={styles.modalSave} onPress={guardarBio}>
+              <TouchableOpacity accessibilityRole="button" style={styles.modalSave} onPress={guardarBio}>
                 <Text style={styles.loginButtonText}>Guardar</Text>
               </TouchableOpacity>
             </View>
@@ -706,9 +729,9 @@ export default function ProfileScreen() {
                           <TouchableOpacity
                             onPress={() => quitarDeporte(d.nombre)}
                             accessibilityLabel={`Quitar ${d.nombre}`}
-                            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                            hitSlop={ZONA_TOQUE}
                           >
-                            <Ionicons name="close" size={13} color={esActivo ? '#fff' : colors.textMuted} />
+                            <Ionicons name="close" size={13} color={esActivo ? SOBRE_COLOR : colors.textMuted} />
                           </TouchableOpacity>
                         </TouchableOpacity>
                       );
@@ -760,17 +783,17 @@ export default function ProfileScreen() {
                   />
                 </View>
                 <TouchableOpacity style={styles.agregarBoton} onPress={agregarDeportePersonalizado} accessibilityLabel="Agregar deporte">
-                  <Ionicons name="add" size={20} color="#fff" />
+                  <Ionicons name="add" size={20} color={SOBRE_COLOR} />
                 </TouchableOpacity>
               </View>
             </ScrollView>
 
             <View style={styles.modalActions}>
-              <TouchableOpacity style={styles.modalCancel} onPress={() => setModalDeportesVisible(false)}>
+              <TouchableOpacity accessibilityRole="button" style={styles.modalCancel} onPress={() => setModalDeportesVisible(false)}>
                 <Text style={styles.modalCancelText}>Cancelar</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={[styles.modalSave, guardandoDeportes && { opacity: 0.6 }]} onPress={guardarDeportes} disabled={guardandoDeportes}>
-                <Text style={styles.loginButtonText}>{guardandoDeportes ? 'Guardando…' : 'Guardar'}</Text>
+              <TouchableOpacity accessibilityRole="button" style={styles.modalSave} onPress={guardarDeportes}>
+                <Text style={styles.loginButtonText}>Guardar</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -811,16 +834,16 @@ export default function ProfileScreen() {
                       onPress={() => tocarDia(d)}
                       accessibilityLabel={`Editar las horas del ${NOMBRE_DIA[d]}`}
                     >
-                      <Ionicons name="time-outline" size={14} color={esActivo ? '#fff' : colors.accent} />
+                      <Ionicons name="time-outline" size={14} color={esActivo ? SOBRE_COLOR : colors.accent} />
                       <Text style={[styles.miDeporteTexto, esActivo && styles.miDeporteTextoActivo]}>
                         {d}{cantidad > 0 ? ` · ${cantidad}` : ''}
                       </Text>
                       <TouchableOpacity
                         onPress={() => quitarDiaElegido(d)}
                         accessibilityLabel={`Quitar ${NOMBRE_DIA[d]}`}
-                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                        hitSlop={ZONA_TOQUE}
                       >
-                        <Ionicons name="close" size={13} color={esActivo ? '#fff' : colors.textMuted} />
+                        <Ionicons name="close" size={13} color={esActivo ? SOBRE_COLOR : colors.textMuted} />
                       </TouchableOpacity>
                     </TouchableOpacity>
                   );
@@ -863,7 +886,7 @@ export default function ProfileScreen() {
                       />
                     </View>
                     <TouchableOpacity style={styles.agregarBoton} onPress={agregarHoraEscrita} accessibilityLabel="Agregar hora">
-                      <Ionicons name="add" size={20} color="#fff" />
+                      <Ionicons name="add" size={20} color={SOBRE_COLOR} />
                     </TouchableOpacity>
                   </View>
                 </View>
@@ -875,10 +898,10 @@ export default function ProfileScreen() {
             </ScrollView>
 
             <View style={styles.modalActions}>
-              <TouchableOpacity style={styles.modalCancel} onPress={() => setModalDispVisible(false)}>
+              <TouchableOpacity accessibilityRole="button" style={styles.modalCancel} onPress={() => setModalDispVisible(false)}>
                 <Text style={styles.modalCancelText}>Cancelar</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={styles.modalSave} onPress={guardarDisponibilidad}>
+              <TouchableOpacity accessibilityRole="button" style={styles.modalSave} onPress={guardarDisponibilidad}>
                 <Text style={styles.loginButtonText}>Guardar</Text>
               </TouchableOpacity>
             </View>
@@ -891,7 +914,7 @@ export default function ProfileScreen() {
         <View style={styles.modalOverlay}>
           <View style={styles.modalBox}>
             <Text style={styles.modalTitle}>Mis objetivos</Text>
-            <Text style={styles.modalHint}>Elige hasta {MAX_OBJETIVOS}. Ayudan a sugerirte compañeros afines.</Text>
+            <Text style={styles.modalHint}>Elige uno o varios. Ayudan a sugerirte compañeros afines.</Text>
 
             <View style={styles.chipsWrap}>
               {OBJETIVOS_DISPONIBLES.map((o) => {
@@ -909,10 +932,10 @@ export default function ProfileScreen() {
             </View>
 
             <View style={styles.modalActions}>
-              <TouchableOpacity style={styles.modalCancel} onPress={() => setModalObjVisible(false)}>
+              <TouchableOpacity accessibilityRole="button" style={styles.modalCancel} onPress={() => setModalObjVisible(false)}>
                 <Text style={styles.modalCancelText}>Cancelar</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={styles.modalSave} onPress={guardarObjetivos}>
+              <TouchableOpacity accessibilityRole="button" style={styles.modalSave} onPress={guardarObjetivos}>
                 <Text style={styles.loginButtonText}>Guardar</Text>
               </TouchableOpacity>
             </View>
@@ -926,15 +949,21 @@ export default function ProfileScreen() {
 const makeStyles = (c: Colors) =>
   StyleSheet.create({
     container: { flex: 1, backgroundColor: c.bg },
-    content: { padding: 20, paddingTop: 60, alignItems: 'center' },
-    header: { alignItems: 'center', marginBottom: 24 },
-    avatarWrapper: { width: 100, height: 100, marginBottom: 12 },
+    content: { paddingHorizontal: espacio.xl, paddingBottom: espacio.xxl + espacio.s, alignItems: 'center' },
+    marca: { width: '100%' },
+    ajustesButton: {
+      width: 44, height: 44, borderRadius: 22, backgroundColor: c.card,
+      borderWidth: 1, borderColor: c.border, alignItems: 'center', justifyContent: 'center',
+    },
+    header: { alignItems: 'center', marginBottom: espacio.xxl },
+    avatarWrapper: { width: 100, height: 100, marginBottom: espacio.m },
     avatarInner: {
       width: 100, height: 100, borderRadius: 50,
       backgroundColor: c.card, borderWidth: 2, borderColor: c.border,
       alignItems: 'center', justifyContent: 'center', overflow: 'hidden',
     },
     avatarImage: { width: '100%', height: '100%' },
+    // Iniciales grandes dentro del círculo de 100 px: tamaño propio, fuera de la escala de texto.
     avatarText: { color: c.text, fontSize: 30, fontWeight: '700' },
     editBadge: {
       position: 'absolute', bottom: 0, right: 0,
@@ -942,126 +971,125 @@ const makeStyles = (c: Colors) =>
       backgroundColor: c.primary, borderWidth: 3, borderColor: c.bg,
       alignItems: 'center', justifyContent: 'center',
     },
-    name: { color: c.text, fontSize: 18, fontWeight: '700' },
-    email: { color: c.textMuted, fontSize: 12, marginTop: 2 },
+    name: { color: c.text, ...tipo.titulo },
+    email: { color: c.textMuted, ...tipo.dato, marginTop: 2 },
     statsRow: {
       flexDirection: 'row', width: '100%', backgroundColor: c.card,
-      borderWidth: 1, borderColor: c.border, borderRadius: 14, paddingVertical: 14, marginBottom: 20,
+      borderWidth: 1, borderColor: c.border, borderRadius: radio.tarjeta, paddingVertical: espacio.l, marginBottom: espacio.xl,
     },
     statBox: { flex: 1, alignItems: 'center' },
     statValueRow: { flexDirection: 'row', alignItems: 'center', gap: 3 },
-    statNumber: { color: c.text, fontSize: 17, fontWeight: '700' },
-    statLabel: { color: c.textMuted, fontSize: 9.5, marginTop: 2 },
+    statNumber: { color: c.text, ...tipo.titulo },
+    statLabel: { color: c.textMuted, ...tipo.etiqueta, fontWeight: '400', marginTop: 2 },
 
-    section: { width: '100%', marginBottom: 18 },
-    sectionHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 },
-    tituloConTag: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-    sectionTitle: { color: c.text, fontSize: 13, fontWeight: '700' },
-    sectionText: { color: c.textMuted, fontSize: 12, lineHeight: 17 },
-    updateLink: { color: c.accent, fontSize: 10.5, fontWeight: '700', marginLeft: 'auto' },
+    section: { width: '100%', marginBottom: espacio.xl },
+    sectionHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: espacio.s },
+    tituloConTag: { flexDirection: 'row', alignItems: 'center', gap: espacio.s },
+    sectionTitle: { color: c.text, ...tipo.seccion },
+    sectionText: { color: c.textMuted, ...tipo.cuerpo, lineHeight: 19 },
+    updateLink: { color: c.accent, ...tipo.cuerpoFuerte, marginLeft: 'auto' },
 
-    chipsWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-    deporteChip: { backgroundColor: c.chip, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 6 },
-    deporteChipText: { color: c.accent, fontSize: 11.5, fontWeight: '700' },
+    chipsWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: espacio.s },
+    deporteChip: { backgroundColor: c.chip, borderRadius: radio.control, paddingHorizontal: espacio.m, paddingVertical: espacio.s - 1 },
+    deporteChipText: { color: c.accent, ...tipo.cuerpoFuerte },
 
-    infoCard: { backgroundColor: c.card, borderWidth: 1, borderColor: c.border, borderRadius: 14, overflow: 'hidden' },
-    infoFila: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12, paddingHorizontal: 14 },
+    infoCard: { backgroundColor: c.card, borderWidth: 1, borderColor: c.border, borderRadius: radio.tarjeta, overflow: 'hidden' },
+    infoFila: { flexDirection: 'row', alignItems: 'center', gap: espacio.m, minHeight: 56, paddingVertical: espacio.m, paddingHorizontal: espacio.l },
     infoFilaBorde: { borderTopWidth: 1, borderTopColor: c.border },
-    infoIcono: { width: 30, height: 30, borderRadius: 9, backgroundColor: c.chip, alignItems: 'center', justifyContent: 'center' },
+    mapWrap: { width: '100%' },
+    infoIcono: { width: 32, height: 32, borderRadius: radio.control - 2, backgroundColor: c.chip, alignItems: 'center', justifyContent: 'center' },
     infoTextos: { flex: 1 },
-    infoTitulo: { color: c.text, fontSize: 12.5, fontWeight: '700' },
-    infoValor: { color: c.text, fontSize: 11.5, marginTop: 2 },
+    infoTitulo: { color: c.text, ...tipo.cuerpoFuerte },
+    infoValor: { color: c.text, ...tipo.dato, marginTop: 2 },
     infoValorVacio: { color: c.textMuted, fontStyle: 'italic' },
 
-    ejemploTag: { backgroundColor: c.chip, borderRadius: 8, paddingHorizontal: 8, paddingVertical: 2 },
-    ejemploTagText: { color: c.textMuted, fontSize: 9.5, fontWeight: '700' },
-    historialFila: {
-      flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: c.card, borderWidth: 1,
-      borderColor: c.border, borderRadius: 12, padding: 10, marginTop: 8,
-    },
-    historialIcono: { width: 34, height: 34, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
+    ejemploTag: { backgroundColor: c.chip, borderRadius: radio.control, paddingHorizontal: espacio.s, paddingVertical: 2 },
+    ejemploTagText: { color: c.textMuted, ...tipo.etiqueta },
     resenaCard: {
       backgroundColor: c.card, borderWidth: 1, borderColor: c.border,
-      borderRadius: 12, padding: 12, marginBottom: 8,
+      borderRadius: radio.control, padding: espacio.m, marginBottom: espacio.s,
     },
-    resenaTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 },
-    resenaNombre: { color: c.text, fontSize: 12.5, fontWeight: '700' },
+    resenaTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: espacio.xs },
+    resenaNombre: { color: c.text, ...tipo.cuerpoFuerte },
     estrellasRow: { flexDirection: 'row', gap: 1 },
-    resenaTexto: { color: c.textMuted, fontSize: 12, lineHeight: 17 },
-    resenaCuando: { color: c.textMuted, fontSize: 10, marginTop: 6 },
+    resenaTexto: { color: c.textMuted, ...tipo.cuerpo, lineHeight: 19 },
+    resenaCuando: { color: c.textMuted, ...tipo.etiqueta, fontWeight: '400', marginTop: espacio.s - 2 },
 
-    themeRow: { flexDirection: 'row', gap: 6, alignSelf: 'flex-start' },
+    themeRow: { flexDirection: 'row', gap: espacio.s, alignSelf: 'flex-start' },
     themeOption: {
-      flexDirection: 'row', alignItems: 'center', gap: 5, paddingVertical: 6, paddingHorizontal: 12,
-      backgroundColor: c.card, borderWidth: 1, borderColor: c.border, borderRadius: 18,
+      flexDirection: 'row', alignItems: 'center', gap: espacio.xs + 1, minHeight: 44, paddingHorizontal: espacio.l,
+      backgroundColor: c.card, borderWidth: 1, borderColor: c.border, borderRadius: 22,
     },
     themeOptionActive: { backgroundColor: c.primary, borderColor: c.primary },
-    themeOptionText: { color: c.textMuted, fontSize: 10.5, fontWeight: '600' },
-    themeOptionTextActive: { color: '#fff' },
+    themeOptionText: { color: c.textMuted, ...tipo.etiqueta },
+    themeOptionTextActive: { color: SOBRE_COLOR },
 
     logoutButton: {
-      flexDirection: 'row', alignItems: 'center', gap: 8,
-      borderWidth: 1, borderColor: c.danger, borderRadius: 13,
-      paddingVertical: 12, paddingHorizontal: 24, marginTop: 4,
+      flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: espacio.s, minHeight: 48,
+      borderWidth: 1, borderColor: c.danger, borderRadius: radio.control,
+      paddingHorizontal: espacio.xxl, marginTop: espacio.xs,
     },
-    logoutText: { color: c.danger, fontSize: 13, fontWeight: '700' },
+    logoutText: { color: c.danger, ...tipo.cuerpoFuerte },
 
-    modalOverlay: { flex: 1, backgroundColor: c.overlay, justifyContent: 'center', padding: 24 },
-    modalBox: { backgroundColor: c.card, borderRadius: 18, padding: 20, borderWidth: 1, borderColor: c.border },
-    modalTitle: { color: c.text, fontSize: 16, fontWeight: '700', marginBottom: 6 },
-    modalHint: { color: c.textMuted, fontSize: 11.5, marginBottom: 14, lineHeight: 16 },
-    modalScroll: { maxHeight: 380, marginBottom: 6 },
+    modalOverlay: { flex: 1, backgroundColor: c.overlay, justifyContent: 'center', padding: espacio.xxl },
+    modalBox: { backgroundColor: c.card, borderRadius: radio.tarjeta + 2, padding: espacio.xl, borderWidth: 1, borderColor: c.border },
+    modalTitle: { color: c.text, ...tipo.titulo, marginBottom: espacio.s - 2 },
+    modalHint: { color: c.textMuted, ...tipo.dato, marginBottom: espacio.l - 2, lineHeight: 17 },
+    modalScroll: { maxHeight: 380, marginBottom: espacio.s - 2 },
     bioInput: {
-      backgroundColor: c.bg, borderWidth: 1, borderColor: c.border, borderRadius: 12,
-      padding: 12, color: c.text, fontSize: 13, height: 90, textAlignVertical: 'top',
+      backgroundColor: c.bg, borderWidth: 1, borderColor: c.border, borderRadius: radio.control,
+      padding: espacio.m, color: c.text, ...tipo.cuerpo, height: 96, textAlignVertical: 'top',
     },
-    dispAnterior: { color: c.textMuted, fontSize: 11.5, lineHeight: 16, marginBottom: 12 },
-    dispError: { color: c.danger, fontSize: 12, marginTop: 8 },
-    charCount: { color: c.textMuted, fontSize: 10, textAlign: 'right', marginTop: 4, marginBottom: 10 },
-    otroLabel: { color: c.textMuted, fontSize: 11, fontWeight: '600', marginTop: 4, marginBottom: 8 },
-    loginButtonText: { color: '#fff', fontSize: 13, fontWeight: '700' },
+    dispAnterior: { color: c.textMuted, ...tipo.dato, lineHeight: 17, marginBottom: espacio.m },
+    dispError: { color: c.danger, ...tipo.dato, marginTop: espacio.s },
+    charCount: { color: c.textMuted, ...tipo.etiqueta, fontWeight: '400', textAlign: 'right', marginTop: espacio.xs, marginBottom: espacio.m - 2 },
+    otroLabel: { color: c.textMuted, ...tipo.etiqueta, marginTop: espacio.xs, marginBottom: espacio.s },
+    loginButtonText: { color: SOBRE_COLOR, ...tipo.cuerpoFuerte },
 
-    selectChip: { borderWidth: 1, borderColor: c.border, borderRadius: 20, paddingHorizontal: 14, paddingVertical: 8 },
+    selectChip: {
+      minHeight: 44, justifyContent: 'center', borderWidth: 1, borderColor: c.border,
+      borderRadius: 22, paddingHorizontal: espacio.l,
+    },
     selectChipActive: { backgroundColor: c.primary, borderColor: c.primary },
-    selectChipText: { color: c.textMuted, fontSize: 12, fontWeight: '600' },
-    selectChipTextActive: { color: '#fff' },
+    selectChipText: { color: c.textMuted, ...tipo.cuerpoFuerte, fontWeight: '600' },
+    selectChipTextActive: { color: SOBRE_COLOR },
 
     miDeporte: {
-      flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 7, paddingHorizontal: 12,
-      borderRadius: 20, backgroundColor: c.chip, borderWidth: 1, borderColor: c.chip,
+      flexDirection: 'row', alignItems: 'center', gap: espacio.s, minHeight: 44, paddingHorizontal: espacio.m,
+      borderRadius: 22, backgroundColor: c.chip, borderWidth: 1, borderColor: c.chip,
     },
     miDeporteActivo: { backgroundColor: c.primary, borderColor: c.primary },
-    miDeporteTexto: { color: c.accent, fontSize: 12, fontWeight: '700' },
-    miDeporteTextoActivo: { color: '#fff' },
+    miDeporteTexto: { color: c.accent, ...tipo.cuerpoFuerte },
+    miDeporteTextoActivo: { color: SOBRE_COLOR },
 
     nivelPanel: {
-      marginTop: 12, marginBottom: 6, padding: 12, borderRadius: 12,
+      marginTop: espacio.m, marginBottom: espacio.s - 2, padding: espacio.m, borderRadius: radio.control,
       backgroundColor: c.inputBg, borderWidth: 1, borderColor: c.border,
     },
-    nivelPanelTitulo: { color: c.text, fontSize: 12, fontWeight: '700', marginBottom: 8 },
-    nivelBotones: { flexDirection: 'row', gap: 6 },
+    nivelPanelTitulo: { color: c.text, ...tipo.cuerpoFuerte, marginBottom: espacio.s },
+    nivelBotones: { flexDirection: 'row', gap: espacio.s - 2 },
     nivelBoton: {
-      flex: 1, height: 36, borderRadius: 9, borderWidth: 1, borderColor: c.border,
+      flex: 1, height: 44, borderRadius: radio.control - 2, borderWidth: 1, borderColor: c.border,
       backgroundColor: c.card, alignItems: 'center', justifyContent: 'center',
     },
     nivelBotonActivo: { backgroundColor: c.primary, borderColor: c.primary },
-    nivelBotonTexto: { color: c.textMuted, fontSize: 13, fontWeight: '700' },
-    nivelBotonTextoActivo: { color: '#fff' },
-    nivelPanelNombre: { color: c.textMuted, fontSize: 11.5, marginTop: 8, textAlign: 'center' },
+    nivelBotonTexto: { color: c.textMuted, ...tipo.cuerpoFuerte },
+    nivelBotonTextoActivo: { color: SOBRE_COLOR },
+    nivelPanelNombre: { color: c.textMuted, ...tipo.dato, marginTop: espacio.s, textAlign: 'center' },
 
-    agregarRow: { flexDirection: 'row', gap: 8, alignItems: 'center', marginTop: 12, marginBottom: 6 },
+    agregarRow: { flexDirection: 'row', gap: espacio.s, alignItems: 'center', marginTop: espacio.m, marginBottom: espacio.s - 2 },
     inputBoxSmall: {
-      backgroundColor: c.inputBg, borderWidth: 1, borderColor: c.border,
-      borderRadius: 12, paddingHorizontal: 14, paddingVertical: 10, marginTop: 8, marginBottom: 10,
+      backgroundColor: c.inputBg, borderWidth: 1, borderColor: c.border, minHeight: 44, justifyContent: 'center',
+      borderRadius: radio.control, paddingHorizontal: espacio.l, marginTop: espacio.s, marginBottom: espacio.m - 2,
     },
-    input: { color: c.text, fontSize: 13 },
+    input: { color: c.text, ...tipo.cuerpo },
     agregarBoton: {
-      width: 38, height: 38, borderRadius: 12, backgroundColor: c.primary,
+      width: 44, height: 44, borderRadius: radio.control, backgroundColor: c.primary,
       alignItems: 'center', justifyContent: 'center',
     },
 
-    modalActions: { flexDirection: 'row', gap: 10, marginTop: 8 },
-    modalCancel: { flex: 1, paddingVertical: 12, borderRadius: 12, borderWidth: 1, borderColor: c.border, alignItems: 'center' },
-    modalCancelText: { color: c.textMuted, fontSize: 13, fontWeight: '700' },
-    modalSave: { flex: 1, backgroundColor: c.primary, borderRadius: 12, paddingVertical: 12, alignItems: 'center' },
+    modalActions: { flexDirection: 'row', gap: espacio.m - 2, marginTop: espacio.s },
+    modalCancel: { flex: 1, minHeight: 48, justifyContent: 'center', borderRadius: radio.control, borderWidth: 1, borderColor: c.border, alignItems: 'center' },
+    modalCancelText: { color: c.textMuted, ...tipo.cuerpoFuerte },
+    modalSave: { flex: 1, minHeight: 48, justifyContent: 'center', backgroundColor: c.primary, borderRadius: radio.control, alignItems: 'center' },
   });

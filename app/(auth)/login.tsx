@@ -1,10 +1,11 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
-import { Alert, KeyboardAvoidingView, Platform, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Alert, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import BrandLogo from '../../components/BrandLogo';
-import { EmailNotVerifiedError, inicioSegunRol, login, loginConHuella, type Usuario } from '../../services/auth';
+import { useTecladoVisible } from '../../hooks/use-teclado';
+import { EmailNotVerifiedError, Usuario, login, loginConHuella, rutaInicial } from '../../services/auth';
 import {
   activarBiometria,
   autenticar,
@@ -26,6 +27,7 @@ export default function LoginScreen() {
   const { colors, mode, setMode } = useAppTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const insets = useSafeAreaInsets();
+  const tecladoAbierto = useTecladoVisible();
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -49,17 +51,17 @@ export default function LoginScreen() {
     })();
   }, []);
 
-  // Ingreso único: el rol de la cuenta (admin, club_admin o deportista) decide a qué vista se va.
+  // Ingreso único: el rol de la cuenta (deportista o club) decide a qué vista se va.
   function entrar(usuario: Usuario) {
-    router.replace(inicioSegunRol(usuario) as never);
+    router.replace(rutaInicial(usuario) as never);
   }
 
   /** Después de un login con contraseña, ofrece activar la huella (una sola vez por cuenta). */
-  function ofrecerActivarHuella(emailLogin: string, passwordLogin: string): Promise<void> {
+  function ofrecerActivarHuella(emailLogin: string, clave: string): Promise<void> {
     return new Promise((resolve) => {
       Alert.alert(
         `¿Entrar con ${bioNombre}?`,
-        `Activa el acceso con ${bioNombre} para entrar más rápido la próxima vez. Tus datos de acceso quedan cifrados en el llavero de este celular y solo se usan tras verificar tu ${bioNombre}.`,
+        `Activa el acceso con ${bioNombre} para entrar más rápido la próxima vez. Tus credenciales se guardan cifradas en el llavero del dispositivo.`,
         [
           {
             text: 'Ahora no',
@@ -74,7 +76,7 @@ export default function LoginScreen() {
             onPress: async () => {
               const ok = await autenticar(`Confirma tu ${bioNombre} para activarlo`);
               if (ok) {
-                await activarBiometria(emailLogin, passwordLogin);
+                await activarBiometria(emailLogin, clave);
                 setBioEmail(emailLogin.trim().toLowerCase());
               }
               resolve();
@@ -119,11 +121,10 @@ export default function LoginScreen() {
     if (!ok) return; // canceló o no coincidió: el sistema ya muestra su mensaje
     setEnviando(true);
     try {
-      entrar(await loginConHuella());
+      const usuario = await loginConHuella();
+      entrar(usuario);
     } catch (e: any) {
       setError(e.message);
-      // Si la huella se desactivó (contraseña cambiada), se esconde el botón.
-      setBioEmail(await emailActivado());
     } finally {
       setEnviando(false);
     }
@@ -132,7 +133,7 @@ export default function LoginScreen() {
   return (
     <KeyboardAvoidingView
       style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
       {/* Apariencia: claro / oscuro / automático */}
       <View style={[styles.temaBarra, { top: insets.top + 10 }]}>
@@ -153,7 +154,14 @@ export default function LoginScreen() {
         })}
       </View>
 
-      <View style={styles.content}>
+      <ScrollView
+        contentContainerStyle={[
+          styles.content,
+          { paddingTop: insets.top + 56, paddingBottom: tecladoAbierto ? 120 : insets.bottom + 24 },
+        ]}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
         <BrandLogo width={222} style={styles.logo} />
 
         <Text style={styles.title}>Bienvenido</Text>
@@ -221,7 +229,7 @@ export default function LoginScreen() {
             ¿No tienes cuenta? <Text style={styles.registerLinkAccent}>Regístrate</Text>
           </Text>
         </TouchableOpacity>
-      </View>
+      </ScrollView>
     </KeyboardAvoidingView>
   );
 }
@@ -229,7 +237,7 @@ export default function LoginScreen() {
 const makeStyles = (c: Colors) =>
   StyleSheet.create({
     container: { flex: 1, backgroundColor: c.bg },
-    content: { flex: 1, justifyContent: 'center', paddingHorizontal: 24 },
+    content: { flexGrow: 1, justifyContent: 'center', paddingHorizontal: 24 },
     logo: { marginBottom: 36 },
 
     temaBarra: {
