@@ -31,7 +31,7 @@ function cargar(archivo, responder) {
         alCambiar: () => () => {},
       };
       if (nombre === './auth') return { getSession: async () => ({ id: 'yo' }), getToken: async () => 'token', guardarClubEnSesion: async () => {} };
-      if (nombre === './api') return { ApiError, apiRequest: async (...args) => { llamadas.push(args); return responder(...args); } };
+      if (nombre === './api') return { ApiError, urlFoto: (v) => v ?? undefined, apiRequest: async (...args) => { llamadas.push(args); return responder(...args); } };
       throw Error(nombre);
     },
   });

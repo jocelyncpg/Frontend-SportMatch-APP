@@ -1,18 +1,31 @@
 import * as Crypto from 'expo-crypto';
 import { useSyncExternalStore } from 'react';
-import { ApiError, apiRequest } from './api';
+import { ApiError, apiRequest, urlFoto } from './api';
 import { getSession, getToken } from './auth';
 import { alCambiar, crearSondeo } from './sondeo';
 
 export const MAX_MENSAJE_GRUPAL = 1000;
 export type AccesoGrupal = 'escribir' | 'leer' | 'ninguno';
+/** HU-64: el mensaje que cita una respuesta. Si el original ya no existe, `disponible` es false y no hay más datos. */
+export type CitaGrupal = {
+  id: string | null;
+  autorId: string | null;
+  autorNombre: string | null;
+  texto: string | null;
+  disponible: boolean;
+};
 export type MensajeGrupal = {
   id: string;
   autorId: string;
   autorNombre: string;
+  /** Foto del autor (ruta ya completa) para abrir su perfil desde el chat; undefined si no tiene. */
+  autorFoto?: string;
   texto: string;
   propio: boolean;
   enviadoEn: number;
+  /** Id del mensaje al que responde, y su cita; null si no es una respuesta. */
+  respondeA: string | null;
+  cita: CitaGrupal | null;
 };
 export type SalaGrupal = {
   actividadId: string;
@@ -37,13 +50,19 @@ export type ResultadoGrupal = {
   ok: false;
   motivo: string;
 };
+type CitaApi = {
+  id: number | null; author_id: string | null; author_name: string | null; text: string | null; available: boolean;
+};
 type MensajeApi = {
   id: number;
   author_id: string;
   author_name: string;
+  author_photo?: string | null;
   text: string;
   created_at: string;
   own: boolean;
+  reply_to_id?: number | null;
+  reply_to?: CitaApi | null;
 };
 type ChatApi = {
   activity_id: string;
@@ -87,9 +106,18 @@ const mensaje = (m: MensajeApi): MensajeGrupal => ({
   id: String(m.id),
   autorId: m.author_id,
   autorNombre: m.author_name,
+  autorFoto: urlFoto(m.author_photo),
   texto: m.text,
   propio: m.own,
-  enviadoEn: Date.parse(m.created_at)
+  enviadoEn: Date.parse(m.created_at),
+  respondeA: m.reply_to_id == null ? null : String(m.reply_to_id),
+  cita: m.reply_to ? {
+    id: m.reply_to.id == null ? null : String(m.reply_to.id),
+    autorId: m.reply_to.author_id,
+    autorNombre: m.reply_to.author_name,
+    texto: m.reply_to.text,
+    disponible: m.reply_to.available
+  } : null
 });
 const motivo = (e: unknown) => e instanceof Error ? e.message : 'No se pudo conectar con el servidor.';
 
@@ -191,19 +219,27 @@ export async function cargarSala(actividadId: string): Promise<boolean> {
   return data.mensajes.some((m) => !anterior?.mensajes.some((viejo) => viejo.id === String(m.id)));
 }
 
-export async function enviarMensajeGrupal(actividadId: string, texto: string): Promise<ResultadoGrupal> {
+/** Página del chat que contiene un mensaje citado (HU-64), para llevar a él aunque no esté cargado. */
+export async function cargarAlrededorDe(actividadId: string, mensajeId: string): Promise<MensajeGrupal[]> {
+  const { token } = await credenciales();
+  const ruta = '/activities/' + encodeURIComponent(actividadId) + '/chat/messages?around_id=' + encodeURIComponent(mensajeId);
+  return (await apiRequest<SalaApi>(ruta + '&limit=50', { token })).mensajes.map(mensaje);
+}
+
+/** `responderA` (HU-64): id de un mensaje de este mismo chat al que responde el nuevo. */
+export async function enviarMensajeGrupal(actividadId: string, texto: string, responderA?: string): Promise<ResultadoGrupal> {
   const limpio = texto.trim();
   if (!limpio || limpio.length > MAX_MENSAJE_GRUPAL) {
     return { ok: false, motivo: 'Escribe entre 1 y ' + MAX_MENSAJE_GRUPAL + ' caracteres.' };
   }
-  const clave = actividadId + ':' + limpio;
+  const clave = actividadId + ':' + limpio + (responderA ? ':' + responderA : '');
   if (!intentos.has(clave)) intentos.set(clave, Crypto.randomUUID());
   try {
     const { token } = await credenciales();
     await apiRequest<MensajeApi>(`/activities/${encodeURIComponent(actividadId)}/chat/messages`, {
       method: 'POST',
       token,
-      body: { text: limpio, client_message_id: intentos.get(clave) },
+      body: { text: limpio, client_message_id: intentos.get(clave), ...(responderA ? { reply_to: Number(responderA) } : {}) },
     });
     intentos.delete(clave);
     intervalos.get(actividadId)?.ahora();
