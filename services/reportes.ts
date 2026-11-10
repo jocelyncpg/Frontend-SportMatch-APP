@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from 'react';
-import { ApiError, apiRequest } from './api';
+import { ApiError, apiRequest, urlFoto } from './api';
 import { getToken } from './auth';
 
 export type TipoReporte = 'usuario' | 'actividad' | 'mensaje';
@@ -99,9 +99,29 @@ export function useBloqueados(): string[] {
   return useSyncExternalStore(suscribir, getBloqueados, getBloqueados);
 }
 
+/** El servidor entrega la lista de a páginas de hasta 100. */
+const PAGINA_BLOQUEADOS = 100;
+
+/** HU-66: una persona de la lista de bloqueados (más reciente primero). `foto` es undefined si no tiene. */
+export type PersonaBloqueada = { id: string; nombre: string; apellidoInicial: string; foto?: string; fecha: string };
+type BloqueadoApi = PersonaApi & { fecha_bloqueo: string };
+
+/** Una página de las personas que bloqueaste: id, nombre, foto y desde cuándo. Nunca trae correo ni datos sensibles. */
+export async function listarBloqueados(desde = 0, limite = PAGINA_BLOQUEADOS): Promise<PersonaBloqueada[]> {
+  const lista = await apiRequest<BloqueadoApi[]>(`/users/me/blocks?limit=${limite}&offset=${desde}`, { token: await sesion() });
+  return lista.map((p) => ({
+    id: p.user_id, nombre: p.nombre, apellidoInicial: p.apellido_inicial, foto: urlFoto(p.foto_perfil), fecha: p.fecha_bloqueo,
+  }));
+}
+
 export async function cargarBloqueados(): Promise<void> {
-  const lista = await apiRequest<PersonaApi[]>('/users/me/blocks', { token: await sesion() });
-  bloqueados = lista.map((p) => p.user_id);
+  const ids: string[] = [];
+  for (let desde = 0; ; desde += PAGINA_BLOQUEADOS) {
+    const pagina = await listarBloqueados(desde, PAGINA_BLOQUEADOS);
+    ids.push(...pagina.map((p) => p.id));
+    if (pagina.length < PAGINA_BLOQUEADOS) break;
+  }
+  bloqueados = ids;
   emitir();
 }
 

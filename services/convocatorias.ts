@@ -65,6 +65,11 @@ export type PaginaConvocatorias = {
 export type EstadoPostulacion = 'PENDIENTE' | 'PRESELECCIONADO' | 'ACEPTADO' | 'RECHAZADO';
 /** Estados que el club asigna (PENDIENTE = volver a "en espera"). */
 export type EstadoRevision = EstadoPostulacion;
+
+/** HU-67: a quien ya fue aceptado no se le ofrece "Preseleccionar" (el backend también lo rechaza con 409). */
+export function puedePreseleccionar(estado: EstadoPostulacion): boolean {
+  return estado !== 'PRESELECCIONADO' && estado !== 'ACEPTADO';
+}
 export type PerfilDeportivo = {
   nombre: string;
   apellido_inicial: string;
