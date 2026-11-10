@@ -29,13 +29,14 @@ function loadStore(request, matchingRequest = async () => ({ incoming: [], outgo
   vm.runInNewContext(code, {
     module, exports: module.exports, Error,
     require(name) {
+      if (name === 'react-native') return { Platform: { OS: 'web' } };
       if (name === 'react') return {};
       if (name === './auth') return {
         getSession: async () => auth.session,
         getToken: async () => auth.token,
       };
       if (name === './api') return {
-        ApiError, urlFoto: (v) => v ?? undefined,
+        ApiError,
         apiRequest: async (...args) => {
           calls.push(args);
           if (args[0].startsWith('/matching/')) return matchingRequest(...args);
@@ -323,6 +324,7 @@ function loadAuth(preferences, initialSession = {}) {
   vm.runInNewContext(code, {
     module, exports: module.exports, Error,
     require(name) {
+      if (name === 'react-native') return { Platform: { OS: 'web' } };
       if (name === '@react-native-async-storage/async-storage') return { default: storage };
       if (name === 'react-native') return { Platform: { OS: 'ios' } };
       if (name === './api') return { ApiError, urlFoto: (v) => v ?? undefined, apiRequest: async (path, options) => {
@@ -410,6 +412,7 @@ function loadAthletes(request) {
   const code = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 } }).outputText;
   vm.runInNewContext(code, { module, exports: module.exports, Error,
     require(name) {
+      if (name === 'react-native') return { Platform: { OS: 'web' } };
       if (name === './api') return { ApiError, apiRequest: request };
       if (name === './auth') return { getSession: async () => auth.session, getToken: async () => auth.token };
       if (name === './matchStore') return { aPersona: (card) => ({ id: card.user_id, name: card.nombre }), getEstado: () => ({ usuarioId: null, catalogo: [] }) };

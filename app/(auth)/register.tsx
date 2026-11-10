@@ -5,6 +5,7 @@ import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import BrandLogo from '../../components/BrandLogo';
 import SelectorTipoCuenta from '../../components/SelectorTipoCuenta';
+import { useTecladoVisible } from '../../hooks/use-teclado';
 import { register } from '../../services/auth';
 import {
   PASSWORD_MAX,
@@ -24,6 +25,8 @@ export default function RegisterScreen() {
   const { colors } = useAppTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const insets = useSafeAreaInsets();
+  // Con el teclado abierto se deja espacio extra abajo para poder subir el último campo sobre el teclado.
+  const tecladoAbierto = useTecladoVisible();
 
   const [rut, setRut] = useState('');
   const [nombre, setNombre] = useState('');
@@ -87,12 +90,12 @@ export default function RegisterScreen() {
   return (
     <KeyboardAvoidingView
       style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
       <ScrollView
         contentContainerStyle={[
           styles.content,
-          { paddingTop: insets.top + 24, paddingBottom: insets.bottom + 32 },
+          { paddingTop: insets.top + 24, paddingBottom: tecladoAbierto ? 120 : insets.bottom + 32 },
         ]}
         keyboardShouldPersistTaps="handled"
       >

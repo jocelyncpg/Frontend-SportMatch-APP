@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ScrollView, StyleSheet, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import { HORARIOS, formatearDia, formatearHora, opcionesDias } from '../services/actividades';
+import CalendarioFecha from './CalendarioFecha';
+import { HORARIOS, formatearHora } from '../services/actividades';
 import {
   agregarDeporteClub,
   listarDeportesClub,
@@ -40,7 +41,6 @@ export function ConvocatoriasClub({ club }: {
 }) {
   const { colors } = useAppTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
-  const dias = useMemo(() => opcionesDias(Date.now()), []);
   const [lista, setLista] = useState<Convocatoria[]>([]);
   const [catalogo, setCatalogo] = useState<DeporteClub[]>([]);
   const [ofrecidos, setOfrecidos] = useState<number[]>(club.deportes.map((deporte) => deporte.id));
@@ -323,24 +323,7 @@ export function ConvocatoriasClub({ club }: {
       {campo('Edad máxima (opcional)', edadMaxima, setEdadMaxima, { numerico: true, limite: 2 })}
       <Text style={styles.etiqueta}>Día de la prueba</Text>
       {campo('Fecha AAAA-MM-DD', fecha, setFecha, { limite: 10, ayuda: '2026-11-07' })}
-      <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-        {dias.map((dia) => {
-          const fechaDia = new Date(dia);
-          const anio = fechaDia.getFullYear();
-          const mes = String(fechaDia.getMonth() + 1).padStart(2, '0');
-          const diaMes = String(fechaDia.getDate()).padStart(2, '0');
-          const valor = `${anio}-${mes}-${diaMes}`;
-          return (
-            <TouchableOpacity
-              key={dia}
-              style={[styles.chip, fecha === valor && styles.chipActivo]}
-              onPress={() => setFecha(valor)}
-            >
-              <Text style={styles.nombre}>{formatearDia(dia, Date.now())}</Text>
-            </TouchableOpacity>
-          );
-        })}
-      </ScrollView>
+      <CalendarioFecha valor={fecha} minimo={new Date().toLocaleDateString('en-CA')} onElegir={setFecha} />
       <Text style={styles.etiqueta}>Hora</Text>
       <ScrollView horizontal showsHorizontalScrollIndicator={false}>
         {HORARIOS.map((hora) => (

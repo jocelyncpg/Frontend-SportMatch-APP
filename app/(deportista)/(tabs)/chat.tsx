@@ -1,8 +1,10 @@
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { router, useFocusEffect } from 'expo-router';
-import { useCallback, useMemo } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { AvatarMini, EncabezadoMarca } from '../../../components/ui';
+import { getSession, type Usuario } from '../../../services/auth';
 import Avatar from '../../../components/Avatar';
 import { YO, visualDeporte } from '../../../services/actividades';
 import { horaCorta, useChats, useSilenciados } from '../../../services/chat';
@@ -13,7 +15,7 @@ import { Persona, cargarMatching, useMatches } from '../../../services/matchStor
 import { useBloqueados } from '../../../services/reportes';
 import { useMatchingRefresh } from '../../../hooks/useMatchingRefresh';
 import { avisarCambio } from '../../../services/sondeo';
-import { Colors, useAppTheme } from '../../../theme/ThemeContext';
+import { Colors, useAppTheme, espacio, radio, tipo } from '../../../theme/ThemeContext';
 type Item =
   | {
     tipo: 'persona';
@@ -37,6 +39,9 @@ type Item =
   };
 export default function ChatListScreen() {
   useFocusEffect(useCallback(() => { avisarCambio('listas'); }, []));
+  const [usuario, setUsuario] = useState<Usuario | null>(null);
+  const [verTodas, setVerTodas] = useState(false);
+  useEffect(() => { void getSession().then(setUsuario); }, []);
   const { colors } = useAppTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const insets = useSafeAreaInsets();
@@ -172,7 +177,7 @@ export default function ChatListScreen() {
     return (
       <TouchableOpacity key={`g-${g.actividadId}`} style={styles.card} onPress={() => abrirGrupo(g)}>
         <View style={[styles.grupoIcono, { backgroundColor: visual.colorBg }]}>
-          <Text style={styles.grupoEmoji}>{visual.icon}</Text>
+          <MaterialCommunityIcons name={visual.icon} size={24} color={visual.color} />
         </View>
         <View style={styles.cardInfo}>
           <View style={styles.nombreFila}>
@@ -253,9 +258,7 @@ export default function ChatListScreen() {
   }
   return (
     <View style={[styles.container, { paddingTop: insets.top + 12 }]}>
-      <View style={styles.topbar}>
-        <Text style={styles.title}>Chats</Text>
-      </View>
+      <EncabezadoMarca subtitulo="Chats" derecha={<AvatarMini uri={usuario?.fotoPerfil} iniciales={usuario ? `${usuario.nombre[0]}${usuario.apellidoPaterno[0]}` : '..'} onPress={() => router.push('/(deportista)/(tabs)/profile')} />} />
       <ScrollView contentContainerStyle={styles.list}>
         {estadoGrupos.error ? <Text style={styles.cardMessage}>{estadoGrupos.error}</Text> : null}
         {estadoConsultas.error ? <Text style={styles.cardMessage}>{estadoConsultas.error}</Text> : null}
@@ -265,7 +268,7 @@ export default function ChatListScreen() {
             <Text style={styles.emptyText}>{matchingError} · {sesionExpirada ? 'Iniciar sesión' : 'Reintentar'}</Text>
           </TouchableOpacity>
         )}
-        {items.map((it) => {
+        {(verTodas ? items : items.slice(0, 5)).map((it) => {
           if (it.tipo === 'grupo') return tarjetaGrupo(it.grupo);
           if (it.tipo === 'club') return tarjetaClub(it.hilo);
           if (it.tipo === 'canal') return tarjetaCanal(it.canal);
@@ -280,6 +283,7 @@ export default function ChatListScreen() {
             </Text>
           </View>
         )}
+        {items.length > 5 ? <TouchableOpacity onPress={() => setVerTodas((v) => !v)} style={{ padding: espacio.l }}><Text style={styles.emptyText}>{verTodas ? 'Ver menos' : `Ver más (${items.length - 5})`}</Text></TouchableOpacity> : null}
       </ScrollView>
     </View>
   );
@@ -289,57 +293,38 @@ const makeStyles = (c: Colors) =>
     container: { flex: 1, backgroundColor: c.bg },
     topbar: { paddingHorizontal: 20, marginBottom: 16 },
     title: { color: c.text, fontSize: 20, fontWeight: '700' },
-    list: { paddingHorizontal: 20, paddingBottom: 30 },
+    list: { paddingHorizontal: espacio.xl, paddingBottom: espacio.xxl + espacio.s },
     card: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 12,
-      backgroundColor: c.card,
-      borderWidth: 1,
-      borderColor: c.border,
-      borderRadius: 14,
-      padding: 12,
-      marginBottom: 10,
+      flexDirection: 'row', alignItems: 'center', gap: espacio.m,
+      backgroundColor: c.card, borderWidth: 1, borderColor: c.border,
+      borderRadius: radio.tarjeta, padding: espacio.m + 2, marginBottom: espacio.m, minHeight: 72,
     },
-    avatar: { width: 46, height: 46, borderRadius: 23 },
+    avatar: { width: 48, height: 48, borderRadius: 24 },
     grupoIcono: { width: 46, height: 46, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
     grupoEmoji: { fontSize: 21 },
     cardInfo: { flex: 1 },
-    nombreFila: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-    cardName: { color: c.text, fontSize: 13, fontWeight: '700' },
+    nombreFila: { flexDirection: 'row', alignItems: 'center', gap: espacio.s },
+    cardName: { color: c.text, ...tipo.seccion },
     cardNameGrupo: { flexShrink: 1 },
-    grupoTag: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 3,
-      backgroundColor: c.chip,
-      borderRadius: 9,
-      paddingHorizontal: 6,
-      paddingVertical: 2
-    },
-    grupoTagTexto: { color: c.accent, fontSize: 10, fontWeight: '700' },
-    cardMessage: { color: c.textMuted, fontSize: 11.5, marginTop: 2 },
+    grupoTag: { flexDirection: 'row', alignItems: 'center', gap: espacio.xs, backgroundColor: c.chip, borderRadius: radio.control, paddingHorizontal: espacio.s, paddingVertical: 2 },
+    grupoTagTexto: { color: c.accent, ...tipo.etiqueta },
+    cardMessage: { color: c.textMuted, ...tipo.cuerpo, marginTop: 2 },
     cardMessageSinLeer: { color: c.text, fontWeight: '700' },
-    cardMessageNuevo: { color: c.accent, fontSize: 11.5, marginTop: 2, fontWeight: '600' },
-    cardBloqueado: { color: c.danger, fontSize: 11.5, marginTop: 2, fontWeight: '600' },
-    cardDerecha: { alignItems: 'flex-end', gap: 5 },
-    horaFila: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-    cardHora: { color: c.textMuted, fontSize: 10 },
+    cardMessageNuevo: { color: c.accent, ...tipo.cuerpoFuerte, marginTop: 2 },
+    cardBloqueado: { color: c.danger, ...tipo.cuerpoFuerte, marginTop: 2 },
+    cardDerecha: { alignItems: 'flex-end', gap: espacio.xs + 1 },
+    horaFila: { flexDirection: 'row', alignItems: 'center', gap: espacio.xs },
+    cardHora: { color: c.textMuted, ...tipo.etiqueta, fontWeight: '400' },
     cardHoraSinLeer: { color: c.primary, fontWeight: '700' },
     contador: {
-      minWidth: 18,
-      height: 18,
-      borderRadius: 9,
-      paddingHorizontal: 5,
-      backgroundColor: c.primary,
-      alignItems: 'center',
-      justifyContent: 'center',
+      minWidth: 22, height: 22, borderRadius: 11, paddingHorizontal: espacio.xs + 2,
+      backgroundColor: c.primary, alignItems: 'center', justifyContent: 'center',
     },
     contadorSilenciado: { backgroundColor: c.textMuted },
-    contadorTexto: { color: '#fff', fontSize: 10, fontWeight: '700' },
-    nuevoBadge: { backgroundColor: c.primary, borderRadius: 10, paddingHorizontal: 8, paddingVertical: 3 },
-    nuevoText: { color: '#fff', fontSize: 9.5, fontWeight: '700' },
-    emptyState: { alignItems: 'center', paddingHorizontal: 30, marginTop: 60, gap: 8 },
-    emptyTitle: { color: c.text, fontSize: 14, fontWeight: '700', marginTop: 6 },
-    emptyText: { color: c.textMuted, fontSize: 12, textAlign: 'center', lineHeight: 18 },
+    contadorTexto: { color: '#FFFFFF', ...tipo.etiqueta, fontWeight: '700' },
+    nuevoBadge: { backgroundColor: c.primary, borderRadius: radio.control, paddingHorizontal: espacio.s + 2, paddingVertical: espacio.xs },
+    nuevoText: { color: '#FFFFFF', ...tipo.etiqueta, fontWeight: '700' },
+    emptyState: { alignItems: 'center', paddingHorizontal: espacio.xxl + espacio.s, marginTop: 60, gap: espacio.s },
+    emptyTitle: { color: c.text, ...tipo.seccion, marginTop: espacio.s },
+    emptyText: { color: c.textMuted, ...tipo.cuerpo, textAlign: 'center', lineHeight: 19 },
   });
