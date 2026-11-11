@@ -188,7 +188,8 @@ test('registro para club existente no guarda datos de un club pendiente', async 
         setItem: async (key, value) => { guardado.set(key, value); },
         removeItem: async (key) => { guardado.delete(key); },
       } };
-      if (nombre === './api') return { ApiError, apiRequest: async (...args) => { llamadas.push(args); } };
+      if (nombre === 'react-native') return { Platform: { OS: 'ios' } };
+      if (nombre === './api') return { ApiError, urlFoto: (v) => v ?? undefined, apiRequest: async (...args) => { llamadas.push(args); } };
       if (nombre === './validators') return { MAX_REPRESENTANTES: 3 };
       if (nombre === './deportes') return {};
       throw Error(nombre);

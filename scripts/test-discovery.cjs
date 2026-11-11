@@ -37,7 +37,6 @@ function loadStore(request, matchingRequest = async () => ({ incoming: [], outgo
       };
       if (name === './api') return {
         ApiError,
-        urlFoto: (valor) => valor ? `http://localhost:8000${valor}` : undefined,
         apiRequest: async (...args) => {
           calls.push(args);
           if (args[0].startsWith('/matching/')) return matchingRequest(...args);
@@ -327,7 +326,8 @@ function loadAuth(preferences, initialSession = {}) {
     require(name) {
       if (name === 'react-native') return { Platform: { OS: 'web' } };
       if (name === '@react-native-async-storage/async-storage') return { default: storage };
-      if (name === './api') return { ApiError, apiRequest: async (path, options) => {
+      if (name === 'react-native') return { Platform: { OS: 'ios' } };
+      if (name === './api') return { ApiError, urlFoto: (v) => v ?? undefined, apiRequest: async (path, options) => {
         calls.push([path, options]);
         if (options.method === 'PUT') { preferences = options.body; return preferences; }
         return preferences;

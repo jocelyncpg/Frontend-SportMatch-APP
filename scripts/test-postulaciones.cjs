@@ -54,3 +54,10 @@ test('acumula todas las páginas al listar convocatorias del club', async () => 
   assert.match(llamadas[0][0], /club_id=club-1&estado=ABIERTA&page=1/);
   assert.match(llamadas[1][0], /page=2/);
 });
+
+test('HU-67: el botón de preselección no se ofrece a quien ya fue aceptado ni a quien ya está preseleccionado', () => {
+  const { api } = cargar(async () => ({}));
+  assert.equal(api.puedePreseleccionar('ACEPTADO'), false);
+  assert.equal(api.puedePreseleccionar('PRESELECCIONADO'), false);
+  for (const estado of ['PENDIENTE', 'RECHAZADO']) assert.equal(api.puedePreseleccionar(estado), true, estado);
+});
