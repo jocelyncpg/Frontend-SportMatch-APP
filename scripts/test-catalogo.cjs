@@ -45,12 +45,12 @@ test('el diseño de siempre: Gratuito, Pro y Club con su tabla comparativa, ante
   const { api } = cargar();
   assert.deepEqual(plano(api.PLANES.map((p) => [p.id, p.nombre, p.precioMensual, p.paraCuenta, p.destacado])),
     [['gratuito', 'Gratuito', 0, 'deportista', false], ['pro', 'Pro', 4990, 'deportista', true], ['club', 'Club', 19990, 'club', false]]);
-  assert.equal(api.FILAS_COMPARATIVA.length, 8);
-  assert.equal(api.FILAS_COMPARATIVA[0].etiqueta, 'Actividades que puedes organizar al mes');
+  assert.equal(api.FILAS_COMPARATIVA.length, 11);
+  assert.equal(api.FILAS_COMPARATIVA[0].etiqueta, 'Solicitudes de match cada 24 h');
   assert.deepEqual(plano(api.usePlanes().map((p) => p.id)), ['gratuito', 'pro', 'club']);
   assert.equal(api.precioTexto(api.PLANES[1]), '$4.990 / mes');
   assert.equal(api.precioTexto(api.PLANES[0]), 'Gratis');
-  assert.deepEqual(plano(api.beneficiosDe('pro')).slice(0, 2), ['Actividades que puedes organizar al mes: Sin límite', 'Postulaciones activas a la vez: Sin límite']);
+  assert.deepEqual(plano(api.beneficiosDe('pro')).slice(0, 2), ['Solicitudes de match cada 24 h: Sin límite', 'Postulaciones a actividades cada 24 h: Sin límite']);
 });
 
 test('los datos reales van por debajo del diseño: Pro toma el plan de pago más barato, con el nombre del diseño', async () => {

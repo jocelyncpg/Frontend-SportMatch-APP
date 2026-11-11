@@ -3,7 +3,7 @@ import { apiRequest } from './api';
 import { getSession, getToken } from './auth';
 import { avisarCambio } from './sondeo';
 
-export type TipoNotificacion = 'solicitud' | 'match' | 'mensaje' | 'calificacion' | 'actividad' | 'canal';
+export type TipoNotificacion = 'solicitud' | 'match' | 'mensaje' | 'calificacion' | 'actividad' | 'canal' | 'suscripcion';
 export type DestinoNotificacion = {
   screen?: string;
   activityId?: string;
@@ -11,6 +11,8 @@ export type DestinoNotificacion = {
   clubId?: string;
   hiloId?: string;
   canalId?: string;
+  /** HU-55: aviso de vencimiento; id del plan que se renueva (ms-pago). */
+  planId?: string;
 };
 export function avisarDestino(data: DestinoNotificacion) {
   if (data.screen === 'activity_chat') avisarCambio('activity_chat', data.activityId);

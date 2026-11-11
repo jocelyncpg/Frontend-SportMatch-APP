@@ -1,5 +1,6 @@
 import { router } from 'expo-router';
 import type { DestinoNotificacion } from './notificaciones';
+import { abrirPlanes } from './renovarPlan';
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -27,6 +28,11 @@ export function abrirDestino(data: DestinoNotificacion) {
     router.push({ pathname: '/(deportista)/club/[id]', params: { id: data.clubId } });
   } else if (data.screen === 'chat' && data.matchId && uuid.test(data.matchId)) {
     router.push({ pathname: '/(deportista)/chat/[id]', params: { id: data.matchId } });
+  } else if (data.screen === 'pago' && data.planId && /^\d{1,9}$/.test(data.planId)) {
+    // HU-55: el aviso de vencimiento abre directo el pago del mismo plan.
+    router.push({ pathname: '/pago', params: { plan: data.planId } });
+  } else if (data.screen === 'planes') {
+    void abrirPlanes();
   } else if (data.screen === 'matches') {
     router.push('/(deportista)/(tabs)/matches');
   } else if (data.screen === 'profile') {

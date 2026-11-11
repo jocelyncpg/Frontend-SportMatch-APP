@@ -12,6 +12,7 @@ const ICONO: Record<TipoNotificacion, keyof typeof Ionicons.glyphMap> = {
   actividad: 'calendar-outline',
   mensaje: 'chatbubble-ellipses',
   canal: 'megaphone-outline',
+  suscripcion: 'card-outline',
 };
 
 /** Ícono y color de un aviso; los usan la bandeja y el banner para verse igual. */

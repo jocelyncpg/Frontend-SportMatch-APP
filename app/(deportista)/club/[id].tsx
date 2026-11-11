@@ -9,6 +9,9 @@ import { idHilo, puedeConsultarClub, useHilo } from '../../../services/consultas
 import { cargarClub, useClub } from '../../../services/clubes';
 import { listarTodasConvocatoriasClub, mensajeErrorPostulacion, misPostulaciones, postularConvocatoria, presentacionConvocatoria, type Convocatoria, type Postulacion } from '../../../services/convocatorias';
 import { Colors, useAppTheme, espacio, radio, tipo } from '../../../theme/ThemeContext';
+import { textoUso, useUsoPlan } from '../../../services/usoPlan';
+
+const RECURSO_POSTULAR = ['postulaciones_convocatorias'] as const;
 
 export default function ClubProfileScreen() {
   const { colors } = useAppTheme();
@@ -25,6 +28,9 @@ export default function ClubProfileScreen() {
   const [cargandoConvocatorias, setCargandoConvocatorias] = useState(true);
   const [postulandoId, setPostulandoId] = useState('');
   const [puedeEscribir, setPuedeEscribir] = useState(false);
+  // HU-54: "Te quedan X de 5 postulaciones a convocatorias hoy" (plan gratuito).
+  const { uso: usoPostular, recargar: recargarUso } = useUsoPlan(RECURSO_POSTULAR);
+  const quedanPostular = textoUso(usoPostular[0]);
   const cargarConvocatorias = useCallback(async () => {
     setCargandoConvocatorias(true);
     try {
@@ -56,7 +62,8 @@ export default function ClubProfileScreen() {
   }, [clubId, cargarConvocatorias]);
   function confirmarPostulacion(convocatoria: Convocatoria) {
     const titulo = convocatoria.titulo || `${convocatoria.deporte.nombre} · ${convocatoria.categoria_edad}`;
-    Alert.alert('Confirmar postulación', `¿Quieres postular a «${titulo}»?`, [
+    Alert.alert('Confirmar postulación', `¿Quieres postular a «${titulo}»?${quedanPostular ? `
+${quedanPostular}.` : ''}`, [
       { text: 'Cancelar', style: 'cancel' },
       { text: 'Postular', onPress: () => { void enviarPostulacion(convocatoria); } },
     ]);
@@ -72,6 +79,7 @@ export default function ClubProfileScreen() {
       Alert.alert('No se pudo postular', mensajeErrorPostulacion(e));
     } finally {
       setPostulandoId('');
+      recargarUso();
     }
   }
   const hilo = useHilo(idHilo(clubId, YO));

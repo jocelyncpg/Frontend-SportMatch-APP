@@ -159,6 +159,7 @@ test('los destinos de push aceptan solo rutas conocidas e identificadores UUID',
   const calls = [];
   const api = load('notificationNavigation.ts', {
     'expo-router': { router: { push: (dest) => calls.push(dest) } },
+    './renovarPlan': { abrirPlanes: async () => calls.push('planes') },
   });
   const valid = '10000000-0000-4000-8000-000000000001';
   api.abrirDestino({ screen: 'https://evil.test', activityId: '../../admin' });
@@ -185,6 +186,7 @@ test('los avisos de club y canales abren su pantalla real con el id correcto', (
   const calls = [];
   const api = load('notificationNavigation.ts', {
     'expo-router': { router: { push: (dest) => calls.push(dest) } },
+    './renovarPlan': { abrirPlanes: async () => calls.push('planes') },
   });
   const valid = '10000000-0000-4000-8000-000000000001';
   api.abrirDestino({ screen: 'comunicado', clubId: valid, comunicadoId: valid });
@@ -197,4 +199,20 @@ test('los avisos de club y canales abren su pantalla real con el id correcto', (
   assert.deepEqual(plano(calls[1]), { pathname: '/(deportista)/canal/[id]', params: { id: valid } });
   assert.deepEqual(plano(calls[2]), { pathname: '/(club)/canal/[id]', params: { id: valid, clubId: valid } });
   assert.deepEqual(plano(calls.slice(3)), Array(2).fill('/(deportista)/notificaciones'));
+});
+
+test('el aviso de vencimiento abre el pago del mismo plan y nunca otra ruta', () => {
+  const calls = [];
+  const api = load('notificationNavigation.ts', {
+    'expo-router': { router: { push: (dest) => calls.push(dest) } },
+    './renovarPlan': { abrirPlanes: async () => calls.push('planes') },
+  });
+  api.abrirDestino({ screen: 'pago', planId: '12' });
+  api.abrirDestino({ screen: 'planes' });
+  api.abrirDestino({ screen: 'pago', planId: '../admin' });
+  api.abrirDestino({ screen: 'pago' });
+  const plano = (value) => JSON.parse(JSON.stringify(value));
+  assert.deepEqual(plano(calls[0]), { pathname: '/pago', params: { plan: '12' } });
+  assert.equal(calls[1], 'planes');
+  assert.deepEqual(plano(calls.slice(2)), Array(2).fill('/(deportista)/notificaciones'));
 });

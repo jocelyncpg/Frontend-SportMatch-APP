@@ -1,10 +1,11 @@
 import { Ionicons } from '@expo/vector-icons';
-import { router, useFocusEffect } from 'expo-router';
-import { useCallback, useMemo, useState } from 'react';
+import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import CatalogoPlanes from '../../components/CatalogoPlanes';
 import ContratarPlanModal from '../../components/ContratarPlanModal';
 import { Boton } from '../../components/ui';
+import { planDeParametro } from '../../services/renovarPlan';
 import { cargarPlanes, nombreDelPlan, planesParaContratar, precioTexto, usePlanActual, usePlanes, type Plan } from '../../services/planes';
 import { Colors, useAppTheme } from '../../theme/ThemeContext';
 
@@ -16,10 +17,27 @@ export default function PlanesClubScreen() {
   const planes = usePlanes();
   const [elegido, setElegido] = useState<Plan | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [cargado, setCargado] = useState(false);
+  const [renovar, setRenovar] = useState(false);
+  // HU-55: /pago?plan=<id> (aviso de vencimiento) llega aquí con ?plan= y abre directo el pago de ese plan.
+  const pedido = planDeParametro(useLocalSearchParams<{ plan?: string }>().plan);
+  const atendido = useRef<string | null>(null);
 
   useFocusEffect(useCallback(() => {
-    cargarPlanes('club').then(() => setError(null)).catch((e) => setError(e instanceof Error ? e.message : 'No pudimos cargar los planes.'));
+    cargarPlanes('club').then(() => { setError(null); setCargado(true); }).catch((e) => setError(e instanceof Error ? e.message : 'No pudimos cargar los planes.'));
   }, []));
+
+  useEffect(() => {
+    if (!pedido || !cargado || atendido.current === pedido) return;
+    atendido.current = pedido;
+    const plan = planes.find((p) => p.backendId === Number(pedido) && p.paraCuenta === 'club');
+    if (!plan) {
+      setError('El plan de tu suscripción ya no está disponible. Elige uno de los planes vigentes.');
+      return;
+    }
+    setRenovar(planActual === plan.id);
+    setElegido(plan);
+  }, [pedido, cargado, planes, planActual]);
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
@@ -62,7 +80,10 @@ export default function PlanesClubScreen() {
         );
       })}
 
-      <ContratarPlanModal visible={elegido !== null} plan={elegido} cuenta="club" onClose={() => setElegido(null)} />
+      <ContratarPlanModal
+        visible={elegido !== null} plan={elegido} cuenta="club" renovar={renovar}
+        onClose={() => { setElegido(null); setRenovar(false); }}
+      />
     </ScrollView>
   );
 }

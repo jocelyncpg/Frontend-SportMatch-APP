@@ -33,6 +33,8 @@ function inferirTono(titulo: string, botones: BotonDialogo[]): TonoDialogo {
 }
 
 export function dialogo(titulo: string, mensaje?: string, botones?: BotonDialogo[], opciones?: { tono?: TonoDialogo }) {
+  // HU-54: el aviso de límite del plan ya se muestra (con su botón al catálogo) desde el layout raíz; no repetirlo.
+  if (mensaje?.startsWith('Te quedan 0 de ') && [actual, ...cola].some((x) => x?.mensaje?.includes(mensaje))) return;
   const lista = botones && botones.length > 0 ? botones : [{ text: 'Entendido' }];
   const d: Dialogo = { id: siguienteId++, titulo, mensaje, botones: lista, tono: opciones?.tono ?? inferirTono(titulo, lista) };
   if (actual) {

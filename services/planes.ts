@@ -37,15 +37,23 @@ export const PLANES: Plan[] = [
   { id: 'club', nombre: 'Club', resumen: 'Para clubes, escuelas y comunidades', precioMensual: 19990, destacado: false, paraCuenta: 'club' },
 ];
 
+/**
+ * HU-54: los mismos números que aplican los servicios (definidos en ms-pago, app/core/limites_plan.py).
+ * "cada 24 h" es una ventana móvil: cuenta lo hecho en las últimas 24 horas.
+ * En la columna Club, "gratis: N" es lo que tiene un club sin plan.
+ */
 export const FILAS_COMPARATIVA: FilaComparativa[] = [
-  { etiqueta: 'Actividades que puedes organizar al mes', gratuito: '3', pro: 'Sin límite', club: 'Sin límite' },
-  { etiqueta: 'Postulaciones activas a la vez', gratuito: '5', pro: 'Sin límite', club: 'Sin límite' },
-  { etiqueta: 'Filtros de búsqueda', gratuito: 'Básicos', pro: 'Avanzados', club: 'Avanzados' },
-  { etiqueta: 'Chat con tus matches', gratuito: true, pro: true, club: true },
-  { etiqueta: 'Insignia de perfil destacado', gratuito: false, pro: true, club: true },
+  { etiqueta: 'Solicitudes de match cada 24 h', gratuito: '6', pro: 'Sin límite', club: false },
+  { etiqueta: 'Postulaciones a actividades cada 24 h', gratuito: '5', pro: 'Sin límite', club: false },
+  { etiqueta: 'Postulaciones a convocatorias de clubes cada 24 h', gratuito: '5', pro: 'Sin límite', club: false },
+  { etiqueta: 'Actividades que puedes organizar al mes', gratuito: '3', pro: 'Sin límite', club: false },
+  { etiqueta: 'Chat con tus matches', gratuito: true, pro: true, club: false },
+  { etiqueta: 'Perfil destacado en sugerencias', gratuito: false, pro: true, club: false },
   { etiqueta: 'Panel web para el club', gratuito: false, pro: false, club: true },
-  { etiqueta: 'Convocatorias y gestión de postulantes', gratuito: false, pro: false, club: true },
-  { etiqueta: 'Estadísticas de postulaciones', gratuito: false, pro: false, club: true },
+  { etiqueta: 'Convocatorias abiertas a la vez', gratuito: false, pro: false, club: 'Sin límite (gratis: 2)' },
+  { etiqueta: 'Comunicados cada 24 h', gratuito: false, pro: false, club: 'Sin límite (gratis: 4)' },
+  { etiqueta: 'Canales del club', gratuito: false, pro: false, club: '20 (gratis: 1)' },
+  { etiqueta: 'Club destacado en el directorio', gratuito: false, pro: false, club: true },
 ];
 
 export type CuentaPlan = 'deportista' | 'club';
@@ -208,12 +216,15 @@ export async function cargarPlanes(cuenta: CuentaPlan): Promise<void> {
  * Paso 1 del pago (HU-42/43): crea la transacción en Webpay Plus y devuelve la página de pago.
  * Abre el puente del backend que envía token_ws mediante un formulario POST.
  */
-export async function iniciarPago(cuenta: CuentaPlan, plan: Plan): Promise<{ tokenWs: string; urlPago: string }> {
+export async function iniciarPago(
+  cuenta: CuentaPlan, plan: Plan, opciones: { renovar?: boolean } = {},
+): Promise<{ tokenWs: string; urlPago: string }> {
   if (plan.paraCuenta !== cuenta) {
     throw new Error(`El plan ${plan.nombre} es para cuentas de ${plan.paraCuenta === 'club' ? 'club' : 'deportista'}.`);
   }
   if (plan.precioMensual === 0) throw new Error('El plan Gratuito ya está incluido; no necesitas contratarlo.');
-  if (estado.actual[cuenta] === plan.id) throw new Error(`Ya tienes el plan ${plan.nombre}.`);
+  // HU-55: renovar el plan vigente suma su duración al vencimiento (ms-pago lo permite para el mismo plan).
+  if (!opciones.renovar && estado.actual[cuenta] === plan.id) throw new Error(`Ya tienes el plan ${plan.nombre}.`);
   if (!plan.backendId) throw new Error('Este plan aún no está disponible para contratar. Intenta más tarde.');
   const r = await apiRequest<PagoIniciadoApi>('/payments/webpay/initiate', {
     method: 'POST', token: await token(), body: { plan_id: plan.backendId },

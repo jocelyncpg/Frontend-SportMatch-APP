@@ -7,13 +7,44 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Boton, Tarjeta } from '../components/ui';
 import { getSession, rolDe } from '../services/auth';
 import { confirmarPago, type ResultadoPlan, type RetornoPago } from '../services/planes';
+import { abrirPlanes, planDeParametro } from '../services/renovarPlan';
 import { Colors, espacio, tipo, useAppTheme } from '../theme/ThemeContext';
+
+const PARAMETROS_WEBPAY = ['token_ws', 'tbk_token', 'tbk_orden_compra', 'tbk_id_sesion'] as const;
+
+/**
+ * /pago tiene dos usos:
+ * - /pago?plan=<id> (HU-55, aviso de vencimiento): abre directo el pago de ese plan para renovarlo, en el
+ *   catálogo de la cuenta (deportista o club).
+ * - Retorno de Webpay (sportmatchapp://pago?token_ws=...): confirma el pago.
+ */
+export default function Pago() {
+  const params = useLocalSearchParams<Record<string, string | string[]>>();
+  const plan = planDeParametro(params.plan);
+  const esRetorno = PARAMETROS_WEBPAY.some((key) => params[key] !== undefined);
+  if (plan && !esRetorno) return <RenovarPlan plan={plan} />;
+  return <RetornoWebpay />;
+}
+
+function RenovarPlan({ plan }: { plan: string }) {
+  const { colors } = useAppTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
+  useEffect(() => { void abrirPlanes(plan, true); }, [plan]);
+  return (
+    <View style={styles.container}>
+      <View style={styles.centro}>
+        <ActivityIndicator color={colors.primary} />
+        <Text style={styles.texto}>Abriendo la renovación de tu plan…</Text>
+      </View>
+    </View>
+  );
+}
 
 /**
  * Pantalla de retorno de Webpay (enlace sportmatchapp://pago?...). Lee lo que devuelve Transbank
  * y le pide al backend confirmar el pago: solo un pago APPROVED deja el plan activo.
  */
-export default function Pago() {
+function RetornoWebpay() {
   const params = useLocalSearchParams<Record<string, string | string[]>>();
   const { colors } = useAppTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
@@ -22,7 +53,7 @@ export default function Pago() {
   const [intento, setIntento] = useState(0);
 
   const retorno: RetornoPago = {};
-  for (const key of ['token_ws', 'tbk_token', 'tbk_orden_compra', 'tbk_id_sesion'] as const) {
+  for (const key of PARAMETROS_WEBPAY) {
     const value = params[key];
     if (typeof value === 'string') retorno[key] = value;
   }

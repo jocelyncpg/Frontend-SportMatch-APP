@@ -2,7 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useIsFocused } from '@react-navigation/native';
 import * as WebBrowser from 'expo-web-browser';
 import { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Modal, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { beneficiosDe, confirmarPago, iniciarPago, leerPagoPendiente, olvidarPagoPendiente, precioTexto, type CuentaPlan, type Plan } from '../services/planes';
 import { Colors, useAppTheme, espacio, tipo } from '../theme/ThemeContext';
 
@@ -12,13 +12,15 @@ type Props = {
   plan: Plan | null;
   cuenta: CuentaPlan;
   onClose: () => void;
+  /** HU-55: renovar el plan vigente (desde el aviso de vencimiento); suma su duración al vencimiento. */
+  renovar?: boolean;
 };
 
 /**
  * HU-42/43: resumen del plan y pago con Webpay Plus (ms-pago).
  * Se abre la página de pago en el navegador; al volver, la app confirma el pago con el backend.
  */
-export default function ContratarPlanModal({ visible, plan, cuenta, onClose }: Props) {
+export default function ContratarPlanModal({ visible, plan, cuenta, onClose, renovar = false }: Props) {
   const enfocado = useIsFocused();
   const { colors } = useAppTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
@@ -50,6 +52,16 @@ export default function ContratarPlanModal({ visible, plan, cuenta, onClose }: P
 
   if (!plan) return null;
 
+  async function abrirWebpay(url: string) {
+    // Crear la transacción requiere esperar a la API. En web, abrir una ventana
+    // después de esa espera puede ser bloqueado y Expo no informa el bloqueo.
+    if (Platform.OS === 'web') {
+      window.location.assign(url);
+      return;
+    }
+    await WebBrowser.openBrowserAsync(url);
+  }
+
   async function confirmar(tokenWs: string) {
     const r = await confirmarPago(cuenta, tokenWs);
     if (r.ok) { setListo(true); setPendiente(null); }
@@ -61,11 +73,11 @@ export default function ContratarPlanModal({ visible, plan, cuenta, onClose }: P
     setError(null);
     setProcesando(true);
     try {
-      const { tokenWs, urlPago } = await iniciarPago(cuenta, plan);
+      const { tokenWs, urlPago } = await iniciarPago(cuenta, plan, { renovar });
       setPendiente(tokenWs);
       setUrlPendiente(urlPago);
       // Vuelve cuando la persona cierra el navegador (en Android, apenas se abre).
-      await WebBrowser.openBrowserAsync(urlPago);
+      await abrirWebpay(urlPago);
     } catch (e) {
       setError(e instanceof Error && e.message ? e.message : 'No pudimos iniciar el pago.');
     } finally {
@@ -87,14 +99,18 @@ export default function ContratarPlanModal({ visible, plan, cuenta, onClose }: P
             <View style={styles.centro}>
               <Ionicons name="checkmark-circle" size={54} color={colors.success} />
               <Text style={styles.titulo}>¡Listo!</Text>
-              <Text style={styles.texto}>Tu plan ahora es {plan.nombre}. Los beneficios ya están activos.</Text>
+              <Text style={styles.texto}>
+                {renovar
+                  ? `Renovaste el plan ${plan.nombre}. Sus beneficios siguen activos.`
+                  : `Tu plan ahora es ${plan.nombre}. Los beneficios ya están activos.`}
+              </Text>
               <TouchableOpacity style={styles.botonCerrar} onPress={onClose}>
                 <Text style={styles.botonPrimarioTexto}>Cerrar</Text>
               </TouchableOpacity>
             </View>
           ) : (
             <>
-              <Text style={styles.titulo}>Contratar plan {plan.nombre}</Text>
+              <Text style={styles.titulo}>{renovar ? 'Renovar' : 'Contratar'} plan {plan.nombre}</Text>
               <Text style={styles.precio}>{precioTexto(plan)}</Text>
               <Text style={styles.resumen}>{plan.resumen}</Text>
 
@@ -118,7 +134,7 @@ export default function ContratarPlanModal({ visible, plan, cuenta, onClose }: P
 
               {error ? <Text accessibilityRole="alert" style={styles.error}>{error}</Text> : null}
               {pendiente && urlPendiente ? <TouchableOpacity disabled={procesando} onPress={() => {
-                void WebBrowser.openBrowserAsync(urlPendiente).catch(() => setError('No pudimos abrir Webpay.'));
+                void abrirWebpay(urlPendiente).catch(() => setError('No pudimos abrir Webpay.'));
               }}><Text style={[styles.avisoTexto, { marginTop: 12 }]}>Continuar el pago pendiente en Webpay</Text></TouchableOpacity> : null}
               {pendiente && error ? <TouchableOpacity disabled={procesando} onPress={() => {
                 void olvidarPagoPendiente().then(() => {

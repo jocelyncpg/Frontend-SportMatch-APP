@@ -27,9 +27,11 @@ import {
   sugerencias,
   useMatches,
 } from '../../../services/matchStore';
+import { textoUsoCorto, useUsoPlan } from '../../../services/usoPlan';
 import { Colors, espacio, radio, tipo, useAppTheme } from '../../../theme/ThemeContext';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
+const RECURSO_MATCH = ['solicitudes_match'] as const;
 const SWIPE_THRESHOLD = 120;
 // Texto e íconos que van sobre la foto: siempre claros, porque el degradado de abajo es oscuro en ambos temas.
 const SOBRE_FOTO = '#FFFFFF';
@@ -74,6 +76,9 @@ export default function DiscoverScreen() {
   const [usuario, setUsuario] = useState<Usuario | null>(null);
   const [nuevoMatch, setNuevoMatch] = useState<Persona | null>(null);
   const [aviso, setAviso] = useState<string | null>(null);
+  // HU-54: "Te quedan X de 6 hoy" en el plan gratuito (nada con un plan pagado o si no se sabe).
+  const { uso: usoMatch, recargar: recargarUso } = useUsoPlan(RECURSO_MATCH);
+  const quedan = textoUsoCorto(usoMatch[0]);
 
   const pan = useRef(new Animated.ValueXY()).current;
   const animando = useRef(false);
@@ -150,7 +155,7 @@ export default function DiscoverScreen() {
           if (resultado.matchId) setNuevoMatch(resultado);
           else setAviso(`Solicitud enviada a ${persona.name.split(' ')[0]}`);
         }).catch((e) => { setAviso(e.message); resetPosition(); })
-          .finally(() => { animando.current = false; });
+          .finally(() => { animando.current = false; recargarUso(); });
       } else {
         descartar(persona.id);
       }
@@ -220,7 +225,7 @@ export default function DiscoverScreen() {
 
       {/* HEADER */}
       <EncabezadoMarca
-        subtitulo={usuario?.comuna ? `Cerca de ${usuario.comuna}` : 'Desliza para conectar'}
+        subtitulo={`${usuario?.comuna ? `Cerca de ${usuario.comuna}` : 'Desliza para conectar'}${quedan ? ` · ${quedan}` : ''}`}
         derecha={
           <AvatarMini
             uri={usuario?.fotoPerfil}

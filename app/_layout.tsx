@@ -5,10 +5,11 @@ import { StatusBar } from 'expo-status-bar';
 import 'react-native-reanimated';
 import BannerAviso from '../components/BannerAviso';
 import DialogoHost from '../components/DialogoHost';
-import { usarDialogosDeLaApp } from '../services/dialogo';
+import { dialogo, usarDialogosDeLaApp } from '../services/dialogo';
 import { AppThemeProvider, useAppTheme } from '../theme/ThemeContext';
 import { useNotifications } from '../hooks/useNotifications';
-import { alSuspenderse } from '../services/api';
+import { alLlegarAlLimite, alSuspenderse } from '../services/api';
+import { avisoLimite } from '../services/limitePlan';
 import { getToken, logout } from '../services/auth';
 import { crearManejadorSuspension } from '../services/suspension';
 
@@ -28,6 +29,11 @@ function RootStack() {
     });
     return alSuspenderse((error) => { void manejar(error); });
   }, []);
+  // HU-54: al llegar a un límite del plan gratuito, "Te quedan 0 de N · Pásate a Pro" con botón al catálogo.
+  useEffect(() => alLlegarAlLimite((error) => {
+    const aviso = avisoLimite(error, (ruta) => router.push(ruta as never));
+    if (aviso) dialogo(aviso.titulo, aviso.mensaje, aviso.botones, { tono: 'aviso' });
+  }), []);
   const { colors, isDark } = useAppTheme();
   return (
     <>

@@ -39,6 +39,10 @@ import { Usuario, getSession } from '../../../services/auth';
 import { calificacionDe, calificar, cargarCalificaciones, useMatches } from '../../../services/matchStore';
 import { useSalaGrupal, useChatGrupal } from '../../../services/chatGrupal';
 import { Colors, useAppTheme } from '../../../theme/ThemeContext';
+import { textoUso, useUsoPlan } from '../../../services/usoPlan';
+
+const RECURSO_POSTULAR = ['postulaciones_actividades'] as const;
+
 export default function ActividadDetalleScreen() {
   const { colors } = useAppTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
@@ -58,6 +62,9 @@ export default function ActividadDetalleScreen() {
   const [cargando, setCargando] = useState(true);
   const [errorCarga, setErrorCarga] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
+  // HU-54: "Te quedan X de 5 postulaciones a actividades hoy" (plan gratuito).
+  const { uso: usoPostular, recargar: recargarUso } = useUsoPlan(RECURSO_POSTULAR);
+  const quedanPostular = textoUso(usoPostular[0]);
   const [participantes, setParticipantes] = useState<Participante[]>([]);
   const [calificando, setCalificando] = useState<Participante | null>(null);
   const estadoMatches = useMatches();
@@ -141,6 +148,7 @@ export default function ActividadDetalleScreen() {
     const r = await postular(a.id, mensaje, usuario?.deportes);
     setEnviando(false);
     setModalPostular(false);
+    recargarUso();
     if (!r.ok) {
       Alert.alert('No se pudo postular', r.motivo);
       return;
@@ -441,6 +449,7 @@ export default function ActividadDetalleScreen() {
               onChangeText={setMensaje}
             />
             <Text style={styles.charCount}>{mensaje.length}/140</Text>
+            {quedanPostular ? <Text style={styles.modalHint}>{quedanPostular}</Text> : null}
             <TouchableOpacity style={styles.checkFila} onPress={() => setCumplo((v) => !v)} accessibilityLabel="Confirmo que cumplo los requisitos">
               <Ionicons name={cumplo ? 'checkbox' : 'square-outline'} size={20} color={cumplo ? colors.accent : colors.textMuted} />
               <Text style={styles.checkTexto}>Confirmo que cumplo los requisitos de la actividad</Text>

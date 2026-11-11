@@ -1,11 +1,15 @@
 import { Ionicons } from '@expo/vector-icons';
-import { router, useFocusEffect } from 'expo-router';
-import { useCallback, useMemo, useState } from 'react';
+import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import CatalogoPlanes from '../../components/CatalogoPlanes';
 import ContratarPlanModal from '../../components/ContratarPlanModal';
+import { planDeParametro } from '../../services/renovarPlan';
+import { textoUso, useUsoPlan } from '../../services/usoPlan';
 import { cargarPlanes, nombreDelPlan, planesParaContratar, precioTexto, usePlanActual, usePlanes, type Plan } from '../../services/planes';
 import { Colors, useAppTheme, espacio, tipo } from '../../theme/ThemeContext';
+
+const RECURSOS_USO = ['solicitudes_match', 'postulaciones_actividades', 'postulaciones_convocatorias', 'actividades_organizadas'] as const;
 
 /** HU-39: consultar el catálogo de planes y beneficios. HU-42: contratar un plan. */
 export default function PlanesScreen() {
@@ -15,10 +19,30 @@ export default function PlanesScreen() {
   const planes = usePlanes();
   const [elegido, setElegido] = useState<Plan | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [cargado, setCargado] = useState(false);
+  const [renovar, setRenovar] = useState(false);
+  // HU-54: "Te quedan X de N hoy" de cada acción limitada del plan gratuito.
+  const { uso } = useUsoPlan(RECURSOS_USO);
+  const usoTextos = uso.map((u) => ({ recurso: u.recurso, texto: textoUso(u) })).filter((u) => u.texto);
+  // HU-55: /pago?plan=<id> (aviso de vencimiento) llega aquí con ?plan= y abre directo el pago de ese plan.
+  const pedido = planDeParametro(useLocalSearchParams<{ plan?: string }>().plan);
+  const atendido = useRef<string | null>(null);
 
   useFocusEffect(useCallback(() => {
-    cargarPlanes('deportista').then(() => setError(null)).catch((e) => setError(e instanceof Error ? e.message : 'No pudimos cargar los planes.'));
+    cargarPlanes('deportista').then(() => { setError(null); setCargado(true); }).catch((e) => setError(e instanceof Error ? e.message : 'No pudimos cargar los planes.'));
   }, []));
+
+  useEffect(() => {
+    if (!pedido || !cargado || atendido.current === pedido) return;
+    atendido.current = pedido;
+    const plan = planes.find((p) => p.backendId === Number(pedido) && p.paraCuenta === 'deportista');
+    if (!plan) {
+      setError('El plan de tu suscripción ya no está disponible. Elige uno de los planes vigentes.');
+      return;
+    }
+    setRenovar(planActual === plan.id);
+    setElegido(plan);
+  }, [pedido, cargado, planes, planActual]);
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
@@ -28,6 +52,13 @@ export default function PlanesScreen() {
 
       <Text style={styles.titulo}>Planes y beneficios</Text>
       <Text style={styles.subtitulo}>Compara los planes y elige el que se ajuste a cómo entrenas.</Text>
+
+      {usoTextos.length ? (
+        <View style={styles.uso} accessibilityLabel="Uso de tu plan">
+          <Text style={styles.usoTitulo}>Tu uso del plan gratuito</Text>
+          {usoTextos.map((u) => <Text key={u.recurso} style={styles.usoTexto}>{u.texto}</Text>)}
+        </View>
+      ) : null}
 
       <CatalogoPlanes />
 
@@ -58,7 +89,10 @@ export default function PlanesScreen() {
         );
       })}
 
-      <ContratarPlanModal visible={elegido !== null} plan={elegido} cuenta="deportista" onClose={() => setElegido(null)} />
+      <ContratarPlanModal
+        visible={elegido !== null} plan={elegido} cuenta="deportista" renovar={renovar}
+        onClose={() => { setElegido(null); setRenovar(false); }}
+      />
     </ScrollView>
   );
 }
@@ -78,6 +112,9 @@ const makeStyles = (c: Colors) =>
       backgroundColor: c.chip, borderRadius: 12, padding: 12,
     },
     avisoTexto: { flex: 1, color: c.textMuted, fontSize: 11.5, lineHeight: 16 },
+    uso: { backgroundColor: c.card, borderWidth: 1, borderColor: c.border, borderRadius: 12, padding: 12, marginBottom: 16, gap: 4 },
+    usoTitulo: { color: c.text, fontSize: 13, fontWeight: '700', marginBottom: 2 },
+    usoTexto: { color: c.textMuted, fontSize: 12.5, lineHeight: 18 },
     boton: {
       marginTop: 16, backgroundColor: c.primary, borderRadius: 13,
       paddingVertical: 13, alignItems: 'center',

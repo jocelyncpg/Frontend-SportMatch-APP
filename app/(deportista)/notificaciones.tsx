@@ -16,6 +16,7 @@ const ICONO: Record<TipoNotificacion, keyof typeof Ionicons.glyphMap> = {
   calificacion: 'star',
   actividad: 'calendar-outline',
   canal: 'megaphone-outline',
+  suscripcion: 'card-outline',
 };
 
 export default function NotificacionesScreen() {
