@@ -444,9 +444,9 @@ export default function ClubHomeScreen() {
 const makeStyles = (c: Colors) =>
   StyleSheet.create({
     container: { flex: 1, backgroundColor: c.bg },
-    content: { paddingHorizontal: 20, gap: 16 },
+    content: { paddingHorizontal: 20, paddingBottom: 40 },
 
-    header: { flexDirection: 'row', alignItems: 'center', gap: 14, marginBottom: 2 },
+    header: { flexDirection: 'row', alignItems: 'center', gap: 14, marginBottom: 18 },
     clubFoto: { width: 60, height: 60, borderRadius: 16 },
     headerInfo: { flex: 1 },
     headerEtiqueta: { color: c.textMuted, fontSize: 11, fontWeight: '600', letterSpacing: 0.4, textTransform: 'uppercase' },

@@ -16,12 +16,17 @@ diálogos y banner de avisos de `respaldo-sprint2`, manteniendo las API de `main
   actual admite **una foto por perfil**: el editor respeta ese límite; las cinco
   fotos de la versión local no se presentan como si estuvieran sincronizadas.
 - Se conserva el historial de actividades y la reputación calculada por el backend.
-- Los planes y pagos se confirman en Ms-club. No se activa una suscripción local
+- Los planes y pagos se confirman en ms-pago. No se activa una suscripción local
   al pulsar contratar. El cambio de contraseña con contraseña actual sigue
   dependiendo de una API pendiente; la recuperación por correo está disponible.
 
 Los datos que una persona guardó en su teléfono no forman parte del repositorio
 Git. Para revisar se usan las bases PostgreSQL del entorno local.
+
+Revisión vigente: [visual de sprint 2 con backend, 11 de noviembre](../visual-backend-20261111.md).
+La disponibilidad ya se guarda en las preferencias de Users; la interfaz del chat
+grupal usa las respuestas citadas de Activities. Los límites aún pendientes del
+backend están detallados en ese informe.
 
 ## Comprobación
 

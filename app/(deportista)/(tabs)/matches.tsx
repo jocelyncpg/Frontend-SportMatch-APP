@@ -242,7 +242,7 @@ const makeStyles = (c: Colors) =>
   StyleSheet.create({
     cancelButton: { backgroundColor: c.subtle, paddingHorizontal: 10, paddingVertical: 12, borderRadius: 10 },
     cancelText: { color: c.text, fontSize: 12, fontWeight: '600' },
-    container: { flex: 1, backgroundColor: c.bg, paddingTop: 60 },
+    container: { flex: 1, backgroundColor: c.bg },
     topbar: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, marginBottom: 16 },
     miniAvatar: {
       width: 34, height: 34, borderRadius: 17, backgroundColor: c.card,
@@ -274,7 +274,7 @@ const makeStyles = (c: Colors) =>
     cardMeta: { color: c.textMuted, ...tipo.dato, marginTop: 2 },
     actions: { flexDirection: 'row', gap: espacio.s },
     rejectButton: { width: 44, height: 44, borderRadius: 22, backgroundColor: c.subtle, alignItems: 'center', justifyContent: 'center' },
-    acceptButton: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#22C55E', alignItems: 'center', justifyContent: 'center' },
+    acceptButton: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#16A34A', alignItems: 'center', justifyContent: 'center' },
     chatButton: { width: 44, height: 44, borderRadius: 22, backgroundColor: c.chip, alignItems: 'center', justifyContent: 'center' },
     ratingButton: {
       flexDirection: 'row', alignItems: 'center', gap: espacio.xs, paddingHorizontal: espacio.m, height: 44, minWidth: 44, borderRadius: 22,

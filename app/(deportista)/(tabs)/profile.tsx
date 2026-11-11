@@ -807,7 +807,7 @@ export default function ProfileScreen() {
             <Text style={styles.modalTitle}>¿Cuándo puedes entrenar?</Text>
 
             <ScrollView style={styles.modalScroll} keyboardShouldPersistTaps="handled">
-              <Text style={styles.modalHint}>Toca un día y elige las horas que te acomodan.</Text>
+              <Text style={styles.modalHint}>Toca un día y elige las horas de inicio que te acomodan. Las horas nuevas guardan una franja de hasta 60 minutos. Máximo 21 horarios por semana.</Text>
 
               {dispAnterior ? (
                 <Text style={styles.dispAnterior}>
@@ -1022,7 +1022,7 @@ const makeStyles = (c: Colors) =>
     },
     themeOptionActive: { backgroundColor: c.primary, borderColor: c.primary },
     themeOptionText: { color: c.textMuted, ...tipo.etiqueta },
-    themeOptionTextActive: { color: SOBRE_COLOR },
+    themeOptionTextActive: { color: '#FFFFFF' },
 
     logoutButton: {
       flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: espacio.s, minHeight: 48,
@@ -1044,7 +1044,7 @@ const makeStyles = (c: Colors) =>
     dispError: { color: c.danger, ...tipo.dato, marginTop: espacio.s },
     charCount: { color: c.textMuted, ...tipo.etiqueta, fontWeight: '400', textAlign: 'right', marginTop: espacio.xs, marginBottom: espacio.m - 2 },
     otroLabel: { color: c.textMuted, ...tipo.etiqueta, marginTop: espacio.xs, marginBottom: espacio.s },
-    loginButtonText: { color: SOBRE_COLOR, ...tipo.cuerpoFuerte },
+    loginButtonText: { color: '#FFFFFF', ...tipo.cuerpoFuerte },
 
     selectChip: {
       minHeight: 44, justifyContent: 'center', borderWidth: 1, borderColor: c.border,
@@ -1052,7 +1052,7 @@ const makeStyles = (c: Colors) =>
     },
     selectChipActive: { backgroundColor: c.primary, borderColor: c.primary },
     selectChipText: { color: c.textMuted, ...tipo.cuerpoFuerte, fontWeight: '600' },
-    selectChipTextActive: { color: SOBRE_COLOR },
+    selectChipTextActive: { color: '#FFFFFF' },
 
     miDeporte: {
       flexDirection: 'row', alignItems: 'center', gap: espacio.s, minHeight: 44, paddingHorizontal: espacio.m,
@@ -1060,7 +1060,7 @@ const makeStyles = (c: Colors) =>
     },
     miDeporteActivo: { backgroundColor: c.primary, borderColor: c.primary },
     miDeporteTexto: { color: c.accent, ...tipo.cuerpoFuerte },
-    miDeporteTextoActivo: { color: SOBRE_COLOR },
+    miDeporteTextoActivo: { color: '#FFFFFF' },
 
     nivelPanel: {
       marginTop: espacio.m, marginBottom: espacio.s - 2, padding: espacio.m, borderRadius: radio.control,
@@ -1074,7 +1074,7 @@ const makeStyles = (c: Colors) =>
     },
     nivelBotonActivo: { backgroundColor: c.primary, borderColor: c.primary },
     nivelBotonTexto: { color: c.textMuted, ...tipo.cuerpoFuerte },
-    nivelBotonTextoActivo: { color: SOBRE_COLOR },
+    nivelBotonTextoActivo: { color: '#FFFFFF' },
     nivelPanelNombre: { color: c.textMuted, ...tipo.dato, marginTop: espacio.s, textAlign: 'center' },
 
     agregarRow: { flexDirection: 'row', gap: espacio.s, alignItems: 'center', marginTop: espacio.m, marginBottom: espacio.s - 2 },

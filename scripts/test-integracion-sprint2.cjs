@@ -20,11 +20,12 @@ function cargar(nombre, modulos) {
   return module.exports;
 }
 
-function auth() {
+function auth({ fallarPreferencias = false } = {}) {
   const perfil = { nombre: 'Ana', apellido_paterno: 'Prueba', apellido_materno: null,
     fecha_nacimiento: null, telefono: '912345678', foto_perfil: '/api/v1/users/photos/foto.jpg', biografia: 'Entreno running' };
   const guardado = new Map([['sportmatch_token', 'token'], ['sportmatch_session', JSON.stringify({ id: 'u1', nombre: 'Ana', fotoPerfil: 'https://gateway/foto.jpg' })]]);
   const llamadas = [];
+  const preferencias = { deportes: [], objetivos: ['competir'], disponibilidad: [], zona: { comuna: 'Santiago', latitud: -33.45, longitud: -70.66 } };
   const servicio = cargar('auth.ts', {
     '@react-native-async-storage/async-storage': { default: {
       getItem: async (key) => guardado.get(key) ?? null,
@@ -32,10 +33,64 @@ function auth() {
     } },
     'react-native': { Platform: { OS: 'web' } },
     './validators': {}, './deportes': {},
-    './api': { apiRequest: async (...args) => { llamadas.push(args); return perfil; } },
+    './api': { apiRequest: async (...args) => {
+      llamadas.push(args);
+      if (args[0].endsWith('/preferences')) {
+        if (args[1]?.method === 'PUT') {
+          if (fallarPreferencias) throw new Error('Sin conexión');
+          Object.assign(preferencias, args[1].body);
+        }
+        return preferencias;
+      }
+      return perfil;
+    } },
   });
-  return { servicio, llamadas, perfil };
+  return { servicio, llamadas, perfil, preferencias, guardado };
 }
+
+test('la disponibilidad de sprint 2 se guarda en Users y se recupera desde sus preferencias', async () => {
+  const { servicio, llamadas, preferencias } = auth();
+  await servicio.updatePerfilExtra('u1', { disponibilidad: 'Lun 07:00, 18:30 · Sáb 23:30' });
+  assert.deepEqual(JSON.parse(JSON.stringify(preferencias.disponibilidad)), [
+    { dia_semana: 'lunes', hora_inicio: '07:00', hora_fin: '08:00' },
+    { dia_semana: 'lunes', hora_inicio: '18:30', hora_fin: '19:30' },
+    { dia_semana: 'sabado', hora_inicio: '23:30', hora_fin: '23:59' },
+  ]);
+  assert.equal(llamadas[1][0], '/users/u1/preferences');
+  assert.equal(llamadas[1][1].method, 'PUT');
+  assert.deepEqual(preferencias.objetivos, ['competir']);
+  assert.equal(preferencias.zona.comuna, 'Santiago');
+  const sesion = await servicio.refrescarPreferencias();
+  assert.equal(sesion.disponibilidad, 'Lun 07:00, 18:30 · Sáb 23:30');
+});
+
+test('editar horas conserva la duración de las franjas existentes; vaciar elimina las del servidor', async () => {
+  const { servicio, preferencias } = auth();
+  preferencias.disponibilidad = [{ dia_semana: 'miercoles', hora_inicio: '10:00', hora_fin: '12:30' }];
+  await servicio.updatePerfilExtra('u1', { disponibilidad: 'Mié 10:00' });
+  assert.equal(preferencias.disponibilidad[0].hora_fin, '12:30');
+  await servicio.updatePerfilExtra('u1', { disponibilidad: '' });
+  assert.equal(preferencias.disponibilidad.length, 0);
+  assert.equal((await servicio.refrescarPreferencias()).disponibilidad, undefined);
+});
+
+test('un fallo del backend no presenta la disponibilidad como guardada localmente', async () => {
+  const { servicio, preferencias, guardado } = auth({ fallarPreferencias: true });
+  await assert.rejects(servicio.updatePerfilExtra('u1', { disponibilidad: 'Lun 07:00' }), /Sin conexión/);
+  assert.equal(preferencias.disponibilidad.length, 0);
+  assert.equal((await servicio.getSession()).disponibilidad, undefined);
+  assert.equal(guardado.has('sportmatch_local_extras'), false);
+});
+
+test('horarios inválidos y semanas de más de 21 franjas no envían PUT al servidor', async () => {
+  const { servicio, llamadas } = auth();
+  for (const disponibilidad of ['Lun 25:00', 'Lun 23:59', 'Los lunes', 'Lun 07:00 · Inexistente 08:00']) {
+    await assert.rejects(servicio.updatePerfilExtra('u1', { disponibilidad }));
+  }
+  const semana = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'].map((dia) => `${dia} 06:00, 07:00, 08:00, 09:00`).join(' · ');
+  await assert.rejects(servicio.updatePerfilExtra('u1', { disponibilidad: semana }), /21/);
+  assert.equal(llamadas.filter((c) => c[1]?.method === 'PUT').length, 0);
+});
 
 test('Configuración guarda el nombre en la API y conserva foto, biografía y teléfono', async () => {
   const { servicio, llamadas, perfil } = auth();

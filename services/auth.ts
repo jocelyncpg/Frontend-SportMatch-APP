@@ -7,9 +7,6 @@ import { codigoDeporte, nombreDeporte } from './deportes';
 
 const SESSION_KEY = 'sportmatch_session';
 const TOKEN_KEY = 'sportmatch_token';
-// La disponibilidad en texto libre solo vive aquí, guardada por id de usuario:
-// Ms_Users solo acepta franjas con hora. La foto de perfil ya se guarda en Ms_Users (HU-61).
-const LOCAL_EXTRAS_KEY = 'sportmatch_local_extras';
 // Club que un representante registró pero que aún no existe en ms-club: se crea
 // con POST /clubs en su primer inicio de sesión (el registro no entrega token).
 const CLUB_PENDIENTE_KEY = 'sportmatch_club_pendiente';
@@ -97,12 +94,46 @@ type Zona = { comuna: string; latitud: number | null; longitud: number | null };
 /** GET/PUT /users/{id}/preferences. El PUT reemplaza todo, así que se envía completo. */
 type Preferences = {
   deportes: { deporte_codigo: string; nivel: number }[];
+  disponibilidad?: VentanaDisponibilidad[];
   zona: Zona | null;
   objetivos?: string[];
   [otros: string]: unknown;
 };
 
-type LocalExtras = Partial<Pick<Usuario, 'disponibilidad'>>;
+export type VentanaDisponibilidad = { dia_semana: string; hora_inicio: string; hora_fin: string };
+const DIAS_API = ['lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado', 'domingo'];
+const DIAS_PANTALLA = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
+
+/** Presentación de sprint 2; las franjas originales permanecen en el servidor. */
+export function disponibilidadDesdeApi(ventanas: VentanaDisponibilidad[] = []): string {
+  return DIAS_API.map((dia, i) => {
+    const horas = [...new Set(ventanas.filter((v) => v.dia_semana === dia).map((v) => v.hora_inicio))].sort();
+    return horas.length ? `${DIAS_PANTALLA[i]} ${horas.join(', ')}` : '';
+  }).filter(Boolean).join(' · ');
+}
+
+export function disponibilidadParaApi(texto: string, anteriores: VentanaDisponibilidad[] = []): VentanaDisponibilidad[] {
+  if (!texto.trim()) return [];
+  const ventanas: VentanaDisponibilidad[] = [];
+  for (const bloque of texto.split(' · ')) {
+    const coincidencia = /^(Lun|Mar|Mié|Jue|Vie|Sáb|Dom) (\d{2}:\d{2}(?:, \d{2}:\d{2})*)$/.exec(bloque);
+    if (!coincidencia) throw new Error('Elige los días y horas en el editor de disponibilidad.');
+    const dia_semana = DIAS_API[DIAS_PANTALLA.indexOf(coincidencia[1])];
+    for (const hora_inicio of coincidencia[2].split(', ')) {
+      if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(hora_inicio) || hora_inicio === '23:59') {
+        throw new Error('Elige una hora de inicio anterior a las 23:59.');
+      }
+      if (ventanas.some((v) => v.dia_semana === dia_semana && v.hora_inicio === hora_inicio)) continue;
+      const existentes = anteriores.filter((v) => v.dia_semana === dia_semana && v.hora_inicio === hora_inicio);
+      if (existentes.length) { ventanas.push(...existentes); continue; }
+      const [h, m] = hora_inicio.split(':').map(Number);
+      const fin = Math.min(h * 60 + m + 60, 23 * 60 + 59);
+      ventanas.push({ dia_semana, hora_inicio, hora_fin: `${String(Math.floor(fin / 60)).padStart(2, '0')}:${String(fin % 60).padStart(2, '0')}` });
+    }
+  }
+  if (ventanas.length > 21) throw new Error('Puedes guardar hasta 21 horarios por semana.');
+  return ventanas;
+}
 
 /** El login falló porque la cuenta aún no confirma su correo. */
 export class EmailNotVerifiedError extends Error {
@@ -111,16 +142,6 @@ export class EmailNotVerifiedError extends Error {
   }
 }
 
-async function getLocalExtras(): Promise<Record<string, LocalExtras>> {
-  const raw = await AsyncStorage.getItem(LOCAL_EXTRAS_KEY);
-  return raw ? JSON.parse(raw) : {};
-}
-
-async function saveLocalExtras(userId: string, datos: LocalExtras): Promise<void> {
-  const extras = await getLocalExtras();
-  extras[userId] = { ...extras[userId], ...datos };
-  await AsyncStorage.setItem(LOCAL_EXTRAS_KEY, JSON.stringify(extras));
-}
 
 /**
  * Club del representante (rol club_admin). Si registró uno que aún no existe en ms-club,
@@ -158,8 +179,6 @@ async function iniciarSesion(tokens: TokenResponse): Promise<Usuario> {
     apiRequest<Preferences>(`/users/${userId}/preferences`, { token: tokens.access_token }),
   ]);
   const club = tokens.user.role === 'club_admin' ? await miClub(tokens.access_token, tokens.user.email) : null;
-  // De lo guardado en el teléfono solo se usa la disponibilidad; lo demás (también la foto) manda el backend.
-  const local = (await getLocalExtras())[userId];
   const usuario: Usuario = {
     id: userId,
     rut: perfil.rut ?? '',
@@ -174,7 +193,7 @@ async function iniciarSesion(tokens: TokenResponse): Promise<Usuario> {
     comuna: preferencias.zona?.comuna,
     latitud: preferencias.zona?.latitud ?? undefined,
     longitud: preferencias.zona?.longitud ?? undefined,
-    disponibilidad: local?.disponibilidad,
+    disponibilidad: disponibilidadDesdeApi(preferencias.disponibilidad) || undefined,
     objetivos: preferencias.objetivos ?? [],
     rol: tokens.user.role,
     clubId: club?.id,
@@ -417,7 +436,7 @@ export async function updateUbicacion(
 
 /**
  * Guarda la biografía en el perfil, y los deportes y objetivos en las preferencias de Ms_Users.
- * La disponibilidad queda en el teléfono (ver LOCAL_EXTRAS_KEY).
+ * La disponibilidad del editor se traduce a franjas persistentes de Ms_Users.
  */
 export async function updatePerfilExtra(
   userId: string,
@@ -432,7 +451,9 @@ export async function updatePerfilExtra(
   const token = await tokenActual();
 
   if (datos.disponibilidad !== undefined) {
-    await saveLocalExtras(userId, { disponibilidad: datos.disponibilidad || undefined });
+    await cambiarPreferencias(userId, token, (actuales) => ({
+      ...actuales, disponibilidad: disponibilidadParaApi(datos.disponibilidad!, actuales.disponibilidad),
+    }));
   }
 
   const objetivos = datos.objetivos;
@@ -498,6 +519,7 @@ export async function refrescarPreferencias(): Promise<Usuario | null> {
     latitud: preferences.zona?.latitud ?? undefined,
     longitud: preferences.zona?.longitud ?? undefined,
     objetivos: preferences.objetivos ?? [],
+    disponibilidad: disponibilidadDesdeApi(preferences.disponibilidad) || undefined,
   });
   return getSession();
 }

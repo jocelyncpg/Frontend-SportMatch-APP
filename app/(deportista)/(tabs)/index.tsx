@@ -311,7 +311,7 @@ const makeStyles = (c: Colors) =>
     },
 
     bellBadgeText: {
-      color: SOBRE_COLOR,
+      color: '#FFFFFF',
       ...tipo.etiqueta,
       fontWeight: '800',
     },
@@ -428,7 +428,7 @@ const makeStyles = (c: Colors) =>
     },
 
     accionPrimariaTexto: {
-      color: SOBRE_COLOR,
+      color: '#FFFFFF',
       ...tipo.cuerpoFuerte,
     },
 

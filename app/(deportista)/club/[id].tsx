@@ -1,7 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, Linking, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { YO } from '../../../services/actividades';
 import MapaEstatico from '../../../components/MapaEstatico';
 import { cargarPerfilClub, type PerfilClub } from '../../../services/perfilClub';
@@ -15,8 +16,9 @@ const RECURSO_POSTULAR = ['postulaciones_convocatorias'] as const;
 
 export default function ClubProfileScreen() {
   const { colors } = useAppTheme();
+  const insets = useSafeAreaInsets();
   const styles = useMemo(() => makeStyles(colors), [colors]);
-  const { id, colorFrom } = useLocalSearchParams<{ id: string; colorFrom?: string }>();
+  const { id } = useLocalSearchParams<{ id: string }>();
   const clubId = id ?? '';
   const club = useClub(clubId);
   const [perfil, setPerfil] = useState<PerfilClub | null>(null);
@@ -89,13 +91,13 @@ ${quedanPostular}.` : ''}`, [
   }
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+    <ScrollView style={styles.container} contentContainerStyle={[styles.content, { paddingTop: insets.top + 60, paddingBottom: insets.bottom + 40 }]}>
+      <TouchableOpacity onPress={() => router.back()} style={[styles.backButton, { top: insets.top + 12 }]} accessibilityLabel="Volver">
         <Ionicons name="arrow-back" size={18} color={colors.text} />
       </TouchableOpacity>
 
-      <View style={[styles.avatar, { backgroundColor: colorFrom ?? '#7C3AED' }]}>
-        <Ionicons name="shield" size={36} color="#fff" />
+      <View style={styles.avatar}>
+        <Ionicons name="shield-outline" size={38} color={colors.accent} />
       </View>
       <Text style={styles.name}>{club?.nombre ?? (error || 'Cargando club...')}</Text>
       {error ? (
@@ -106,10 +108,7 @@ ${quedanPostular}.` : ''}`, [
         </TouchableOpacity>
       ) : null}
       {club?.rut ? <Text style={styles.meta}>RUT {club.rut}</Text> : null}
-      {perfil && (perfil.direccion || perfil.zona) ? <Text style={styles.meta}>{[perfil.direccion, perfil.zona].filter(Boolean).join(' · ')}</Text> : null}
-      {perfil?.latitud != null && perfil.longitud != null ? (
-        <View style={styles.section}><MapaEstatico latitud={perfil.latitud} longitud={perfil.longitud} /></View>
-      ) : null}
+      {perfil ? <Text style={styles.meta}>{[perfil.deportes.join(', '), perfil.zona].filter(Boolean).join(' · ')}</Text> : null}
 
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Sobre el club</Text>
@@ -164,10 +163,13 @@ ${quedanPostular}.` : ''}`, [
               </View>
               {(() => {
                 if (vista.tipo === 'estado') {
+                  const aceptada = mia?.estado === 'ACEPTADO';
+                  const rechazada = mia?.estado === 'RECHAZADO';
+                  const preseleccionada = mia?.estado === 'PRESELECCIONADO';
                   return (
-                    <View style={styles.pendienteBadge}>
-                      <Ionicons name="time-outline" size={16} color={colors.textMuted} />
-                      <Text style={styles.pendienteText}>{vista.texto}</Text>
+                    <View style={aceptada ? styles.postuladoBadge : rechazada ? styles.rechazadoBadge : preseleccionada ? styles.preseleccionBadge : styles.pendienteBadge}>
+                      <Ionicons name={aceptada ? 'checkmark-circle' : rechazada ? 'close-circle' : preseleccionada ? 'star' : 'time-outline'} size={16} color={aceptada ? colors.success : rechazada ? colors.danger : preseleccionada ? colors.accent : colors.textMuted} />
+                      <Text style={aceptada ? styles.postuladoText : rechazada ? styles.rechazadoText : preseleccionada ? styles.preseleccionText : styles.pendienteText}>{vista.texto}</Text>
                     </View>
                   );
                 }
@@ -185,6 +187,41 @@ ${quedanPostular}.` : ''}`, [
         })}
       </View>
 
+      {perfil && (perfil.direccion || perfil.zona || (perfil.latitud != null && perfil.longitud != null)) ? (
+        <View style={styles.tarjeta}>
+          <View style={styles.convocatoriaHeader}>
+            <Ionicons name="location-outline" size={16} color={colors.accent} />
+            <Text style={styles.convocatoriaTitle}>Ubicación</Text>
+          </View>
+          <Text style={styles.lugarTexto}>{[perfil.direccion, perfil.zona].filter(Boolean).join(' · ')}</Text>
+          {perfil.latitud != null && perfil.longitud != null ? <View style={styles.mapaWrap}>
+            <MapaEstatico latitud={perfil.latitud} longitud={perfil.longitud} />
+          </View> : null}
+        </View>
+      ) : null}
+      {perfil && (perfil.email || perfil.telefono || perfil.instagram || perfil.web) ? (
+        <View style={styles.tarjeta}>
+          <View style={styles.convocatoriaHeader}>
+            <Ionicons name="call-outline" size={16} color={colors.accent} />
+            <Text style={styles.convocatoriaTitle}>Contacto</Text>
+          </View>
+          {[
+            { etiqueta: 'Correo', valor: perfil.email, url: `mailto:${perfil.email}` },
+            { etiqueta: 'Teléfono', valor: perfil.telefono, url: `tel:${perfil.telefono.replace(/[^+\d]/g, '')}` },
+            { etiqueta: 'Instagram', valor: perfil.instagram, url: `https://www.instagram.com/${encodeURIComponent(perfil.instagram.replace(/^@/, ''))}/` },
+            { etiqueta: 'Sitio web', valor: perfil.web, url: perfil.web },
+          ].filter((c) => c.valor).map((c) => (
+            <TouchableOpacity key={c.etiqueta} style={styles.contactoFila} accessibilityLabel={`${c.etiqueta}: ${c.valor}`}
+              onPress={() => { if (/^(https?:\/\/|mailto:|tel:)/i.test(c.url)) void Linking.openURL(c.url).catch(() => Alert.alert('No se pudo abrir el contacto')); }}>
+              <View style={styles.consultaTextos}>
+                <Text style={styles.detalleEtiqueta}>{c.etiqueta}</Text>
+                <Text style={styles.detalleValor}>{c.valor}</Text>
+              </View>
+              <Ionicons name="open-outline" size={15} color={colors.textMuted} />
+            </TouchableOpacity>
+          ))}
+        </View>
+      ) : null}
       {/* HU-51: canal de consultas con el club */}
       {hilo || puedeEscribir ? (
         <TouchableOpacity style={styles.consultaButton} onPress={abrirConsultas} activeOpacity={0.8} accessibilityLabel="Abrir consultas con el club">
@@ -211,9 +248,33 @@ ${quedanPostular}.` : ''}`, [
 
 const makeStyles = (c: Colors) =>
   StyleSheet.create({
+    sinMargen: { marginBottom: 0 },
+    postuladoBadge: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: c.successBg, borderRadius: radio.control, paddingVertical: espacio.m, justifyContent: 'center' },
+    postuladoText: { color: c.success, ...tipo.cuerpoFuerte },
+    preseleccionBadge: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: c.chip, borderRadius: radio.control, paddingVertical: espacio.m, paddingHorizontal: espacio.m - 2, justifyContent: 'center' },
+    preseleccionText: { color: c.accent, ...tipo.cuerpoFuerte, flexShrink: 1, textAlign: 'center' },
+    rechazadoBadge: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: c.dangerBg, borderRadius: radio.control, paddingVertical: espacio.m, justifyContent: 'center' },
+    rechazadoText: { color: c.danger, ...tipo.cuerpoFuerte },
+    retirarButton: { alignItems: 'center', paddingTop: espacio.m },
+    retirarText: { color: c.danger, fontSize: 12, fontWeight: '700' },
+    tarjeta: {
+      width: '100%', backgroundColor: c.card, borderWidth: 1, borderColor: c.border,
+      borderRadius: radio.tarjeta, padding: espacio.l, marginBottom: espacio.m + 2,
+    },
+    lugarTexto: { color: c.text, ...tipo.cuerpo, lineHeight: 19 },
+    mapaWrap: { borderRadius: radio.control, overflow: 'hidden', marginTop: espacio.m - 2 },
+    contactoFila: {
+      flexDirection: 'row', alignItems: 'center', gap: espacio.m - 2, paddingVertical: espacio.m - 2,
+      borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: c.border,
+    },
+
     container: { flex: 1, backgroundColor: c.bg },
-    content: { padding: 20, paddingTop: 60, alignItems: 'center' },
-    backButton: { position: 'absolute', top: 60, left: 20, width: 34, height: 34, borderRadius: 17, backgroundColor: c.card, borderWidth: 1, borderColor: c.border, alignItems: 'center', justifyContent: 'center', zIndex: 1 },
+    content: { padding: espacio.xl, paddingBottom: 40, alignItems: 'center' },
+    backButton: {
+      position: 'absolute', left: espacio.xl, width: 36, height: 36, borderRadius: 18,
+      backgroundColor: c.card, borderWidth: 1, borderColor: c.border,
+      alignItems: 'center', justifyContent: 'center', zIndex: 1,
+    },
     avatar: {
       width: 84, height: 84, borderRadius: 22, backgroundColor: c.chip,
       alignItems: 'center', justifyContent: 'center', marginBottom: espacio.m + 2,

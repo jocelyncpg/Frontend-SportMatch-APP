@@ -13,6 +13,7 @@ import {
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useTecladoVisible } from '../../../hooks/use-teclado';
 import { YO } from '../../../services/actividades';
 import { getSession } from '../../../services/auth';
 import { horaCorta } from '../../../services/chat';
@@ -32,6 +33,8 @@ export default function ChatClubScreen() {
   const { colors } = useAppTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const insets = useSafeAreaInsets();
+  const tecladoVisible = useTecladoVisible();
+  const margenInferior = tecladoVisible ? espacio.s : insets.bottom + espacio.m;
   const { id } = useLocalSearchParams<{
     id: string
   }>();
@@ -76,7 +79,7 @@ export default function ChatClubScreen() {
   }
   return (
     <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <View style={[styles.topbar, { paddingTop: insets.top + 12 }]}>
+      <View style={[styles.topbar, { paddingTop: insets.top + espacio.m }]}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backButton} accessibilityLabel="Volver">
           <Ionicons name="arrow-back" size={18} color={colors.text} />
         </TouchableOpacity>
@@ -112,14 +115,14 @@ export default function ChatClubScreen() {
         })}
       </ScrollView>
       {soloLectura ? (
-        <View style={[styles.inputBar, { paddingBottom: insets.bottom + 10 }]}>
+        <View style={[styles.inputBar, { paddingBottom: margenInferior }]}>
           <Ionicons name="lock-closed-outline" size={16} color={colors.textMuted} />
           <Text style={styles.cerradaTexto}>
             Solo puedes leer: el club deshabilitó el chat para postulantes en esta convocatoria.
           </Text>
         </View>
       ) : !sinPermiso ? (
-        <View style={[styles.inputBar, { paddingBottom: insets.bottom + 10 }]}>
+        <View style={[styles.inputBar, { paddingBottom: margenInferior }]}>
           <TextInput
             style={styles.input}
             value={texto}
@@ -145,25 +148,8 @@ export default function ChatClubScreen() {
 const makeStyles = (c: Colors) =>
   StyleSheet.create({
     container: { flex: 1, backgroundColor: c.bg },
-    topbar: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 10,
-      paddingHorizontal: 20,
-      paddingBottom: 12,
-      borderBottomWidth: 1,
-      borderBottomColor: c.border
-    },
-    backButton: {
-      width: 34,
-      height: 34,
-      borderRadius: 17,
-      backgroundColor: c.card,
-      borderWidth: 1,
-      borderColor: c.border,
-      alignItems: 'center',
-      justifyContent: 'center'
-    },
+    topbar: { flexDirection: 'row', alignItems: 'center', gap: espacio.s, paddingHorizontal: espacio.l, paddingBottom: espacio.m, borderBottomWidth: 1, borderBottomColor: c.border },
+    backButton: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
     icono: { width: 40, height: 40, borderRadius: radio.control, alignItems: 'center', justifyContent: 'center' },
     title: { color: c.text, ...tipo.seccion },
     sub: { color: c.textMuted, ...tipo.dato, marginTop: 2 },
@@ -178,28 +164,8 @@ const makeStyles = (c: Colors) =>
     textoPropio: { color: '#FFFFFF' },
     horaMsg: { color: c.textMuted, ...tipo.etiqueta, fontWeight: '400', marginTop: 3, alignSelf: 'flex-end' },
     horaMsgPropia: { color: 'rgba(255,255,255,0.75)' },
-    inputBar: {
-      flexDirection: 'row',
-      alignItems: 'flex-end',
-      gap: 10,
-      paddingHorizontal: 16,
-      paddingTop: 10,
-      borderTopWidth: 1,
-      borderTopColor: c.border,
-      backgroundColor: c.bg
-    },
-    input: {
-      flex: 1,
-      maxHeight: 110,
-      backgroundColor: c.inputBg,
-      borderWidth: 1,
-      borderColor: c.border,
-      borderRadius: 18,
-      paddingHorizontal: 14,
-      paddingVertical: 10,
-      color: c.text,
-      fontSize: 13
-    },
+    inputBar: { flexDirection: 'row', alignItems: 'flex-end', gap: espacio.s, paddingHorizontal: espacio.l, paddingTop: espacio.m, borderTopWidth: 1, borderTopColor: c.border, backgroundColor: c.bg },
+    input: { flex: 1, minHeight: 44, maxHeight: 110, backgroundColor: c.inputBg, borderWidth: 1, borderColor: c.border, borderRadius: 22, paddingHorizontal: espacio.l, paddingVertical: espacio.s + 1, color: c.text, fontSize: 14, fontWeight: '400' },
     enviarBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: c.primary, alignItems: 'center', justifyContent: 'center' },
     enviarBtnOff: { opacity: 0.4 },
     cerrada: { flexDirection: 'row', alignItems: 'center', gap: espacio.s, paddingHorizontal: espacio.xl, paddingTop: espacio.m, borderTopWidth: 1, borderTopColor: c.border, backgroundColor: c.chip },

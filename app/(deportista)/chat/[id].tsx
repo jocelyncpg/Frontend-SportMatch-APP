@@ -7,6 +7,7 @@ import {
   TouchableOpacity, View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useTecladoVisible } from '../../../hooks/use-teclado';
 import Avatar from '../../../components/Avatar';
 import MapaEstatico from '../../../components/MapaEstatico';
 import VisorFoto from '../../../components/VisorFoto';
@@ -25,6 +26,18 @@ import { Colors, useAppTheme, espacio, radio, tipo } from '../../../theme/ThemeC
 /** Lo que se está reportando desde el chat (HU-42): la persona o un mensaje suyo. */
 type ObjetivoReporte = { tipo: TipoReporte; id: string; nombre: string };
 
+function FotoChat({ uri }: { uri: string }) {
+  const [proporcion, setProporcion] = useState(1);
+  useEffect(() => {
+    let activo = true;
+    Image.getSize(uri, (ancho, alto) => {
+      if (activo && ancho > 0 && alto > 0) setProporcion(Math.min(1.5, Math.max(0.7, ancho / alto)));
+    }, () => {});
+    return () => { activo = false; };
+  }, [uri]);
+  return <Image source={{ uri }} style={{ width: 240, aspectRatio: proporcion }} resizeMode="cover" accessibilityLabel="Foto enviada" />;
+}
+
 function fusionar(actuales: MensajeApi[], nuevos: MensajeApi[]) {
   return [...new Map([...actuales, ...nuevos].map((m) => [m.id, m])).values()]
     .sort((a, b) => BigInt(a.id) < BigInt(b.id) ? -1 : BigInt(a.id) > BigInt(b.id) ? 1 : 0);
@@ -34,6 +47,8 @@ export default function ChatScreen() {
   const { colors } = useAppTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const insets = useSafeAreaInsets();
+  const tecladoVisible = useTecladoVisible();
+  const margenInferior = tecladoVisible ? espacio.s : insets.bottom + espacio.m;
   // id = match; personaId = la otra persona (lo manda la lista, para poder desbloquear aunque el chat no abra).
   const { id, personaId: personaParam } = useLocalSearchParams<{ id: string; personaId?: string }>();
   const [persona, setPersona] = useState<Persona | null>(null);
@@ -237,9 +252,7 @@ export default function ChatScreen() {
     if (m.message_type === 'IMAGE' && m.attachment_url) {
       return (
         <View style={{ gap: 6 }}>
-          <TouchableOpacity onPress={() => setFotoAbierta(m.attachment_url ?? null)} onLongPress={() => opcionesMensaje(m)} accessibilityLabel="Ampliar foto">
-            <Image source={{ uri: m.attachment_url }} style={styles.imagen} resizeMode="contain" accessibilityLabel="Foto enviada" />
-          </TouchableOpacity>
+          <FotoChat uri={m.attachment_url} />
           {m.text ? <Text style={propio ? styles.bubbleTextOwn : styles.bubbleTextOther}>{m.text}</Text> : null}
         </View>
       );
@@ -247,14 +260,16 @@ export default function ChatScreen() {
     if (m.message_type === 'LOCATION' && m.latitude != null && m.longitude != null) {
       const u = { latitud: m.latitude, longitud: m.longitude, comuna: m.location_name ?? undefined };
       return (
-        <TouchableOpacity style={styles.ubicacion} onPress={() => abrirEnMapas(u)} onLongPress={() => opcionesMensaje(m)} accessibilityLabel="Abrir ubicación en mapas">
+        <View>
           <MapaEstatico latitud={u.latitud} longitud={u.longitud} alto={130} />
-          <View style={styles.ubicacionFila}>
-            <Ionicons name="location" size={18} color={color} />
-            <Text style={[styles.ubicacionTitulo, { color }]}>{u.comuna || 'Ubicación compartida'}</Text>
+          <View style={styles.ubicacionPie}>
+            <Ionicons name="location" size={20} color={colors.accent} />
+            <View style={styles.ubicacionTextos}>
+              <Text style={styles.ubicacionTitulo}>{u.comuna || 'Ubicación compartida'}</Text>
+              <Text style={styles.ubicacionAccion}>Abrir en mapas</Text>
+            </View>
           </View>
-          <Text style={[styles.ubicacionAccion, { color }]}>Abrir en mapas</Text>
-        </TouchableOpacity>
+        </View>
       );
     }
     if (m.message_type === 'FILE' && m.attachment_url) {
@@ -335,11 +350,14 @@ export default function ChatScreen() {
     if (!c) return null;
     const propio = m.sender_id === miId;
     return (
-      <TouchableOpacity style={styles.cita} disabled={!c.available} onPress={() => irAlMensaje(c)} accessibilityLabel="Ir al mensaje citado">
-        <Text style={propio ? styles.bubbleTextOwn : styles.bubbleTextOther} numberOfLines={1}>
+      <TouchableOpacity style={[styles.cita, propio ? styles.citaPropia : styles.citaAjena]} disabled={!c.available} onPress={() => irAlMensaje(c)} accessibilityLabel="Ir al mensaje citado">
+        <View style={[styles.citaBarra, { backgroundColor: propio ? '#fff' : colors.accent }]} />
+        <View style={styles.citaCuerpo}>
+        <Text style={[styles.citaAutor, { color: propio ? '#fff' : colors.accent }]} numberOfLines={1}>
           {c.available ? (c.sender_id === miId ? 'Tú' : primerNombre) : 'Mensaje no disponible'}
         </Text>
-        {c.available ? <Text style={propio ? styles.bubbleTextOwn : styles.bubbleTextOther} numberOfLines={2}>{c.text || (c.message_type === 'IMAGE' ? 'Foto' : c.message_type === 'LOCATION' ? 'Ubicación compartida' : 'Archivo')}</Text> : null}
+        {c.available ? <Text style={[styles.citaTexto, { color: propio ? 'rgba(255,255,255,0.85)' : colors.textMuted }]} numberOfLines={2}>{c.text || (c.message_type === 'IMAGE' ? 'Foto' : c.message_type === 'LOCATION' ? 'Ubicación compartida' : 'Archivo')}</Text> : null}
+        </View>
       </TouchableOpacity>
     );
   }
@@ -376,8 +394,8 @@ export default function ChatScreen() {
   }
 
   return (
-    <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : 'height'} keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}>
-      <View style={[styles.topbar, { paddingTop: insets.top + 12 }]}>
+    <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : 'height'} keyboardVerticalOffset={0}>
+      <View style={[styles.topbar, { paddingTop: insets.top + espacio.m }]}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
           <Ionicons name="arrow-back" size={18} color={colors.text} />
         </TouchableOpacity>
@@ -439,12 +457,14 @@ export default function ChatScreen() {
           </View>
         }
         renderItem={({ item }) => {
-          const multimedia = item.message_type === 'IMAGE' || item.message_type === 'LOCATION';
+          const foto = item.message_type === 'IMAGE' && !!item.attachment_url;
+          const mapa = item.message_type === 'LOCATION' && item.latitude != null && item.longitude != null;
           const propio = item.sender_id === miId;
           return (
             <TouchableOpacity activeOpacity={0.8} delayLongPress={350}
+              onPress={foto ? () => setFotoAbierta(item.attachment_url ?? null) : mapa ? () => abrirEnMapas({ latitud: item.latitude!, longitud: item.longitude! }) : undefined}
               onLongPress={() => opcionesMensaje(item)}
-              style={[styles.bubble, propio ? styles.bubbleOwn : styles.bubbleOther, multimedia && styles.bubbleMedia]}
+              style={[styles.bubble, propio ? styles.bubbleOwn : styles.bubbleOther, foto && styles.bubbleFoto, mapa && styles.bubbleMapa]}
               accessibilityHint="Mantén presionado para responder o reportar este mensaje">
               {cita(item)}
               {contenido(item, propio)}
@@ -454,7 +474,7 @@ export default function ChatScreen() {
       />
       {bloqueado ? (
         // Persona bloqueada (HU-59): no se puede escribir hasta desbloquearla.
-        <View style={[styles.bloqueadoBox, { paddingBottom: insets.bottom + 12 }]}>
+        <View style={[styles.bloqueadoBox, { paddingBottom: margenInferior }]}>
           <Ionicons name="ban-outline" size={18} color={colors.danger} />
           <Text style={styles.bloqueadoTexto}>Bloqueaste a {primerNombre}. No pueden enviarse mensajes.</Text>
           <TouchableOpacity style={styles.desbloquearBtn} onPress={cambiarBloqueo}>
@@ -462,17 +482,18 @@ export default function ChatScreen() {
           </TouchableOpacity>
         </View>
       ) : (
-      <View>
+      <View style={styles.pie}>
       {citando ? <View style={styles.respondiendo}>
-        <View style={{ flex: 1 }}>
-          <Text style={styles.sugerenciaTexto}>{citando.sender_id === miId ? 'Tú' : primerNombre}</Text>
-          <Text style={styles.sport} numberOfLines={1}>{resumenMensaje(citando)}</Text>
+        <View style={styles.respondiendoBarra} />
+        <View style={styles.respondiendoTextos}>
+          <Text style={styles.respondiendoAutor}>{citando.sender_id === miId ? 'Tú' : primerNombre}</Text>
+          <Text style={styles.respondiendoTexto} numberOfLines={1}>{resumenMensaje(citando)}</Text>
         </View>
-        <TouchableOpacity onPress={() => setCitando(null)} accessibilityLabel="Cancelar respuesta" style={styles.reportButton}>
+        <TouchableOpacity onPress={() => setCitando(null)} accessibilityLabel="Cancelar respuesta" style={styles.respondiendoCerrar}>
           <Ionicons name="close" size={18} color={colors.textMuted} />
         </TouchableOpacity>
       </View> : null}
-      <View style={[styles.inputRow, { paddingBottom: insets.bottom + 12 }]}>
+      <View style={[styles.inputRow, { paddingBottom: margenInferior }]}>
         <TouchableOpacity
           style={[styles.adjuntarButton, !disponible && { opacity: 0.5 }]}
           onPress={abrirAdjuntos}
@@ -502,9 +523,26 @@ export default function ChatScreen() {
 
 const makeStyles = (c: Colors) =>
   StyleSheet.create({
+    bubbleFoto: { backgroundColor: 'transparent', borderWidth: 0, padding: 0, overflow: 'hidden' },
+    bubbleMapa: { width: 240, maxWidth: '78%', backgroundColor: c.card, borderWidth: 1, borderColor: c.border, padding: 0, overflow: 'hidden' },
+    citaPropia: { backgroundColor: 'rgba(0,0,0,0.22)' },
+    citaAjena: { backgroundColor: c.chip },
+    citaBarra: { width: 4 },
+    citaCuerpo: { flexShrink: 1, paddingHorizontal: espacio.s, paddingVertical: espacio.xs, gap: 1 },
+    citaAutor: { ...tipo.etiqueta },
+    citaTexto: { ...tipo.dato },
+    pie: { borderTopWidth: 1, borderColor: c.border },
+    respondiendoBarra: { alignSelf: 'stretch', width: 4, backgroundColor: c.accent },
+    respondiendoTextos: { flex: 1, paddingHorizontal: espacio.m, paddingVertical: espacio.s },
+    respondiendoAutor: { color: c.accent, ...tipo.etiqueta },
+    respondiendoTexto: { color: c.textMuted, ...tipo.dato },
+    respondiendoCerrar: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
+    ubicacionPie: { flexDirection: 'row', alignItems: 'center', gap: espacio.s, paddingHorizontal: espacio.m, paddingVertical: espacio.s, minHeight: 48 },
+    ubicacionTextos: { flex: 1 },
+
     container: { flex: 1, backgroundColor: c.bg },
-    topbar: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 20, paddingBottom: 16, borderBottomWidth: 1, borderColor: c.border },
-    backButton: { width: 34, height: 34, borderRadius: 17, backgroundColor: c.card, borderWidth: 1, borderColor: c.border, alignItems: 'center', justifyContent: 'center' },
+    topbar: { flexDirection: 'row', alignItems: 'center', gap: espacio.s, paddingHorizontal: espacio.l, paddingBottom: espacio.m, borderBottomWidth: 1, borderColor: c.border },
+    backButton: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
     topbarTextos: { flex: 1 },
     reportButton: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
     avatar: { width: 40, height: 40, borderRadius: 20 },
@@ -520,14 +558,14 @@ const makeStyles = (c: Colors) =>
     bubbleOwn: { backgroundColor: c.primary, alignSelf: 'flex-end', borderBottomRightRadius: espacio.xs },
     bubbleTextOther: { color: c.text, ...tipo.cuerpo, fontSize: 14, lineHeight: 20 },
     bubbleTextOwn: { color: '#FFFFFF', ...tipo.cuerpo, fontSize: 14, lineHeight: 20 },
-    cita: { borderLeftWidth: 3, borderColor: c.accent, backgroundColor: 'rgba(0,0,0,0.12)', padding: espacio.s, borderRadius: radio.control, marginBottom: espacio.s },
-    respondiendo: { flexDirection: 'row', alignItems: 'center', backgroundColor: c.chip, borderLeftWidth: 4, borderColor: c.accent, paddingLeft: espacio.m, marginHorizontal: espacio.l, marginTop: espacio.s },
+    cita: { flexDirection: 'row', borderRadius: radio.control, overflow: 'hidden', marginBottom: espacio.xs },
+    respondiendo: { flexDirection: 'row', alignItems: 'center', marginHorizontal: espacio.l, marginTop: espacio.s, borderRadius: radio.control, overflow: 'hidden', backgroundColor: c.chip },
     bubbleMedia: { padding: 6, width: 240 },
-    imagen: { width: 200, height: 150, borderRadius: radio.control },
+    imagen: { width: 240, borderRadius: radio.tarjeta },
     ubicacion: { paddingHorizontal: espacio.s, paddingVertical: 6, gap: espacio.xs, minHeight: 44, justifyContent: 'center' },
     ubicacionFila: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-    ubicacionTitulo: { ...tipo.cuerpoFuerte },
-    ubicacionAccion: { ...tipo.dato, textDecorationLine: 'underline' },
+    ubicacionTitulo: { color: c.text, ...tipo.cuerpoFuerte },
+    ubicacionAccion: { color: c.accent, ...tipo.dato },
     intro: { alignItems: 'center', paddingHorizontal: espacio.m },
     introIcono: { width: 52, height: 52, borderRadius: 26, backgroundColor: c.primary, alignItems: 'center', justifyContent: 'center', marginBottom: espacio.m },
     introTitulo: { color: c.text, ...tipo.titulo },
@@ -535,8 +573,8 @@ const makeStyles = (c: Colors) =>
     sugerencias: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: espacio.s, marginTop: espacio.xl },
     sugerencia: { backgroundColor: c.chip, borderRadius: radio.control, paddingHorizontal: espacio.l, minHeight: 44, justifyContent: 'center' },
     sugerenciaTexto: { color: c.accent, ...tipo.cuerpoFuerte },
-    inputRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingTop: 12, paddingHorizontal: 16, borderTopWidth: 1, borderColor: c.border },
-    input: { flex: 1, backgroundColor: c.inputBg, borderWidth: 1, borderColor: c.border, borderRadius: 20, paddingHorizontal: 16, paddingVertical: 10, color: c.text, fontSize: 13 },
+    inputRow: { flexDirection: 'row', alignItems: 'center', gap: espacio.s, paddingTop: espacio.m, paddingHorizontal: espacio.l },
+    input: { flex: 1, minHeight: 44, backgroundColor: c.inputBg, borderWidth: 1, borderColor: c.border, borderRadius: 22, paddingHorizontal: espacio.l, paddingVertical: espacio.s, color: c.text, fontSize: 14, fontWeight: '400' },
     sendButton: { width: 44, height: 44, borderRadius: 22, backgroundColor: c.primary, alignItems: 'center', justifyContent: 'center' },
     adjuntarButton: { width: 44, height: 44, borderRadius: 22, backgroundColor: c.card, borderWidth: 1, borderColor: c.border, alignItems: 'center', justifyContent: 'center' },
     bloqueadoBox: {
@@ -544,6 +582,6 @@ const makeStyles = (c: Colors) =>
       paddingTop: espacio.m, paddingHorizontal: espacio.l, borderTopWidth: 1, borderColor: c.border, backgroundColor: c.card,
     },
     bloqueadoTexto: { flex: 1, color: c.textMuted, ...tipo.dato, lineHeight: 17 },
-    desbloquearBtn: { borderWidth: 1, borderColor: c.accent, borderRadius: 14, paddingHorizontal: 12, paddingVertical: 7 },
+    desbloquearBtn: { minHeight: 44, paddingHorizontal: espacio.l },
     desbloquearTexto: { color: c.accent, fontSize: 12, fontWeight: '700' },
   });

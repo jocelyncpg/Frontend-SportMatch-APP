@@ -1,12 +1,13 @@
 import { Ionicons } from '@expo/vector-icons';
-import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
+import { useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import CatalogoPlanes from '../../components/CatalogoPlanes';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Aviso, Boton, Chip, EncabezadoPantalla, Tarjeta } from '../../components/ui';
 import ContratarPlanModal from '../../components/ContratarPlanModal';
 import { planDeParametro } from '../../services/renovarPlan';
 import { textoUso, useUsoPlan } from '../../services/usoPlan';
-import { cargarPlanes, nombreDelPlan, planesParaContratar, precioTexto, usePlanActual, usePlanes, type Plan } from '../../services/planes';
+import { beneficiosDe, cargarPlanes, formatearCLP, usePlanActual, usePlanes, type Plan } from '../../services/planes';
 import { Colors, useAppTheme, espacio, tipo } from '../../theme/ThemeContext';
 
 const RECURSOS_USO = ['solicitudes_match', 'postulaciones_actividades', 'postulaciones_convocatorias', 'actividades_organizadas'] as const;
@@ -14,6 +15,7 @@ const RECURSOS_USO = ['solicitudes_match', 'postulaciones_actividades', 'postula
 /** HU-39: consultar el catálogo de planes y beneficios. HU-42: contratar un plan. */
 export default function PlanesScreen() {
   const { colors } = useAppTheme();
+  const insets = useSafeAreaInsets();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const planActual = usePlanActual('deportista');
   const planes = usePlanes();
@@ -45,13 +47,8 @@ export default function PlanesScreen() {
   }, [pedido, cargado, planes, planActual]);
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <TouchableOpacity style={styles.volver} onPress={() => router.back()} accessibilityLabel="Volver">
-        <Ionicons name="chevron-back" size={20} color={colors.text} />
-      </TouchableOpacity>
-
-      <Text style={styles.titulo}>Planes y beneficios</Text>
-      <Text style={styles.subtitulo}>Compara los planes y elige el que se ajuste a cómo entrenas.</Text>
+    <ScrollView style={styles.container} contentContainerStyle={[styles.content, { paddingTop: insets.top + espacio.m, paddingBottom: insets.bottom + espacio.xxl }]}>
+      <EncabezadoPantalla titulo="Planes y beneficios" subtitulo="Elige el plan que se ajuste a cómo entrenas. Puedes cambiarlo cuando quieras." />
 
       {usoTextos.length ? (
         <View style={styles.uso} accessibilityLabel="Uso de tu plan">
@@ -60,34 +57,37 @@ export default function PlanesScreen() {
         </View>
       ) : null}
 
-      <CatalogoPlanes />
-
-      <View style={styles.aviso}>
-        <Ionicons name="information-circle-outline" size={18} color={colors.accent} />
-        <Text style={styles.avisoTexto}>
-          Los precios son referenciales y están en pesos chilenos (CLP). El pago se hace con Webpay Plus.
-        </Text>
-      </View>
-
-      {error ? <Text style={styles.error}>{error}</Text> : null}
-
-      {planesParaContratar('deportista', planes).map((p) => {
-        const yaLoTienes = planActual === p.id;
-        const disponible = p.backendId !== undefined;
+      {planes.map((p) => {
+        const esActual = planActual === p.id;
+        const esGratis = p.precioMensual === 0;
+        const disponible = p.backendId !== undefined && p.paraCuenta === 'deportista';
         return (
-          <TouchableOpacity
-            key={p.id}
-            style={[styles.boton, (yaLoTienes || !disponible) && styles.botonInactivo]}
-            disabled={yaLoTienes || !disponible}
-            accessibilityState={{ disabled: yaLoTienes || !disponible }}
-            onPress={() => setElegido(p)}
-          >
-            <Text style={styles.botonTexto}>
-              {yaLoTienes ? `Tu plan actual: ${nombreDelPlan(p.id)}` : disponible ? `Contratar plan ${p.nombre} · ${precioTexto(p)}` : `Plan ${p.nombre} · Disponible pronto`}
-            </Text>
-          </TouchableOpacity>
+          <Tarjeta key={p.id} resaltada={p.destacado} style={styles.plan}>
+            <View style={styles.etiquetas}>
+              {esActual ? <Chip texto="Tu plan" tono="exito" icono="checkmark-circle" /> : null}
+              {p.destacado && !esActual ? <Chip texto="Recomendado" tono="acento" icono="star-outline" /> : null}
+            </View>
+            <Text style={styles.nombre}>{p.nombre}</Text>
+            <Text style={styles.resumen}>{p.resumen}</Text>
+            <View style={styles.precioFila}>
+              <Text style={styles.precio}>{esGratis ? '$0' : formatearCLP(p.precioMensual)}</Text>
+              <Text style={styles.periodo}>{esGratis ? 'para siempre' : 'al mes'}</Text>
+            </View>
+            <View style={styles.separador} />
+            <View style={styles.beneficios}>
+              {beneficiosDe(p.id).map((b) => <View key={b} style={styles.beneficio}>
+                <Ionicons name="checkmark-circle" size={18} color={colors.success} />
+                <Text style={styles.beneficioTexto}>{b}</Text>
+              </View>)}
+            </View>
+            {!esGratis ? <Boton texto={esActual ? 'Es tu plan actual' : p.paraCuenta === 'club' ? 'Para cuentas de club' : disponible ? 'Contratar plan ' + p.nombre : 'Disponible pronto'}
+              deshabilitado={esActual || !disponible} onPress={() => { setRenovar(false); setElegido(p); }} style={styles.cta} /> : null}
+          </Tarjeta>
         );
       })}
+      <Aviso texto="Los precios están en pesos chilenos (CLP). El pago se hace en el sitio seguro de Webpay Plus." />
+
+      {error ? <Text style={styles.error}>{error}</Text> : null}
 
       <ContratarPlanModal
         visible={elegido !== null} plan={elegido} cuenta="deportista" renovar={renovar}
@@ -99,8 +99,21 @@ export default function PlanesScreen() {
 
 const makeStyles = (c: Colors) =>
   StyleSheet.create({
+    plan: { marginBottom: espacio.l },
+    etiquetas: { flexDirection: 'row', gap: espacio.s, minHeight: 24, marginBottom: espacio.s },
+    nombre: { color: c.text, ...tipo.titulo },
+    resumen: { color: c.textMuted, ...tipo.cuerpo, lineHeight: 19, marginTop: espacio.xs },
+    precioFila: { flexDirection: 'row', alignItems: 'baseline', gap: espacio.s, marginTop: espacio.l },
+    precio: { color: c.text, fontSize: 32, fontWeight: '800' },
+    periodo: { color: c.textMuted, ...tipo.cuerpo },
+    separador: { height: 1, backgroundColor: c.border, marginVertical: espacio.l },
+    beneficios: { gap: espacio.m },
+    beneficio: { flexDirection: 'row', alignItems: 'flex-start', gap: espacio.m },
+    beneficioTexto: { flex: 1, color: c.text, ...tipo.cuerpo, lineHeight: 19 },
+    cta: { marginTop: espacio.xl },
+
     container: { flex: 1, backgroundColor: c.bg },
-    content: { padding: 20, paddingTop: 60, paddingBottom: 40 },
+    content: { paddingHorizontal: espacio.xl },
     volver: {
       width: 36, height: 36, borderRadius: 18, backgroundColor: c.card,
       borderWidth: 1, borderColor: c.border, alignItems: 'center', justifyContent: 'center', marginBottom: 16,

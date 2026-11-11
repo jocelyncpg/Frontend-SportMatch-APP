@@ -1,12 +1,13 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Image, Modal, Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Avatar from '../../../components/Avatar';
 import MatchModal from '../../../components/MatchModal';
 import RatingModal from '../../../components/RatingModal';
 import ReportarModal from '../../../components/ReportarModal';
+import { Boton } from '../../../components/ui';
 import { ApiError } from '../../../services/api';
 import { getAthleteProfile } from '../../../services/athletes';
 import { Usuario, getSession } from '../../../services/auth';
@@ -50,6 +51,15 @@ export default function PerfilDeportistaScreen() {
   const ocupado = useRef(false);
   const version = useRef(0);
   const [fotoAmpliada, setFotoAmpliada] = useState(false);
+  const [proporcion, setProporcion] = useState(0.8);
+  useEffect(() => {
+    let activo = true;
+    setProporcion(0.8);
+    if (persona?.fotoUri) Image.getSize(persona.fotoUri, (ancho, alto) => {
+      if (activo && ancho > 0 && alto > 0) setProporcion(Math.min(1.3, Math.max(0.7, ancho / alto)));
+    }, () => {});
+    return () => { activo = false; };
+  }, [persona?.fotoUri]);
 
   useFocusEffect(useCallback(() => {
     let active = true;
@@ -212,16 +222,16 @@ export default function PerfilDeportistaScreen() {
   const tieneFoto = !!persona.fotoUri;
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top + 12 }]}>
+    <View style={styles.container}>
       <TouchableOpacity onPress={volver} style={[styles.backButton, { top: insets.top + 12 }]} accessibilityLabel="Volver">
-        <Ionicons name="arrow-back" size={18} color={colors.text} />
+        <Ionicons name="arrow-back" size={20} color="#fff" />
       </TouchableOpacity>
       <TouchableOpacity
         onPress={() => setReportando(true)}
         style={[styles.reportButton, { top: insets.top + 12 }]}
         accessibilityLabel={`Reportar a ${p.name}`}
       >
-        <Ionicons name="flag-outline" size={17} color={colors.text} />
+        <Ionicons name="flag-outline" size={19} color="#fff" />
       </TouchableOpacity>
 
       <ScrollView contentContainerStyle={styles.content}>
@@ -235,7 +245,7 @@ export default function PerfilDeportistaScreen() {
             name={persona.name}
             colorFrom={persona.colorFrom}
             uri={persona.fotoUri}
-            style={styles.foto}
+            style={[styles.foto, { aspectRatio: tieneFoto ? proporcion : 1 }]}
             fontSize={56}
           >
             {tieneFoto ? (
@@ -250,12 +260,13 @@ export default function PerfilDeportistaScreen() {
         </TouchableOpacity>
 
         <View style={styles.info}>
-          <View style={styles.nameRow}>
             <Text style={styles.name}>
               {p.name}{p.age ? `, ${p.age}` : ''}
             </Text>
-            {p.distance ? <Text style={styles.distance}>{p.distance}</Text> : null}
-          </View>
+            {p.distance ? <View style={styles.distanciaFila}>
+              <Ionicons name="location-outline" size={16} color={colors.textMuted} />
+              <Text style={styles.distance}>A {p.distance} de ti</Text>
+            </View> : null}
 
           <View style={styles.tagsRow}>
             <View style={styles.tag}>
@@ -286,21 +297,10 @@ export default function PerfilDeportistaScreen() {
       <View style={[styles.actions, { paddingBottom: insets.bottom + 16 }]}>
         {esMatch ? (
           <>
-            <TouchableOpacity style={styles.pillSecundario} onPress={() => setCalificando(true)}>
-              <Ionicons
-                name={miCalificacion ? 'star' : 'star-outline'}
-                size={16}
-                color={miCalificacion ? '#FACC15' : colors.accent}
-              />
-              <Text style={styles.pillSecundarioTexto}>
-                {miCalificacion ? `Tu calificación: ${miCalificacion.estrellas}★` : 'Calificar'}
-              </Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity style={styles.pillPrimario} onPress={() => irAlChat(false)}>
-              <Ionicons name="chatbubble-ellipses" size={16} color="#fff" />
-              <Text style={styles.pillPrimarioTexto}>Enviar mensaje</Text>
-            </TouchableOpacity>
+            <Boton variante="secundario" icono={miCalificacion ? 'star' : 'star-outline'}
+              texto={miCalificacion ? `Tu calificación: ${miCalificacion.estrellas}★` : 'Calificar'}
+              onPress={() => setCalificando(true)} style={styles.accionFlex} />
+            <Boton icono="chatbubble-ellipses" texto="Enviar mensaje" onPress={() => irAlChat(false)} style={styles.accionFlex} />
           </>
         ) : esSolicitud ? (
           <>
@@ -313,13 +313,11 @@ export default function PerfilDeportistaScreen() {
           </>
         ) : esEnviada ? (
           <>
-            <View style={styles.pillSecundario}>
+            <View style={styles.enviada}>
               <Ionicons name="paper-plane-outline" size={16} color={colors.accent} />
-              <Text style={styles.pillSecundarioTexto}>Solicitud enviada</Text>
+              <Text style={styles.enviadaTexto}>Solicitud enviada</Text>
             </View>
-            <TouchableOpacity style={styles.pillCancelar} onPress={handleCancelarSolicitud} disabled={enviando}>
-              <Text style={styles.pillCancelarTexto}>Cancelar solicitud</Text>
-            </TouchableOpacity>
+            <Boton variante="peligro" texto="Cancelar solicitud" onPress={handleCancelarSolicitud} deshabilitado={enviando} style={styles.accionFlex} />
           </>
         ) : cerrada ? (
           <Text style={styles.bio}>Esta solicitud ya se cerró.</Text>
@@ -401,30 +399,38 @@ export default function PerfilDeportistaScreen() {
 
 const makeStyles = (c: Colors) =>
   StyleSheet.create({
+    distanciaFila: { flexDirection: 'row', alignItems: 'center', gap: espacio.xs + 2, marginTop: espacio.xs + 2 },
+    accionFlex: { flex: 1 },
+    enviada: {
+      flex: 1, minHeight: 48, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: espacio.s,
+      backgroundColor: c.card, borderWidth: 1, borderColor: c.border, borderRadius: radio.control,
+    },
+    enviadaTexto: { color: c.text, ...tipo.cuerpoFuerte },
+
     container: { flex: 1, backgroundColor: c.bg },
     backButton: {
-      position: 'absolute', left: 20, zIndex: 2,
-      width: 36, height: 36, borderRadius: 18,
-      backgroundColor: c.card, borderWidth: 1, borderColor: c.border,
+      position: 'absolute', left: espacio.l, zIndex: 2,
+      width: 44, height: 44, borderRadius: 22,
+      backgroundColor: 'rgba(11,15,25,0.6)',
       alignItems: 'center', justifyContent: 'center',
     },
     reportButton: {
       position: 'absolute', right: espacio.l, zIndex: 2,
       width: 44, height: 44, borderRadius: 22,
-      backgroundColor: 'rgba(0,0,0,0.38)',
+      backgroundColor: 'rgba(11,15,25,0.6)',
       alignItems: 'center', justifyContent: 'center',
     },
-    content: { paddingBottom: 30 },
+    content: { paddingBottom: espacio.xxl + espacio.s },
     foto: { width: '100%' },
     compatBadge: {
       position: 'absolute', bottom: espacio.l, right: espacio.l,
-      backgroundColor: 'rgba(0,0,0,0.38)', paddingHorizontal: espacio.m, paddingVertical: espacio.s - 2, borderRadius: radio.tarjeta + 4,
+      backgroundColor: 'rgba(11,15,25,0.6)', paddingHorizontal: espacio.m, paddingVertical: espacio.s - 2, borderRadius: radio.tarjeta + 4,
     },
     compatText: { color: '#4ADE80', ...tipo.cuerpoFuerte, fontWeight: '800' },
     ampliarBadge: {
       position: 'absolute', bottom: espacio.l, left: espacio.l,
       width: 32, height: 32, borderRadius: 16,
-      backgroundColor: 'rgba(0,0,0,0.38)', alignItems: 'center', justifyContent: 'center',
+      backgroundColor: 'rgba(11,15,25,0.6)', alignItems: 'center', justifyContent: 'center',
     },
     info: { padding: espacio.xl },
     nameRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 10 },
@@ -450,7 +456,7 @@ const makeStyles = (c: Colors) =>
       alignItems: 'center', justifyContent: 'center',
     },
     aceptarButton: {
-      width: 56, height: 56, borderRadius: 28, backgroundColor: '#22C55E',
+      width: 56, height: 56, borderRadius: 28, backgroundColor: '#16A34A',
       alignItems: 'center', justifyContent: 'center',
     },
     pillPrimario: {

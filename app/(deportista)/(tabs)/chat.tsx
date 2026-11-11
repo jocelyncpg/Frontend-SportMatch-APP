@@ -291,7 +291,7 @@ export default function ChatListScreen() {
 const makeStyles = (c: Colors) =>
   StyleSheet.create({
     container: { flex: 1, backgroundColor: c.bg },
-    topbar: { paddingHorizontal: 20, marginBottom: 16 },
+    topbar: { paddingHorizontal: espacio.xl },
     title: { color: c.text, fontSize: 20, fontWeight: '700' },
     list: { paddingHorizontal: espacio.xl, paddingBottom: espacio.xxl + espacio.s },
     card: {

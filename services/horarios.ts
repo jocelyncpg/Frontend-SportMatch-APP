@@ -1,6 +1,5 @@
 // Disponibilidad del deportista como días de la semana + horas ("Lun 07:00, 18:00 · Sáb 10:00").
-// Se sigue guardando como TEXTO en el perfil (campo `disponibilidad`), igual que antes, así el backend y la
-// búsqueda no cambian: lo único nuevo es cómo se arma ese texto en el editor.
+// El editor mantiene este texto; auth.ts lo traduce a franjas de Ms_Users al guardar y al leer.
 
 export type DiaHorario = 'Lun' | 'Mar' | 'Mié' | 'Jue' | 'Vie' | 'Sáb' | 'Dom';
 export type Horarios = Partial<Record<DiaHorario, string[]>>;

@@ -2,9 +2,10 @@ import { Ionicons } from '@expo/vector-icons';
 import { useIsFocused } from '@react-navigation/native';
 import * as WebBrowser from 'expo-web-browser';
 import { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Modal, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Modal, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { beneficiosDe, confirmarPago, iniciarPago, leerPagoPendiente, olvidarPagoPendiente, precioTexto, type CuentaPlan, type Plan } from '../services/planes';
-import { Colors, useAppTheme, espacio, tipo } from '../theme/ThemeContext';
+import { Colors, useAppTheme, espacio, radio, tipo } from '../theme/ThemeContext';
+import { Aviso, Boton } from './ui';
 
 type Props = {
   visible: boolean;
@@ -104,9 +105,7 @@ export default function ContratarPlanModal({ visible, plan, cuenta, onClose, ren
                   ? `Renovaste el plan ${plan.nombre}. Sus beneficios siguen activos.`
                   : `Tu plan ahora es ${plan.nombre}. Los beneficios ya están activos.`}
               </Text>
-              <TouchableOpacity style={styles.botonCerrar} onPress={onClose}>
-                <Text style={styles.botonPrimarioTexto}>Cerrar</Text>
-              </TouchableOpacity>
+              <Boton texto="Cerrar" onPress={onClose} style={styles.botonCerrar} />
             </View>
           ) : (
             <>
@@ -123,14 +122,9 @@ export default function ContratarPlanModal({ visible, plan, cuenta, onClose, ren
                 ))}
               </ScrollView>
 
-              <View style={styles.aviso}>
-                <Ionicons name="information-circle-outline" size={18} color={colors.accent} />
-                <Text style={styles.avisoTexto}>
-                  {pendiente
+              <Aviso icono="lock-closed-outline" texto={pendiente
                     ? 'Completa el pago en Webpay. Al regresar verás el resultado; si cerraste el navegador, toca "Consultar pago".'
-                    : 'Completarás el pago en el sitio seguro de Webpay Plus. SportMatch no solicita los datos de tu tarjeta.'}
-                </Text>
-              </View>
+                    : 'Completarás el pago en el sitio seguro de Webpay Plus. SportMatch no solicita los datos de tu tarjeta.'} />
 
               {error ? <Text accessibilityRole="alert" style={styles.error}>{error}</Text> : null}
               {pendiente && urlPendiente ? <TouchableOpacity disabled={procesando} onPress={() => {
@@ -144,20 +138,9 @@ export default function ContratarPlanModal({ visible, plan, cuenta, onClose, ren
               }}><Text style={[styles.avisoTexto, { marginTop: 12 }]}>Volver al resumen para iniciar otro intento</Text></TouchableOpacity> : null}
 
               <View style={styles.acciones}>
-                <TouchableOpacity style={styles.botonSecundario} onPress={onClose}>
-                  <Text style={styles.botonSecundarioTexto}>Cancelar</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.botonPrimario, procesando && { opacity: 0.6 }]}
-                  onPress={pendiente ? yaPague : pagar}
-                  disabled={procesando}
-                >
-                  {procesando ? (
-                    <ActivityIndicator color="#fff" />
-                  ) : (
-                    <Text style={styles.botonPrimarioTexto}>{pendiente ? 'Consultar pago' : 'Pagar con Webpay'}</Text>
-                  )}
-                </TouchableOpacity>
+                <Boton variante="secundario" texto="Cancelar" onPress={onClose} deshabilitado={procesando} style={styles.accionCancelar} />
+                <Boton texto={procesando ? 'Procesando…' : pendiente ? 'Consultar pago' : 'Pagar con Webpay'}
+                  onPress={pendiente ? yaPague : pagar} deshabilitado={procesando} style={styles.accionConfirmar} />
               </View>
             </>
           )}
@@ -169,20 +152,33 @@ export default function ContratarPlanModal({ visible, plan, cuenta, onClose, ren
 
 const makeStyles = (c: Colors) =>
   StyleSheet.create({
-    fondo: { flex: 1, backgroundColor: c.overlay, justifyContent: 'center', padding: 20 },
-    hoja: { backgroundColor: c.card, borderRadius: 18, borderWidth: 1, borderColor: c.border, padding: 18, maxHeight: '90%' },
-    centro: { alignItems: 'center', gap: 10, paddingVertical: 10 },
+    enlace: { minHeight: 44, justifyContent: 'center', marginTop: espacio.s },
+    enlaceTexto: { color: c.accent, ...tipo.cuerpoFuerte },
+    accionCancelar: { flex: 1 },
+    accionConfirmar: { flex: 1.4 },
+    cargando: { minHeight: 48, alignItems: 'center', justifyContent: 'center' },
+
+    fondo: { flex: 1, backgroundColor: c.overlay, justifyContent: 'center', padding: espacio.xl },
+    hoja: {
+      backgroundColor: c.card,
+      borderRadius: radio.tarjeta,
+      borderWidth: 1,
+      borderColor: c.border,
+      padding: espacio.xl,
+      maxHeight: '90%',
+    },
+    centro: { alignItems: 'center', gap: espacio.m, paddingVertical: espacio.m },
     titulo: { color: c.text, ...tipo.titulo },
     precio: { color: c.accent, fontSize: 24, fontWeight: '800', marginTop: espacio.xs },
     resumen: { color: c.textMuted, ...tipo.cuerpo, marginTop: espacio.xs, marginBottom: espacio.l },
     texto: { color: c.textMuted, ...tipo.cuerpo, textAlign: 'center', lineHeight: 19 },
-    lista: { flexGrow: 0, marginBottom: 12 },
+    lista: { flexGrow: 0, marginBottom: espacio.l },
     beneficio: { flexDirection: 'row', gap: espacio.m, alignItems: 'flex-start' },
     beneficioTexto: { flex: 1, color: c.text, ...tipo.cuerpo, lineHeight: 19 },
     aviso: { flexDirection: 'row', gap: 10, alignItems: 'flex-start', backgroundColor: c.chip, borderRadius: 12, padding: 12 },
     avisoTexto: { flex: 1, color: c.textMuted, fontSize: 11.5, lineHeight: 16 },
     error: { color: c.danger, ...tipo.cuerpo, marginTop: espacio.m },
-    acciones: { flexDirection: 'row', gap: 10, marginTop: 14 },
+    acciones: { flexDirection: 'row', gap: espacio.m, marginTop: espacio.l },
     botonSecundario: { flex: 1, borderWidth: 1, borderColor: c.border, borderRadius: 13, paddingVertical: 13, alignItems: 'center' },
     botonSecundarioTexto: { color: c.text, fontSize: 13, fontWeight: '700' },
     botonPrimario: { flex: 1.4, backgroundColor: c.primary, borderRadius: 13, paddingVertical: 13, alignItems: 'center', minWidth: 120 },

@@ -60,9 +60,7 @@ export type DatosActividad = {
   cupos: number; descripcion: string; requisitos: string;
 };
 export type ResultadoCrear = { ok: true; id: string } | { ok: false; motivo: string };
-export type CambioActividad = 'horario' | 'lugar' | 'cancelada';
 /** Aviso para quien participa (o postuló) cuando el organizador cambia o cancela la actividad (HU-37). */
-export type AvisoActividad = { id: string; actividadId: string; cambio: CambioActividad; titulo: string; detalle: string; ts: number };
 export type EstadoCarga = { cargando: boolean; error: string | null; sesionExpirada: boolean };
 /** Alguien que estuvo en una actividad contigo: quien organiza o un postulante aceptado. */
 export type Participante = { id: string; nombre: string; rol: 'organizador' | 'participante' };
@@ -389,7 +387,6 @@ function reiniciarSiCambioLaCuenta(id: string) {
   usuarioId = id;
   actividades = [];
   mensajesPropios = {};
-  avisos = [];
   ultimoIntento = null;
   historial = { total: 0, ids: [], cargando: false, error: null };
 }
@@ -580,50 +577,6 @@ export async function retirarse(id: string, ahora: number = Date.now()): Promise
   }
   await cargarActividad(id);
   return { ok: true };
-}
-
-// ---------- avisos (HU-37) ----------
-// Aún no hay notificaciones en el backend: los avisos solo se generan con la demo de abajo.
-let avisos: AvisoActividad[] = [];
-export const getAvisos = () => avisos;
-export function useAvisos(): AvisoActividad[] {
-  return useSyncExternalStore(suscribir, getAvisos, getAvisos);
-}
-
-/**
- * SOLO DEMO: simula que quien organiza una actividad en la que participas cambia el horario,
- * cambia el lugar o la cancela, para ver la alerta (HU-37). Cambia solo la copia de este
- * teléfono; al recargar, manda el servidor. Sin `id` válido usa la primera en la que participas.
- */
-export function simularCambioDelOrganizador(id: string, cambio: CambioActividad, ahora: number = Date.now()): Resultado {
-  const participa = (x: Actividad) => ['aprobada', 'pendiente'].includes(relacionConActividad(x) ?? '');
-  const a = actividades.find((x) => x.id === id && participa(x)) ?? actividades.find((x) => participa(x) && estadoActividad(x, ahora) !== 'vencida' && !x.cancelada);
-  if (!a) return { ok: false, motivo: 'Postula a una actividad para probar los avisos.' };
-  const estado = estadoActividad(a, ahora);
-  if (estado === 'cancelada') return { ok: false, motivo: 'Esta actividad ya estaba cancelada.' };
-  if (estado === 'vencida') return { ok: false, motivo: 'Esta actividad ya finalizó.' };
-  const aviso = (titulo: string, detalle: string): AvisoActividad => ({ id: `av-${avisos.length + 1}`, actividadId: a.id, cambio, titulo, detalle, ts: ahora });
-  if (cambio === 'horario') {
-    const nueva = a.fecha + 60 * 60 * 1000;
-    guardar({ ...a, fecha: nueva });
-    avisos = [...avisos, aviso(`Cambió el horario de "${a.titulo}"`, `Ahora: ${formatearCuando(nueva, ahora)} (antes: ${formatearCuando(a.fecha, ahora)})`)];
-  } else if (cambio === 'lugar') {
-    const nuevo = `${a.lugar} (acceso sur)`;
-    guardar({ ...a, lugar: nuevo });
-    avisos = [...avisos, aviso(`Cambió el lugar de "${a.titulo}"`, `Nuevo lugar: ${nuevo}`)];
-  } else {
-    guardar({ ...a, cancelada: true });
-    avisos = [...avisos, aviso(`Se canceló "${a.titulo}"`, `${a.organizadorNombre} canceló la actividad.`)];
-  }
-  emitir();
-  return { ok: true };
-}
-
-/** Borra los avisos de la demo y vuelve a cargar desde el servidor. */
-export function reiniciarActividades() {
-  avisos = [];
-  emitir();
-  void cargarActividades();
 }
 
 export function useActividades(): Actividad[] {
