@@ -1,18 +1,20 @@
 import { Ionicons } from '@expo/vector-icons';
 import * as Crypto from 'expo-crypto';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator, Alert, FlatList, Image, KeyboardAvoidingView, Linking, Platform, StyleSheet, Text, TextInput,
   TouchableOpacity, View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Avatar from '../../../components/Avatar';
+import MapaEstatico from '../../../components/MapaEstatico';
+import VisorFoto from '../../../components/VisorFoto';
 import ReportarModal from '../../../components/ReportarModal';
 import { ApiError } from '../../../services/api';
 import {
   abrirChat, cerrarChat, ENVIO_DE_FOTOS_DISPONIBLE, enviarMensaje, enviarUbicacion, getChat, getMensajes, MensajeApi,
-  silenciarChat, useSilenciados, type UbicacionChat,
+  silenciarChat, useSilenciados, resumenMensaje, type UbicacionChat, type RespuestaCitada,
 } from '../../../services/chat';
 import { solicitarUbicacion } from '../../../services/location';
 import { Persona } from '../../../services/matchStore';
@@ -42,6 +44,10 @@ export default function ChatScreen() {
   const [miId, setMiId] = useState('');
   const [mensajes, setMensajes] = useState<MensajeApi[]>([]);
   const [texto, setTexto] = useState('');
+  const [citando, setCitando] = useState<MensajeApi | null>(null);
+  const [fotoAbierta, setFotoAbierta] = useState<string | null>(null);
+  const [destinoCita, setDestinoCita] = useState<string | null>(null);
+  const intentosDesplazar = useRef(0);
   const [error, setError] = useState<string | null>(null);
   const [disponible, setDisponible] = useState(false);
   const [cargando, setCargando] = useState(true);
@@ -53,7 +59,7 @@ export default function ChatScreen() {
   const listaRef = useRef<FlatList<MensajeApi>>(null);
   const ultimoId = useRef<string | undefined>(undefined);
   const generacion = useRef(0);
-  const envioPendiente = useRef<{ text: string; clientId: string } | null>(null);
+  const envioPendiente = useRef<{ text: string; clientId: string; replyTo?: string } | null>(null);
   const envioEnCurso = useRef(false);
   const desplazar = useRef(true);
   const [reporte, setReporte] = useState<ObjetivoReporte | null>(null);
@@ -65,7 +71,7 @@ export default function ChatScreen() {
     setError(e instanceof Error ? e.message : 'No se pudo conectar con el chat.');
     if (e instanceof ApiError && [401, 403, 404].includes(e.status)) {
       setDisponible(false);
-      setMensajes([]);
+      setMensajes([]); setCitando(null);
       ultimoId.current = undefined;
     }
   }, []);
@@ -76,6 +82,7 @@ export default function ChatScreen() {
     let fichaCargada = false;
     setPersona(null); setMensajes([]); setDisponible(false); setCargando(true); setError(null);
     setCargandoAnteriores(false); desplazar.current = true;
+    setCitando(null); setFotoAbierta(null); setDestinoCita(null);
     setTexto(''); setEnviando(false); envioEnCurso.current = false; envioPendiente.current = null;
     ultimoId.current = undefined;
     async function actualizar(): Promise<boolean> {
@@ -126,13 +133,15 @@ export default function ChatScreen() {
     envioEnCurso.current = true; setEnviando(true);
     const version = generacion.current;
     // A failed request keeps the same id for a retry; the server deduplicates it.
-    if (envioPendiente.current?.text !== t) envioPendiente.current = { text: t, clientId: Crypto.randomUUID() };
+    if (envioPendiente.current?.text !== t || envioPendiente.current?.replyTo !== citando?.id) {
+      envioPendiente.current = { text: t, clientId: Crypto.randomUUID(), replyTo: citando?.id };
+    }
     try {
-      const mensaje = await enviarMensaje(id, t, envioPendiente.current.clientId);
+      const mensaje = await enviarMensaje(id, t, envioPendiente.current.clientId, envioPendiente.current.replyTo);
       if (version !== generacion.current) return;
       setMensajes((prev) => fusionar(prev, [mensaje]));
       // The polling cursor only advances from reads, so simultaneous peer messages are not skipped.
-      envioPendiente.current = null; setTexto(''); setError(null); desplazar.current = true;
+      envioPendiente.current = null; setDestinoCita(null); setTexto(''); setCitando(null); setError(null); desplazar.current = true;
       sondeoRef.current?.ahora();
     } catch (e) {
       if (version === generacion.current) { setTexto(t); mostrarError(e); }
@@ -228,7 +237,9 @@ export default function ChatScreen() {
     if (m.message_type === 'IMAGE' && m.attachment_url) {
       return (
         <View style={{ gap: 6 }}>
-          <Image source={{ uri: m.attachment_url }} style={styles.imagen} resizeMode="cover" accessibilityLabel="Foto enviada" />
+          <TouchableOpacity onPress={() => setFotoAbierta(m.attachment_url ?? null)} onLongPress={() => opcionesMensaje(m)} accessibilityLabel="Ampliar foto">
+            <Image source={{ uri: m.attachment_url }} style={styles.imagen} resizeMode="contain" accessibilityLabel="Foto enviada" />
+          </TouchableOpacity>
           {m.text ? <Text style={propio ? styles.bubbleTextOwn : styles.bubbleTextOther}>{m.text}</Text> : null}
         </View>
       );
@@ -236,7 +247,8 @@ export default function ChatScreen() {
     if (m.message_type === 'LOCATION' && m.latitude != null && m.longitude != null) {
       const u = { latitud: m.latitude, longitud: m.longitude, comuna: m.location_name ?? undefined };
       return (
-        <TouchableOpacity style={styles.ubicacion} onPress={() => abrirEnMapas(u)} accessibilityLabel="Abrir ubicación en mapas">
+        <TouchableOpacity style={styles.ubicacion} onPress={() => abrirEnMapas(u)} onLongPress={() => opcionesMensaje(m)} accessibilityLabel="Abrir ubicación en mapas">
+          <MapaEstatico latitud={u.latitud} longitud={u.longitud} alto={130} />
           <View style={styles.ubicacionFila}>
             <Ionicons name="location" size={18} color={color} />
             <Text style={[styles.ubicacionTitulo, { color }]}>{u.comuna || 'Ubicación compartida'}</Text>
@@ -255,6 +267,81 @@ export default function ChatScreen() {
       );
     }
     return <Text style={propio ? styles.bubbleTextOwn : styles.bubbleTextOther}>{m.text}</Text>;
+  }
+
+  function opcionesMensaje(m: MensajeApi) {
+    if (!disponible || bloqueado) return;
+    Alert.alert('Mensaje', undefined, [
+      { text: 'Responder', onPress: () => setCitando(m) },
+      ...(m.sender_id === miId ? [] : [{ text: 'Reportar mensaje', style: 'destructive' as const, onPress: () => reportarMensaje(m) }]),
+      { text: 'Cancelar', style: 'cancel' as const },
+    ]);
+  }
+
+  async function irAlMensaje(c: RespuestaCitada) {
+    if (!c.available || !c.id) return;
+    const version = generacion.current;
+    try {
+      if (!mensajes.some((m) => m.id === c.id)) {
+        const pagina = await getMensajes(id, { around: c.id });
+        if (version !== generacion.current) return;
+        if (!pagina.some((m) => m.id === c.id)) {
+          Alert.alert('Mensaje no disponible');
+          return;
+        }
+        // Fill the gap as well: before/after cursors must not skip messages between pages.
+        const primero = mensajes[0]?.id;
+        let cursor = pagina[pagina.length - 1]?.id;
+        const recuperados = [...pagina];
+        while (primero && cursor && BigInt(cursor) < BigInt(primero)) {
+          const siguiente = await getMensajes(id, { after: cursor });
+          if (version !== generacion.current) return;
+          const ultimo = siguiente[siguiente.length - 1]?.id;
+          if (!ultimo || BigInt(ultimo) <= BigInt(cursor)) break;
+          recuperados.push(...siguiente);
+          cursor = ultimo;
+        }
+        desplazar.current = false;
+        setMensajes((prev) => fusionar(prev, recuperados));
+        setAnteriores(pagina.length === 50);
+      }
+      desplazar.current = false;
+      intentosDesplazar.current = 0;
+      setDestinoCita(c.id);
+      const index = mensajes.findIndex((m) => m.id === c.id);
+      if (index >= 0) listaRef.current?.scrollToIndex({ index, animated: true, viewPosition: 0.5 });
+    } catch (e) {
+      if (version === generacion.current) mostrarError(e);
+    }
+  }
+
+  function desplazarAlDestino() {
+    if (!destinoCita) return;
+    const index = mensajes.findIndex((m) => m.id === destinoCita);
+    if (index >= 0) listaRef.current?.scrollToIndex({ index, animated: true, viewPosition: 0.5 });
+  }
+
+  useEffect(() => {
+    if (!destinoCita) return;
+    const index = mensajes.findIndex((m) => m.id === destinoCita);
+    if (index < 0) return;
+    // FlatList measures rows after the page arrives; retry briefly if the target is not measured yet.
+    const timer = setTimeout(() => listaRef.current?.scrollToIndex({ index, animated: true, viewPosition: 0.5 }), 250);
+    return () => clearTimeout(timer);
+  }, [destinoCita, mensajes]);
+
+  function cita(m: MensajeApi) {
+    const c = m.reply_to;
+    if (!c) return null;
+    const propio = m.sender_id === miId;
+    return (
+      <TouchableOpacity style={styles.cita} disabled={!c.available} onPress={() => irAlMensaje(c)} accessibilityLabel="Ir al mensaje citado">
+        <Text style={propio ? styles.bubbleTextOwn : styles.bubbleTextOther} numberOfLines={1}>
+          {c.available ? (c.sender_id === miId ? 'T?' : primerNombre) : 'Mensaje no disponible'}
+        </Text>
+        {c.available ? <Text style={propio ? styles.bubbleTextOwn : styles.bubbleTextOther} numberOfLines={2}>{c.text || (c.message_type === 'IMAGE' ? 'Foto' : c.message_type === 'LOCATION' ? 'Ubicaci?n compartida' : 'Archivo')}</Text> : null}
+      </TouchableOpacity>
+    );
   }
 
   async function cargarAnteriores() {
@@ -294,7 +381,7 @@ export default function ChatScreen() {
         <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
           <Ionicons name="arrow-back" size={18} color={colors.text} />
         </TouchableOpacity>
-        <Avatar name={nombre} colorFrom={persona?.colorFrom ?? '#7C3AED'} uri={persona?.fotoUri} style={styles.avatar} fontSize={13} />
+        <TouchableOpacity disabled={!disponible} onPress={() => router.push({ pathname: '/(deportista)/athlete/[id]', params: { id } })} accessibilityLabel={`Ver perfil de ${nombre}`}><Avatar name={nombre} colorFrom={persona?.colorFrom ?? '#7C3AED'} uri={persona?.fotoUri} style={styles.avatar} fontSize={13} /></TouchableOpacity>
         <TouchableOpacity style={styles.topbarTextos} disabled={!disponible} accessibilityLabel={`Ver perfil de ${nombre}`}
           onPress={() => router.push({ pathname: '/(deportista)/athlete/[id]', params: { id } })}>
           <Text style={styles.name}>{nombre}</Text>
@@ -332,7 +419,14 @@ export default function ChatScreen() {
       {error && !bloqueado && <TouchableOpacity onPress={() => actualizarRef.current()}><Text style={styles.introTexto}>{error} · Reintentar</Text></TouchableOpacity>}
       <FlatList ref={listaRef} data={mensajes} keyExtractor={(m) => m.id}
         contentContainerStyle={[styles.list, mensajes.length === 0 && styles.listVacia]}
-        onContentSizeChange={() => { if (desplazar.current) listaRef.current?.scrollToEnd({ animated: true }); }}
+        onContentSizeChange={() => { if (destinoCita) desplazarAlDestino(); else if (desplazar.current) listaRef.current?.scrollToEnd({ animated: true }); }}
+        onLayout={desplazarAlDestino}
+        onScrollBeginDrag={() => setDestinoCita(null)}
+        onScrollToIndexFailed={({ averageItemLength, index }) => {
+          if (++intentosDesplazar.current <= 3) {
+            listaRef.current?.scrollToOffset({ offset: averageItemLength * index, animated: false });
+          } else setDestinoCita(null);
+        }}
         ListHeaderComponent={anteriores ? <TouchableOpacity disabled={cargandoAnteriores} onPress={cargarAnteriores}><Text style={styles.introTexto}>{cargandoAnteriores ? 'Cargando...' : 'Ver mensajes anteriores'}</Text></TouchableOpacity> : null}
         ListEmptyComponent={
           <View style={styles.intro}>
@@ -346,20 +440,14 @@ export default function ChatScreen() {
         }
         renderItem={({ item }) => {
           const multimedia = item.message_type === 'IMAGE' || item.message_type === 'LOCATION';
-          return item.sender_id === miId ? (
-            <View style={[styles.bubble, styles.bubbleOwn, multimedia && styles.bubbleMedia]}>
-              {contenido(item, true)}
-            </View>
-          ) : (
-            // Mantén presionado un mensaje de la otra persona para reportarlo.
-            <TouchableOpacity
-              activeOpacity={0.8}
-              delayLongPress={350}
-              onLongPress={() => reportarMensaje(item)}
-              style={[styles.bubble, styles.bubbleOther, multimedia && styles.bubbleMedia]}
-              accessibilityHint="Mantén presionado para reportar este mensaje"
-            >
-              {contenido(item, false)}
+          const propio = item.sender_id === miId;
+          return (
+            <TouchableOpacity activeOpacity={0.8} delayLongPress={350}
+              onLongPress={() => opcionesMensaje(item)}
+              style={[styles.bubble, propio ? styles.bubbleOwn : styles.bubbleOther, multimedia && styles.bubbleMedia]}
+              accessibilityHint="Mant?n presionado para responder o reportar este mensaje">
+              {cita(item)}
+              {contenido(item, propio)}
             </TouchableOpacity>
           );
         }}
@@ -374,6 +462,16 @@ export default function ChatScreen() {
           </TouchableOpacity>
         </View>
       ) : (
+      <View>
+      {citando ? <View style={styles.respondiendo}>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.sugerenciaTexto}>{citando.sender_id === miId ? 'T?' : primerNombre}</Text>
+          <Text style={styles.sport} numberOfLines={1}>{resumenMensaje(citando)}</Text>
+        </View>
+        <TouchableOpacity onPress={() => setCitando(null)} accessibilityLabel="Cancelar respuesta" style={styles.reportButton}>
+          <Ionicons name="close" size={18} color={colors.textMuted} />
+        </TouchableOpacity>
+      </View> : null}
       <View style={[styles.inputRow, { paddingBottom: insets.bottom + 12 }]}>
         <TouchableOpacity
           style={[styles.adjuntarButton, !disponible && { opacity: 0.5 }]}
@@ -386,7 +484,9 @@ export default function ChatScreen() {
         <TextInput placeholder="Escribe un mensaje..." placeholderTextColor={colors.textMuted} style={styles.input} value={texto} onChangeText={setTexto} onSubmitEditing={() => enviar()} returnKeyType="send" editable={disponible && !enviando} maxLength={2000} />
         <TouchableOpacity style={[styles.sendButton, (!disponible || enviando) && { opacity: 0.5 }]} disabled={!disponible || enviando || !texto.trim()} onPress={() => enviar()} accessibilityLabel="Enviar mensaje"><Ionicons name="send" size={16} color="#fff" /></TouchableOpacity>
       </View>
+      </View>
       )}
+      <VisorFoto uri={fotoAbierta} onClose={() => setFotoAbierta(null)} />
 
       {/* Reportar persona o mensaje (HU-42) */}
       <ReportarModal
@@ -420,7 +520,9 @@ const makeStyles = (c: Colors) =>
     bubbleOwn: { backgroundColor: c.primary, alignSelf: 'flex-end', borderBottomRightRadius: espacio.xs },
     bubbleTextOther: { color: c.text, ...tipo.cuerpo, fontSize: 14, lineHeight: 20 },
     bubbleTextOwn: { color: '#FFFFFF', ...tipo.cuerpo, fontSize: 14, lineHeight: 20 },
-    bubbleMedia: { padding: 6 },
+    cita: { borderLeftWidth: 3, borderColor: c.accent, backgroundColor: 'rgba(0,0,0,0.12)', padding: espacio.s, borderRadius: radio.control, marginBottom: espacio.s },
+    respondiendo: { flexDirection: 'row', alignItems: 'center', backgroundColor: c.chip, borderLeftWidth: 4, borderColor: c.accent, paddingLeft: espacio.m, marginHorizontal: espacio.l, marginTop: espacio.s },
+    bubbleMedia: { padding: 6, width: 240 },
     imagen: { width: 200, height: 150, borderRadius: radio.control },
     ubicacion: { paddingHorizontal: espacio.s, paddingVertical: 6, gap: espacio.xs, minHeight: 44, justifyContent: 'center' },
     ubicacionFila: { flexDirection: 'row', alignItems: 'center', gap: 6 },

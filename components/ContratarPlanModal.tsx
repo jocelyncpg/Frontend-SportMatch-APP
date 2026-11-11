@@ -52,14 +52,14 @@ export default function ContratarPlanModal({ visible, plan, cuenta, onClose, ren
 
   if (!plan) return null;
 
-  async function abrirWebpay(url: string) {
+  async function abrirWebpay(urlPago: string) {
     // Crear la transacción requiere esperar a la API. En web, abrir una ventana
     // después de esa espera puede ser bloqueado y Expo no informa el bloqueo.
     if (Platform.OS === 'web') {
-      window.location.assign(url);
+      window.location.assign(urlPago);
       return;
     }
-    await WebBrowser.openBrowserAsync(url);
+    await WebBrowser.openBrowserAsync(urlPago);
   }
 
   async function confirmar(tokenWs: string) {
