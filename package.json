@@ -28,7 +28,8 @@
     "test:postular": "node --test scripts/test-postular.cjs",
     "test:foto": "node --test scripts/test-foto-perfil.cjs",
     "test:editar-convocatoria": "node --test scripts/test-editar-convocatoria.cjs",
-    "test:bloqueados": "node --test scripts/test-bloqueados.cjs"
+    "test:bloqueados": "node --test scripts/test-bloqueados.cjs",
+    "test:chat-respuestas": "node --test scripts/test-chat-respuestas.cjs"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.3",

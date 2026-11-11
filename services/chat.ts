@@ -9,6 +9,14 @@ import { ConexionApi, personaConexion } from './matchStore';
 
 export type TipoMensaje = 'TEXT' | 'IMAGE' | 'LOCATION' | 'FILE';
 
+/**
+ * HU-64: lo que muestra una respuesta del mensaje que cita. Si el original ya no existe, `available` es false y
+ * todo lo demás es null (el servidor nunca entrega lo que decía).
+ */
+export type RespuestaCitada = {
+  id: string | null; sender_id: string | null; text: string | null; message_type: TipoMensaje | null; available: boolean;
+};
+
 export type MensajeApi = {
   id: string; match_id: string; sender_id: string; client_message_id: string;
   text: string; created_at: string;
@@ -16,6 +24,8 @@ export type MensajeApi = {
   message_type?: TipoMensaje;
   attachment_url?: string | null; attachment_name?: string | null;
   latitude?: number | null; longitude?: number | null; location_name?: string | null;
+  /** HU-64: id del mensaje al que responde y su vista previa (null si no es una respuesta). */
+  reply_to_id?: string | null; reply_to?: RespuestaCitada | null;
 };
 
 /** Punto geolocalizado que se comparte en un chat (HU-58). */
@@ -36,8 +46,10 @@ export async function getChat(matchId: string) {
 }
 
 /** Página de mensajes. Leerla marca como leídos los mensajes de la otra persona. */
-export async function getMensajes(matchId: string, cursor: { after?: string; before?: string } = {}) {
-  const query = cursor.after ? `&after_id=${cursor.after}` : cursor.before ? `&before_id=${cursor.before}` : '';
+export async function getMensajes(matchId: string, cursor: { after?: string; before?: string; around?: string } = {}) {
+  // `around` (HU-64) trae la página que contiene un mensaje citado, para poder llevar a él aunque no esté cargado.
+  const query = cursor.after ? `&after_id=${cursor.after}` : cursor.before ? `&before_id=${cursor.before}`
+    : cursor.around ? `&around_id=${cursor.around}` : '';
   return (await chatRequest<MensajeApi[]>(`/chats/${encodeURIComponent(matchId)}/messages?limit=50${query}`)).data;
 }
 
@@ -45,8 +57,11 @@ async function enviar(matchId: string, body: Record<string, unknown>) {
   return (await chatRequest<MensajeApi>(`/chats/${encodeURIComponent(matchId)}/messages`, { method: 'POST', body })).data;
 }
 
-export function enviarMensaje(matchId: string, text: string, clientId: string) {
-  return enviar(matchId, { type: 'TEXT', content: text, clientMessageId: clientId });
+/** `responderA` (HU-64): id de un mensaje de este mismo chat al que responde este. */
+export function enviarMensaje(matchId: string, text: string, clientId: string, responderA?: string) {
+  return enviar(matchId, {
+    type: 'TEXT', content: text, clientMessageId: clientId, ...(responderA ? { replyTo: responderA } : {}),
+  });
 }
 
 /** Comparte un punto geolocalizado (HU-58). */

@@ -36,7 +36,7 @@ function loadStore(request, matchingRequest = async () => ({ incoming: [], outgo
         getToken: async () => auth.token,
       };
       if (name === './api') return {
-        ApiError,
+        ApiError, urlFoto: (v) => v ?? undefined,
         apiRequest: async (...args) => {
           calls.push(args);
           if (args[0].startsWith('/matching/')) return matchingRequest(...args);
