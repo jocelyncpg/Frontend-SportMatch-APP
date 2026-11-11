@@ -337,9 +337,9 @@ export default function ChatScreen() {
     return (
       <TouchableOpacity style={styles.cita} disabled={!c.available} onPress={() => irAlMensaje(c)} accessibilityLabel="Ir al mensaje citado">
         <Text style={propio ? styles.bubbleTextOwn : styles.bubbleTextOther} numberOfLines={1}>
-          {c.available ? (c.sender_id === miId ? 'T?' : primerNombre) : 'Mensaje no disponible'}
+          {c.available ? (c.sender_id === miId ? 'Tú' : primerNombre) : 'Mensaje no disponible'}
         </Text>
-        {c.available ? <Text style={propio ? styles.bubbleTextOwn : styles.bubbleTextOther} numberOfLines={2}>{c.text || (c.message_type === 'IMAGE' ? 'Foto' : c.message_type === 'LOCATION' ? 'Ubicaci?n compartida' : 'Archivo')}</Text> : null}
+        {c.available ? <Text style={propio ? styles.bubbleTextOwn : styles.bubbleTextOther} numberOfLines={2}>{c.text || (c.message_type === 'IMAGE' ? 'Foto' : c.message_type === 'LOCATION' ? 'Ubicación compartida' : 'Archivo')}</Text> : null}
       </TouchableOpacity>
     );
   }
@@ -445,7 +445,7 @@ export default function ChatScreen() {
             <TouchableOpacity activeOpacity={0.8} delayLongPress={350}
               onLongPress={() => opcionesMensaje(item)}
               style={[styles.bubble, propio ? styles.bubbleOwn : styles.bubbleOther, multimedia && styles.bubbleMedia]}
-              accessibilityHint="Mant?n presionado para responder o reportar este mensaje">
+              accessibilityHint="Mantén presionado para responder o reportar este mensaje">
               {cita(item)}
               {contenido(item, propio)}
             </TouchableOpacity>
@@ -465,7 +465,7 @@ export default function ChatScreen() {
       <View>
       {citando ? <View style={styles.respondiendo}>
         <View style={{ flex: 1 }}>
-          <Text style={styles.sugerenciaTexto}>{citando.sender_id === miId ? 'T?' : primerNombre}</Text>
+          <Text style={styles.sugerenciaTexto}>{citando.sender_id === miId ? 'Tú' : primerNombre}</Text>
           <Text style={styles.sport} numberOfLines={1}>{resumenMensaje(citando)}</Text>
         </View>
         <TouchableOpacity onPress={() => setCitando(null)} accessibilityLabel="Cancelar respuesta" style={styles.reportButton}>
