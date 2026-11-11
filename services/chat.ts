@@ -19,6 +19,20 @@ export type MensajeChat = {
   ubicacion?: UbicacionChat;
   /** Imagen adjunta (HU-58). Hoy es una ruta local del teléfono; con el backend será un enlace. */
   imagenUri?: string;
+  /**
+   * Mensaje al que respondes (HU-64). Guarda una copia corta del mensaje citado, así se ve aunque la lista cambie.
+   * Con el backend, el servidor guardará solo el id (`reply_to`) y la app buscará el mensaje por ese id.
+   */
+  respondeA?: CitaChat;
+};
+
+/** Copia corta de un mensaje citado al responder (HU-64). */
+export type CitaChat = {
+  /** Id del mensaje original (es el futuro `reply_to` del backend). */
+  id: string;
+  texto: string;
+  /** true = el mensaje citado lo escribiste tú. */
+  propio: boolean;
 };
 
 export type Conversacion = {
@@ -162,7 +176,12 @@ export function horaCorta(enviadoEn: number, ahora: number = Date.now()): string
 
 // ---------- acciones ----------
 
-function enviarPropio(id: string, contenido: Pick<MensajeChat, 'texto' | 'ubicacion' | 'imagenUri'>): boolean {
+/** Arma la cita de un mensaje para responderlo (HU-64). */
+export function citaDe(m: MensajeChat): CitaChat {
+  return { id: m.id, texto: m.texto, propio: m.propio };
+}
+
+function enviarPropio(id: string, contenido: Pick<MensajeChat, 'texto' | 'ubicacion' | 'imagenUri' | 'respondeA'>): boolean {
   const c = conversacionDe(id);
   if (c.bloqueado) return false;
   guardar({ ...c, mensajes: [...c.mensajes, { id: nuevoId(), propio: true, enviadoEn: Date.now(), ...contenido }] });
@@ -170,11 +189,11 @@ function enviarPropio(id: string, contenido: Pick<MensajeChat, 'texto' | 'ubicac
   return true;
 }
 
-/** Envía un mensaje tuyo. Devuelve false si el texto está vacío o si la persona está bloqueada. */
-export function enviarMensaje(id: string, texto: string): boolean {
+/** Envía un mensaje tuyo, opcionalmente como respuesta a otro (HU-64). Devuelve false si el texto está vacío o si la persona está bloqueada. */
+export function enviarMensaje(id: string, texto: string, respondeA?: CitaChat): boolean {
   const t = texto.trim();
   if (!t) return false;
-  return enviarPropio(id, { texto: t });
+  return enviarPropio(id, respondeA ? { texto: t, respondeA } : { texto: t });
 }
 
 /** Comparte un punto geolocalizado (HU-58). Devuelve false si las coordenadas no son válidas o si la persona está bloqueada. */
