@@ -1,9 +1,10 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useIsFocused } from '@react-navigation/native';
 import * as WebBrowser from 'expo-web-browser';
-import { useEffect, useMemo, useState } from 'react';
-import { Modal, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { beneficiosDe, confirmarPago, iniciarPago, leerPagoPendiente, olvidarPagoPendiente, precioTexto, type CuentaPlan, type Plan } from '../services/planes';
+import { router } from 'expo-router';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { AppState, Modal, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { beneficiosDe, cancelarPagoPendiente, confirmarPago, iniciarPago, leerPagoPendiente, precioTexto, type CuentaPlan, type Plan } from '../services/planes';
 import { Colors, useAppTheme, espacio, radio, tipo } from '../theme/ThemeContext';
 import { Aviso, Boton } from './ui';
 
@@ -30,7 +31,32 @@ export default function ContratarPlanModal({ visible, plan, cuenta, onClose, ren
   const [procesando, setProcesando] = useState(false);
   /** token_ws del pago en curso: si el navegador se cerró antes de tiempo, se puede volver a confirmar. */
   const [pendiente, setPendiente] = useState<string | null>(null);
-  const [urlPendiente, setUrlPendiente] = useState<string | null>(null);
+  const [mensaje, setMensaje] = useState<string | null>(null);
+  const ocupado = useRef(false);
+  const version = useRef(0);
+  const actual = useRef({ visible, enfocado, pendiente });
+  actual.current = { visible, enfocado, pendiente };
+
+  const recuperar = useCallback(async (tokenWs: string): Promise<boolean> => {
+    if (ocupado.current || !actual.current.visible || !actual.current.enfocado) return false;
+    ocupado.current = true; setProcesando(true); setError(null);
+    const generacion = version.current;
+    try {
+      const estado = await cancelarPagoPendiente(cuenta, tokenWs);
+      if (generacion !== version.current) return false;
+      setPendiente(null);
+      setListo(estado === 'aprobado');
+      setMensaje(estado === 'aprobado'
+        ? 'Tu pago anterior fue aprobado. Puedes revisar el detalle en Mis pagos.'
+        : 'El intento anterior quedó cancelado. Puedes iniciar un nuevo pago.');
+      return true;
+    } catch (e) {
+      if (generacion === version.current) setError(e instanceof Error ? e.message : 'No pudimos revisar el intento anterior. Inténtalo nuevamente.');
+      return false;
+    } finally {
+      if (generacion === version.current) { ocupado.current = false; setProcesando(false); }
+    }
+  }, [cuenta]);
 
   // El deep link abre /pago sobre esta pantalla. Cerrar el modal permite
   // ver el comprobante y evita volver a mostrar la compra al regresar.
@@ -41,15 +67,45 @@ export default function ContratarPlanModal({ visible, plan, cuenta, onClose, ren
   // Cada vez que se abre, parte desde el resumen.
   useEffect(() => {
     let activo = true;
+    const generacion = ++version.current;
     if (visible) {
-      setListo(false); setError(null); setPendiente(null); setUrlPendiente(null); setProcesando(true);
-      void leerPagoPendiente().then((pago) => {
-        if (activo) { setPendiente(pago?.tokenWs ?? null); setUrlPendiente(pago?.urlPago ?? null); }
+      ocupado.current = true;
+      setListo(false); setError(null); setMensaje(null); setPendiente(null); setProcesando(true);
+      void leerPagoPendiente().then(async (pago) => {
+        if (!activo) return;
+        ocupado.current = false; setProcesando(false);
+        if (pago) { setPendiente(pago.tokenWs); await recuperar(pago.tokenWs); }
       }).catch(() => { if (activo) setError('No pudimos recuperar el pago pendiente.'); })
-        .finally(() => { if (activo) setProcesando(false); });
+        .finally(() => { if (activo) { ocupado.current = false; setProcesando(false); } });
     }
-    return () => { activo = false; };
-  }, [visible]);
+    return () => { activo = false; version.current = generacion + 1; };
+  }, [visible, recuperar]);
+
+  useEffect(() => {
+    if (Platform.OS === 'web') {
+      const revisarAlVolver = () => {
+        if (!actual.current.visible || !actual.current.enfocado) return;
+        void leerPagoPendiente().then((pago) => {
+          if (pago) { setPendiente(pago.tokenWs); void recuperar(pago.tokenWs); }
+        }).catch(() => setError('No pudimos revisar el intento anterior.'));
+      };
+      window.addEventListener('pageshow', revisarAlVolver);
+      return () => window.removeEventListener('pageshow', revisarAlVolver);
+    }
+    let anterior = AppState.currentState;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const subscription = AppState.addEventListener('change', (estado) => {
+      if (estado === 'active' && anterior !== 'active') {
+        clearTimeout(timer);
+        timer = setTimeout(() => {
+          const pago = actual.current;
+          if (pago.visible && pago.enfocado && pago.pendiente) void recuperar(pago.pendiente);
+        }, 800);
+      }
+      anterior = estado;
+    });
+    return () => { subscription.remove(); clearTimeout(timer); };
+  }, [recuperar]);
 
   if (!plan) return null;
 
@@ -60,7 +116,7 @@ export default function ContratarPlanModal({ visible, plan, cuenta, onClose, ren
       window.location.assign(urlPago);
       return;
     }
-    await WebBrowser.openBrowserAsync(urlPago);
+    return WebBrowser.openBrowserAsync(urlPago);
   }
 
   async function confirmar(tokenWs: string) {
@@ -70,30 +126,46 @@ export default function ContratarPlanModal({ visible, plan, cuenta, onClose, ren
   }
 
   async function pagar() {
-    if (!plan || procesando) return;
-    setError(null);
+    if (!plan || ocupado.current) return;
+    ocupado.current = true;
+    const generacion = version.current;
+    setError(null); setMensaje(null);
     setProcesando(true);
+    let cerrado: string | undefined;
     try {
       const { tokenWs, urlPago } = await iniciarPago(cuenta, plan, { renovar });
+      if (generacion !== version.current) return;
       setPendiente(tokenWs);
-      setUrlPendiente(urlPago);
-      // Vuelve cuando la persona cierra el navegador (en Android, apenas se abre).
-      await abrirWebpay(urlPago);
+      const navegador = await abrirWebpay(urlPago);
+      if (navegador?.type === 'cancel' || navegador?.type === 'dismiss') cerrado = tokenWs;
     } catch (e) {
-      setError(e instanceof Error && e.message ? e.message : 'No pudimos iniciar el pago.');
+      if (generacion === version.current) setError(e instanceof Error && e.message ? e.message : 'No pudimos iniciar el pago.');
     } finally {
-      setProcesando(false);
+      if (generacion === version.current) { ocupado.current = false; setProcesando(false); }
     }
+    if (cerrado) await recuperar(cerrado);
   }
 
   async function yaPague() {
-    if (!pendiente || procesando) return;
+    if (!pendiente || ocupado.current) return;
+    ocupado.current = true;
     setProcesando(true);
-    try { await confirmar(pendiente); } finally { setProcesando(false); }
+    try { await confirmar(pendiente); } finally { ocupado.current = false; setProcesando(false); }
+  }
+
+  async function cerrar() {
+    if (ocupado.current) return;
+    if (pendiente && !await recuperar(pendiente)) return;
+    onClose();
+  }
+
+  function verPagos() {
+    onClose();
+    router.push(cuenta === 'club' ? '/(club)/mis-pagos' : '/(deportista)/mis-pagos');
   }
 
   return (
-    <Modal visible={visible && enfocado} transparent animationType="fade" onRequestClose={onClose}>
+    <Modal visible={visible && enfocado} transparent animationType="fade" onRequestClose={() => { void cerrar(); }}>
       <View style={styles.fondo}>
         <View style={styles.hoja}>
           {listo ? (
@@ -101,10 +173,11 @@ export default function ContratarPlanModal({ visible, plan, cuenta, onClose, ren
               <Ionicons name="checkmark-circle" size={54} color={colors.success} />
               <Text style={styles.titulo}>¡Listo!</Text>
               <Text style={styles.texto}>
-                {renovar
+                {mensaje ?? (renovar
                   ? `Renovaste el plan ${plan.nombre}. Sus beneficios siguen activos.`
-                  : `Tu plan ahora es ${plan.nombre}. Los beneficios ya están activos.`}
+                  : `Tu plan ahora es ${plan.nombre}. Los beneficios ya están activos.`)}
               </Text>
+              <Boton texto="Ver Mis pagos" onPress={verPagos} style={styles.botonCerrar} />
               <Boton texto="Cerrar" onPress={onClose} style={styles.botonCerrar} />
             </View>
           ) : (
@@ -122,23 +195,20 @@ export default function ContratarPlanModal({ visible, plan, cuenta, onClose, ren
                 ))}
               </ScrollView>
 
-              <Aviso icono="lock-closed-outline" texto={pendiente
-                    ? 'Completa el pago en Webpay. Al regresar verás el resultado; si cerraste el navegador, toca "Consultar pago".'
-                    : 'Completarás el pago en el sitio seguro de Webpay Plus. SportMatch no solicita los datos de tu tarjeta.'} />
+              <Aviso icono="lock-closed-outline" texto={mensaje ?? (pendiente
+                    ? 'Estamos revisando el intento anterior. Puedes consultar el resultado o cancelar ese intento para volver a pagar.'
+                    : 'Completarás el pago en el sitio seguro de Webpay Plus. SportMatch no solicita los datos de tu tarjeta.')} />
 
               {error ? <Text accessibilityRole="alert" style={styles.error}>{error}</Text> : null}
-              {pendiente && urlPendiente ? <TouchableOpacity disabled={procesando} onPress={() => {
-                void abrirWebpay(urlPendiente).catch(() => setError('No pudimos abrir Webpay.'));
-              }}><Text style={[styles.avisoTexto, { marginTop: 12 }]}>Continuar el pago pendiente en Webpay</Text></TouchableOpacity> : null}
-              {pendiente && error ? <TouchableOpacity disabled={procesando} onPress={() => {
-                void olvidarPagoPendiente().then(() => {
-                  setPendiente(null); setUrlPendiente(null);
-                  setError('Antes de iniciar otro intento, verifica si el pago anterior fue confirmado.');
-                }).catch(() => setError('No pudimos recuperar el resumen. Inténtalo nuevamente.'));
-              }}><Text style={[styles.avisoTexto, { marginTop: 12 }]}>Volver al resumen para iniciar otro intento</Text></TouchableOpacity> : null}
+              {pendiente ? <TouchableOpacity disabled={procesando} onPress={() => { void recuperar(pendiente); }} style={styles.enlace}>
+                <Text style={styles.enlaceTexto}>Cancelar intento anterior y volver a pagar</Text>
+              </TouchableOpacity> : null}
+              <TouchableOpacity disabled={procesando} onPress={verPagos} style={styles.enlace}>
+                <Text style={styles.enlaceTexto}>Ver Mis pagos</Text>
+              </TouchableOpacity>
 
               <View style={styles.acciones}>
-                <Boton variante="secundario" texto="Cancelar" onPress={onClose} deshabilitado={procesando} style={styles.accionCancelar} />
+                <Boton variante="secundario" texto="Cancelar" onPress={() => { void cerrar(); }} deshabilitado={procesando} style={styles.accionCancelar} />
                 <Boton texto={procesando ? 'Procesando…' : pendiente ? 'Consultar pago' : 'Pagar con Webpay'}
                   onPress={pendiente ? yaPague : pagar} deshabilitado={procesando} style={styles.accionConfirmar} />
               </View>

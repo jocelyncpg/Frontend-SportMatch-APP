@@ -92,13 +92,51 @@ test('un error de conexión conserva el pago y no activa beneficios', async () =
   assert.equal(c.api.getPlanActual('deportista'), 'gratuito');
 });
 
-test('un enlace vencido o guardado por una versión anterior no bloquea un nuevo pago', async () => {
+test('un enlace vencido conserva el token para cerrar el intento antes de reemplazarlo', async () => {
   const c = cargar();
   for (const creadoEn of [undefined, Date.now() - 16 * 60 * 1000]) {
     c.storage.set('sportmatch_pago:athlete-a', JSON.stringify({ tokenWs: created.token_ws, urlPago: created.checkout_url, creadoEn }));
-    assert.equal(await c.api.leerPagoPendiente(), null);
+    assert.equal((await c.api.leerPagoPendiente()).tokenWs, created.token_ws);
+    c.respond({ status: 'CANCELLED', suscripcion: null });
+    assert.equal(await c.api.cancelarPagoPendiente('deportista', created.token_ws), 'cancelado');
     assert.equal(c.storage.has('sportmatch_pago:athlete-a'), false);
   }
+});
+
+test('abandonar cierra el intento en el servidor y el siguiente pago usa un enlace nuevo', async () => {
+  const c = cargar(); c.respond(created); await c.api.iniciarPago('deportista', plan);
+  const siguiente = { token_ws: 'b'.repeat(64), checkout_url: 'https://api.test/nuevo-checkout' };
+  c.respond((url) => url.endsWith('/cancel') ? { status: 'CANCELLED', suscripcion: null } : siguiente);
+  const result = await c.api.iniciarPago('deportista', plan);
+  assert.equal(c.calls.at(-2).url, '/payments/webpay/cancel');
+  assert.equal(c.calls.at(-2).options.body.token_ws, created.token_ws);
+  assert.equal(result.tokenWs, siguiente.token_ws);
+  assert.equal(result.urlPago, siguiente.checkout_url);
+});
+
+test('cancelar no descarta un cobro aprobado ni inicia otro automáticamente', async () => {
+  const c = cargar(); c.respond(created); await c.api.iniciarPago('deportista', plan);
+  c.respond({ status: 'APPROVED', suscripcion: { estado: 'ACTIVE', plan: { tipo: 'USUARIO' } } });
+  await assert.rejects(c.api.iniciarPago('deportista', plan), /anterior ya fue aprobado/);
+  assert.equal(c.api.getPlanActual('deportista'), 'pro');
+  assert.equal(await c.api.leerPagoPendiente(), null);
+  assert.equal(c.calls.filter((call) => call.url.endsWith('/initiate')).length, 1);
+});
+
+test('si no se puede verificar el intento anterior no se borra ni se crea otra orden', async () => {
+  const c = cargar(); c.respond(created); await c.api.iniciarPago('deportista', plan);
+  c.respond(new c.ApiError('No se pudo consultar Webpay.', 502));
+  await assert.rejects(c.api.iniciarPago('deportista', plan), /consultar Webpay/);
+  assert.equal((await c.api.leerPagoPendiente()).tokenWs, created.token_ws);
+  assert.equal(c.calls.filter((call) => call.url.endsWith('/initiate')).length, 1);
+});
+
+test('un retorno antiguo no borra el intento más reciente', async () => {
+  const c = cargar(); c.respond(created); await c.api.iniciarPago('deportista', plan);
+  c.storage.set('sportmatch_pago:athlete-a', JSON.stringify({ tokenWs: 'b'.repeat(64), urlPago: 'nuevo' }));
+  c.respond(new c.ApiError('El pago fue cancelado.', 400));
+  await c.api.confirmarPago('deportista', created.token_ws);
+  assert.equal((await c.api.leerPagoPendiente()).tokenWs, 'b'.repeat(64));
 });
 
 test('la suscripción vencida devuelve al plan gratuito y permite contratar otra vez', async () => {

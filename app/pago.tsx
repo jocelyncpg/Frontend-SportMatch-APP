@@ -87,6 +87,11 @@ function RetornoWebpay() {
     );
   }
 
+  async function verMisPagos() {
+    const session = await getSession();
+    router.replace(!session ? '/(auth)/login' : rolDe(session) === 'club' ? '/(club)/mis-pagos' : '/(deportista)/mis-pagos');
+  }
+
   const aprobado = resultado?.ok === true;
 
   return (
@@ -123,6 +128,7 @@ function RetornoWebpay() {
         />
       ) : null}
       <Boton texto="Volver a SportMatch" onPress={volver} style={styles.boton} />
+      {resultado ? <Boton texto="Ver Mis pagos" variante="secundario" onPress={verMisPagos} style={styles.boton} /> : null}
     </View>
   );
 }

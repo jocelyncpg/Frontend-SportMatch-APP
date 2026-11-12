@@ -72,9 +72,8 @@ export async function leerPagoPendiente(): Promise<PagoPendiente | null> {
   try {
     const pago = JSON.parse(await AsyncStorage.getItem(key) || 'null') as PagoPendiente | null;
     if (!pago) return null;
-    // El puente firmado vence en 15 minutos. Un intento antiguo no debe
-    // impedir contratar de nuevo; su retorno aún se procesa en /pago.
-    if (typeof pago.creadoEn !== 'number' || Date.now() - pago.creadoEn >= 15 * 60 * 1000) {
+    // El enlace puede vencer, pero el intento debe consultarse antes de reemplazarlo.
+    if (typeof pago.tokenWs !== 'string' || !/^[A-Za-z0-9_-]{1,64}$/.test(pago.tokenWs)) {
       await AsyncStorage.removeItem(key);
       return null;
     }
@@ -82,9 +81,24 @@ export async function leerPagoPendiente(): Promise<PagoPendiente | null> {
   } catch { return null; }
 }
 
-export async function olvidarPagoPendiente(): Promise<void> {
+async function borrarIntento(key: string | null, tokenWs: string): Promise<void> {
+  if (!key) return;
+  const actual = JSON.parse(await AsyncStorage.getItem(key) || 'null') as PagoPendiente | null;
+  if (actual?.tokenWs === tokenWs) await AsyncStorage.removeItem(key);
+}
+
+/** Cerrar el navegador no confirma un cobro: primero se consulta a Webpay. */
+export async function cancelarPagoPendiente(cuenta: CuentaPlan, tokenWs: string): Promise<'cancelado' | 'aprobado'> {
   const key = await clavePendiente();
-  if (key) await AsyncStorage.removeItem(key);
+  const authToken = await token();
+  const r = await apiRequest<PagoConfirmadoApi>('/payments/webpay/cancel', {
+    method: 'POST', token: authToken, body: { token_ws: tokenWs }, timeoutMs: 40000,
+  });
+  if (await clavePendiente() !== key || await getToken() !== authToken) throw new Error('La sesión cambió. Vuelve a revisar el pago.');
+  if (r.status === 'PENDING') throw new Error('El pago aún se está verificando. Consulta el resultado antes de iniciar otro.');
+  if (r.status === 'APPROVED') guardarActual(cuenta, vigente(r.suscripcion) ?? SIN_PLAN[cuenta]);
+  await borrarIntento(key, tokenWs);
+  return r.status === 'APPROVED' ? 'aprobado' : 'cancelado';
 }
 
 /** Pesos chilenos con punto de miles, sin depender del idioma del teléfono: 4990 → "$4.990". */
@@ -223,15 +237,21 @@ export async function iniciarPago(
     throw new Error(`El plan ${plan.nombre} es para cuentas de ${plan.paraCuenta === 'club' ? 'club' : 'deportista'}.`);
   }
   if (plan.precioMensual === 0) throw new Error('El plan Gratuito ya está incluido; no necesitas contratarlo.');
+  const anterior = await leerPagoPendiente();
+  if (anterior && await cancelarPagoPendiente(cuenta, anterior.tokenWs) === 'aprobado') {
+    throw new Error('El pago anterior ya fue aprobado. Revisa tu suscripción en Mis pagos.');
+  }
   // HU-55: renovar el plan vigente suma su duración al vencimiento (ms-pago lo permite para el mismo plan).
   if (!opciones.renovar && estado.actual[cuenta] === plan.id) throw new Error(`Ya tienes el plan ${plan.nombre}.`);
   if (!plan.backendId) throw new Error('Este plan aún no está disponible para contratar. Intenta más tarde.');
+  const key = await clavePendiente();
+  const authToken = await token();
   const r = await apiRequest<PagoIniciadoApi>('/payments/webpay/initiate', {
-    method: 'POST', token: await token(), body: { plan_id: plan.backendId },
+    method: 'POST', token: authToken, body: { plan_id: plan.backendId },
     timeoutMs: 40000,
   });
+  if (await clavePendiente() !== key || await getToken() !== authToken) throw new Error('La sesión cambió. Vuelve a iniciar el pago.');
   const pendiente = { tokenWs: r.token_ws, urlPago: r.checkout_url, creadoEn: Date.now() };
-  const key = await clavePendiente();
   if (key) await AsyncStorage.setItem(key, JSON.stringify(pendiente));
   return pendiente;
 }
@@ -241,14 +261,16 @@ export async function confirmarPago(cuenta: CuentaPlan, retorno: string | Retorn
   let key: string | null = null;
   try {
     key = await clavePendiente();
+    const authToken = await token();
     const r = await apiRequest<PagoConfirmadoApi>('/payments/webpay/commit', {
-      method: 'POST', token: await token(), body: typeof retorno === 'string' ? { token_ws: retorno } : retorno,
+      method: 'POST', token: authToken, body: typeof retorno === 'string' ? { token_ws: retorno } : retorno,
       timeoutMs: 40000,
     });
+    if (await clavePendiente() !== key || await getToken() !== authToken) throw new Error('La sesión cambió. Vuelve a revisar el pago.');
     if (r.status !== 'APPROVED') return { ok: false, motivo: 'El pago aún no está confirmado.', reintentable: r.status === 'PENDING' };
     const planVigente = vigente(r.suscripcion);
     guardarActual(cuenta, planVigente ?? SIN_PLAN[cuenta]);
-    if (key) await AsyncStorage.removeItem(key).catch(() => undefined);
+    await borrarIntento(key, typeof retorno === 'string' ? retorno : retorno.tbk_token ?? retorno.token_ws ?? '').catch(() => undefined);
     if (!planVigente) return {
       ok: false, reintentable: false,
       motivo: 'Este pago corresponde a una suscripción que ya no está activa. Puedes contratar un plan nuevamente.',
@@ -256,7 +278,9 @@ export async function confirmarPago(cuenta: CuentaPlan, retorno: string | Retorn
     return { ok: true };
   } catch (e) {
     // Webpay rechazó o se anuló la compra: el backend responde 400 con el detalle.
-    if (key && e instanceof ApiError && [400, 404].includes(e.status)) await AsyncStorage.removeItem(key).catch(() => undefined);
+    if (key && e instanceof ApiError && [400, 404].includes(e.status)) {
+      await borrarIntento(key, typeof retorno === 'string' ? retorno : retorno.tbk_token ?? retorno.token_ws ?? '').catch(() => undefined);
+    }
     return { ok: false, motivo: e instanceof Error && e.message ? e.message : 'No pudimos confirmar el pago.',
       reintentable: !(e instanceof ApiError) || e.status === 0 || e.status === 401 || e.status >= 500 };
   }
