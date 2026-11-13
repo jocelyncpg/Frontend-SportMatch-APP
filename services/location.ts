@@ -1,6 +1,7 @@
 import * as Location from 'expo-location';
 
-export const GEOAPIFY_API_KEY = '9bd562e32cf44b9090f3613e81d6690f';
+// La clave de Geoapify se define al compilar (EXPO_PUBLIC_GEOAPIFY_KEY en .env.local o en las variables de EAS), no en el código.
+export const GEOAPIFY_API_KEY = process.env.EXPO_PUBLIC_GEOAPIFY_KEY ?? '';
 
 export type Ubicacion = {
   latitud: number;

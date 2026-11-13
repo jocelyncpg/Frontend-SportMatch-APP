@@ -48,3 +48,10 @@ Join our community of developers creating universal apps.
 
 - [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
 - [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+
+## Clave de mapas (Geoapify)
+
+La clave ya no está en el código: `services/location.ts` la lee de `EXPO_PUBLIC_GEOAPIFY_KEY` (cópiala de `.env.example` a
+`.env.local`, que git ignora, o defínela en las variables de EAS). Sin ella los mapas no cargan, pero el resto de la app
+funciona. Una variable `EXPO_PUBLIC_*` queda dentro de la app compilada, así que además de rotarla en el panel de Geoapify
+conviene restringirla allí por aplicación o dominio.
